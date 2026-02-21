@@ -1,0 +1,240 @@
+import React, { useMemo } from 'react'
+import { Grid, Cell, PricePoint, CellPrice } from '../../types/grid'
+
+interface CellPricesMap {
+    [cellId: string]: CellPrice
+}
+import { GridBackground } from './canvas/GridBackground'
+import { PriceChart } from './canvas/PriceChart'
+import { GridCells } from './canvas/GridCells'
+import { CurrentPriceIndicator } from './canvas/CurrentPriceIndicator'
+import { LivePriceElements } from './canvas/LivePriceElements'
+import { FrozenZoneMask } from './canvas/FrozenZoneMask'
+import { Crosshair } from './canvas/Crosshair'
+
+interface GridCanvasProps {
+    width: number
+    height: number
+    grid: Grid | null
+    cells: Cell[]
+    prices: PricePoint[]
+    currentPrice: number | null
+    selectedCells: string[]
+    visibleTimeRange: { start: number; end: number }
+    visiblePriceRange: { min: number; max: number }
+    mousePos: { x: number; y: number } | null
+    isDragging: boolean
+    onCellClick: (cellId: string, isFuture: boolean, cellData?: unknown) => void
+    betResults: Record<string, string>
+    cellStakes?: Record<string, number>
+    cellPrices?: CellPricesMap
+    contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
+}
+
+const GridCanvasInner: React.FC<GridCanvasProps> = ({
+    width,
+    height,
+    grid,
+    cells,
+    prices,
+    currentPrice,
+    selectedCells,
+    visibleTimeRange,
+    visiblePriceRange,
+    mousePos,
+    isDragging,
+    onCellClick,
+    betResults,
+    cellStakes,
+    cellPrices,
+    contestEndTime,
+}) => {
+    const { start: viewportStart, end: viewportEnd } = visibleTimeRange
+    const { min: visibleMinPrice, max: visibleMaxPrice } = visiblePriceRange
+
+    const viewportDuration = viewportEnd - viewportStart
+    const visiblePriceDiff = visibleMaxPrice - visibleMinPrice
+
+    const getX = (t: number) => {
+        return ((t - viewportStart) / viewportDuration) * width
+    }
+
+    const getY = (p: number) => {
+        return height - ((p - visibleMinPrice) / visiblePriceDiff) * height
+    }
+
+    const timeSteps = useMemo(() => {
+        if (!grid) return []
+        const steps: number[] = []
+        const windowDuration = (grid.timeframe_sec || 60) * 1000
+        const gridStartTime = new Date(grid.start_time).getTime()
+        const offset = gridStartTime % windowDuration
+
+        const startWindow =
+            Math.floor((viewportStart - offset) / windowDuration) * windowDuration +
+            offset
+
+        if (windowDuration <= 0) return []
+
+        for (let t = startWindow; t <= viewportEnd; t += windowDuration) {
+            steps.push(t)
+        }
+        return steps
+    }, [grid, viewportStart, viewportEnd])
+
+    const priceSteps = useMemo(() => {
+        if (!grid) return []
+        const steps: number[] = []
+        const priceInterval = grid.price_interval || 1
+        const anchorPrice = grid.anchor_price
+
+        const startBand = Math.floor(
+            (visibleMinPrice - anchorPrice) / priceInterval
+        )
+        const startPrice = anchorPrice + startBand * priceInterval
+
+        if (priceInterval <= 0) return []
+
+        for (let p = startPrice; p <= visibleMaxPrice; p += priceInterval) {
+            steps.push(p)
+        }
+        return steps
+    }, [grid, visibleMinPrice, visibleMaxPrice])
+
+    if (!grid) return null
+
+    return (
+        <svg width={width} height={height} className="block bg-background">
+            <GridBackground
+                width={width}
+                height={height}
+                timeSteps={timeSteps}
+                priceSteps={priceSteps}
+                getX={getX}
+                getY={getY}
+            />
+
+            <PriceChart
+                width={width}
+                height={height}
+                prices={prices}
+                grid={grid}
+                visibleTimeRange={visibleTimeRange}
+                visiblePriceRange={visiblePriceRange}
+                getX={getX}
+                getY={getY}
+            />
+
+            <LivePriceElements
+                width={width}
+                height={height}
+                viewportStart={viewportStart}
+                viewportEnd={viewportEnd}
+                visibleMinPrice={visibleMinPrice}
+                visibleMaxPrice={visibleMaxPrice}
+                lastPricePoint={prices.length > 0 ? prices[prices.length - 1] : null}
+                currentPrice={currentPrice}
+            />
+
+            <GridCells
+                width={width}
+                height={height}
+                grid={grid}
+                cells={cells}
+                visibleTimeRange={visibleTimeRange}
+                visiblePriceRange={visiblePriceRange}
+                selectedCells={selectedCells}
+                betResults={betResults}
+                cellStakes={cellStakes}
+                cellPrices={cellPrices}
+                getX={getX}
+                getY={getY}
+                onCellClick={onCellClick}
+                contestEndTime={contestEndTime}
+            />
+
+            <FrozenZoneMask
+                width={width}
+                height={height}
+                viewportStart={viewportStart}
+                viewportEnd={viewportEnd}
+                gridStartTime={new Date(grid.start_time).getTime()}
+                windowDuration={(grid.timeframe_sec || 60) * 1000}
+                frozenWindows={2}
+            />
+
+            <CurrentPriceIndicator
+                width={width}
+                currentPrice={currentPrice}
+                getY={getY}
+            />
+
+            <Crosshair
+                width={width}
+                height={height}
+                mousePos={mousePos}
+                isDragging={isDragging}
+                visibleTimeRange={visibleTimeRange}
+                visiblePriceRange={visiblePriceRange}
+                currentPrice={currentPrice}
+            />
+        </svg>
+    )
+}
+
+// Memoize GridCanvas to prevent re-renders when props haven't meaningfully changed
+export const GridCanvas = React.memo(GridCanvasInner, (prevProps, nextProps) => {
+    // Always re-render if dimensions change
+    if (prevProps.width !== nextProps.width || prevProps.height !== nextProps.height) {
+        return false
+    }
+
+    // Always re-render if currentPrice changes (for price indicator)
+    if (prevProps.currentPrice !== nextProps.currentPrice) {
+        return false
+    }
+
+    // Re-render if viewport changes significantly
+    if (
+        prevProps.visibleTimeRange.start !== nextProps.visibleTimeRange.start ||
+        prevProps.visibleTimeRange.end !== nextProps.visibleTimeRange.end ||
+        prevProps.visiblePriceRange.min !== nextProps.visiblePriceRange.min ||
+        prevProps.visiblePriceRange.max !== nextProps.visiblePriceRange.max
+    ) {
+        return false
+    }
+
+    // Re-render if selection or results change
+    if (
+        prevProps.selectedCells !== nextProps.selectedCells ||
+        prevProps.betResults !== nextProps.betResults ||
+        prevProps.cellStakes !== nextProps.cellStakes ||
+        prevProps.cellPrices !== nextProps.cellPrices ||
+        prevProps.contestEndTime !== nextProps.contestEndTime
+    ) {
+        return false
+    }
+
+    // Re-render if cells change
+    if (prevProps.cells !== nextProps.cells) {
+        return false
+    }
+
+    // Re-render if mouse position changes (for crosshair)
+    if (
+        prevProps.mousePos?.x !== nextProps.mousePos?.x ||
+        prevProps.mousePos?.y !== nextProps.mousePos?.y ||
+        prevProps.isDragging !== nextProps.isDragging
+    ) {
+        return false
+    }
+
+    // For prices, only re-render if array length changed significantly (new data loaded)
+    // Small updates from WebSocket are handled by the price indicator via currentPrice
+    if (Math.abs(prevProps.prices.length - nextProps.prices.length) > 10) {
+        return false
+    }
+
+    // No significant changes - skip re-render
+    return true
+})
