@@ -1,0 +1,230 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 220 70% 50%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 220 70% 50%;
+    --radius: 0.2rem;
+    /* Sharper corners for pro look */
+
+    /* Custom Trading Colors (Light Mode) */
+    --trade-up: 160 84% 39%;
+    --trade-down: 340 82% 52%;
+    --grid-line: 220 13% 91%;
+  }
+
+  .dark {
+    --background: 30 25% 4%;
+    /* #0C0A08 — Warm near-black */
+    --foreground: 30 15% 92%;
+
+    --card: 30 18% 7%;
+    /* #131110 — Warm dark card */
+    --card-foreground: 30 15% 92%;
+
+    --popover: 30 18% 7%;
+    --popover-foreground: 30 15% 92%;
+
+    --primary: 38 92% 45%;
+    /* #D97706 — Amber accent */
+    --primary-foreground: 30 25% 8%;
+
+    --secondary: 30 12% 11%;
+    /* #1C1915 — Warm secondary */
+    --secondary-foreground: 30 15% 85%;
+
+    --muted: 30 10% 14%;
+    --muted-foreground: 30 8% 55%;
+
+    --accent: 38 92% 45%;
+    --accent-foreground: 30 25% 8%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 30 10% 14%;
+    /* Warm subtle borders */
+    --input: 30 10% 14%;
+    --ring: 38 92% 45%;
+    /* Amber ring */
+
+    /* Custom Trading Colors */
+    --trade-up: 142 71% 45%;
+    /* #22c55e Green */
+    --trade-down: 0 84% 60%;
+    /* #ef4444 Red */
+    --grid-line: 30 8% 10%;
+
+    /* Terminal amber tokens */
+    --amber: 38 92% 45%;
+    --amber-dim: 25 55% 18%;
+    /* frozen zone overlay */
+  }
+}
+
+@font-face {
+  font-family: 'geist';
+  src: url('/fonts/GeistVariableVF.woff2') format('woff2');
+  /* font-weight: normal;
+  font-style: normal; */
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'geist';
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+  overscroll-behavior: none;
+}
+
+body {
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  background: hsl(var(--secondary));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+@layer utilities {
+  .bg-300\% {
+    background-size: 300% 300%;
+  }
+
+  .animate-gradient {
+    animation: gradient 8s linear infinite;
+  }
+
+  @keyframes gradient {
+    0% {
+      background-position: 0% 50%;
+    }
+
+    50% {
+      background-position: 100% 50%;
+    }
+
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Win/Loss Cell Animations */
+  .animate-cell-win {
+    animation: cellWin 0.6s ease-out forwards;
+  }
+
+  .animate-cell-loss {
+    animation: cellLoss 0.5s ease-out forwards;
+  }
+
+  .animate-cell-glow {
+    animation: cellGlow 1.5s ease-in-out infinite;
+  }
+
+  @keyframes cellWin {
+    0% {
+      transform: scale(1);
+      filter: brightness(1);
+    }
+    25% {
+      transform: scale(1.1);
+      filter: brightness(1.5) drop-shadow(0 0 10px hsl(var(--trade-up)));
+    }
+    50% {
+      transform: scale(0.95);
+    }
+    100% {
+      transform: scale(1);
+      filter: brightness(1.2) drop-shadow(0 0 5px hsl(var(--trade-up)));
+    }
+  }
+
+  @keyframes cellLoss {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    30% {
+      transform: scale(0.95);
+    }
+    100% {
+      opacity: 0.7;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes cellGlow {
+    0%, 100% {
+      filter: drop-shadow(0 0 2px hsl(var(--trade-up)));
+    }
+    50% {
+      filter: drop-shadow(0 0 10px hsl(var(--trade-up))) drop-shadow(0 0 20px hsl(var(--trade-up) / 0.5));
+    }
+  }
+
+  /* Confetti particles */
+  .confetti-particle {
+    position: fixed;
+    pointer-events: none;
+    width: 8px;
+    height: 8px;
+    animation: confettiFall 2s ease-out forwards;
+  }
+
+  @keyframes confettiFall {
+    0% {
+      opacity: 1;
+      transform: translateY(0) rotate(0deg) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(100vh) rotate(720deg) scale(0.5);
+    }
+  }
+}
