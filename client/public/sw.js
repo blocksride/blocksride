@@ -1,9 +1,22 @@
-// Eth Ride Service Worker
-const CACHE_NAME = 'eth-ride-v1';
+// BlocksRide Service Worker
+const CACHE_NAME = 'blocksride-v0';
 const STATIC_ASSETS = [
   '/',
-  '/logo/blip-logo.png',
-  '/logo/blip-logo-white.png',
+  '/robots.txt',
+  '/site.webmanifest',
+  '/sitemap.xml',
+  '/fonts/GeistVariableVF.woff2',
+  '/logo/blocksride-mark-color.png',
+  '/logo/blocksride-mark-white.png',
+  '/logo/blocksride-logo-color.png',
+  '/logo/blocksride-logo-white.png',
+  '/logo/blocksride-mark-color.svg',
+  '/logo/blocksride-mark-white.svg',
+  '/logo/blocksride-logo-color.svg',
+  '/logo/blocksride-logo-white.svg',
+  '/logo/base-mark-white.svg',
+  '/logo/base-lockup-white.svg',
+  '/logo/coingecko.png',
 ];
 
 // Install event - cache static assets
@@ -95,9 +108,9 @@ self.addEventListener('push', (event) => {
 
     const options = {
       body: data.body || '',
-      icon: '/logo/blip-logo.png',
-      badge: '/logo/blip-logo.png',
-      tag: data.tag || 'blip-notification',
+      icon: '/logo/blocksride-mark-color.png',
+      badge: '/logo/blocksride-mark-color.png',
+      tag: data.tag || 'blocksride-notification',
       requireInteraction: data.requireInteraction || false,
       data: {
         url: data.url || '/',
@@ -105,7 +118,7 @@ self.addEventListener('push', (event) => {
     };
 
     event.waitUntil(
-      self.registration.showNotification(data.title || 'Eth Ride', options)
+      self.registration.showNotification(data.title || 'BlocksRide', options)
     );
   } catch (error) {
     console.error('Push notification error:', error);
