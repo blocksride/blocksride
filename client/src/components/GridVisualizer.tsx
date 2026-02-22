@@ -77,6 +77,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     })
 
     const selectedTimeframe = 60
+    const frozenWindows = 2
     const { isPracticeMode, selectedContest, timeRemaining, exitToSelection } = useContest()
     const [showContestEnded, setShowContestEnded] = useState(false)
 
@@ -193,6 +194,42 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         grid?.anchor_price || null,
         timeBoundary
     )
+
+    const priceLabels = useMemo(() => {
+        const count = 10
+        const min = viewport.visibleMinPrice
+        const max = viewport.visibleMaxPrice
+        if (!isFinite(min) || !isFinite(max) || max <= min) return []
+        const step = (max - min) / (count - 1)
+        return Array.from({ length: count }, (_, i) => max - i * step)
+    }, [viewport.visibleMinPrice, viewport.visibleMaxPrice])
+
+    const livePriceIndex = useMemo(() => {
+        if (currentPrice === null || priceLabels.length === 0) return -1
+        let idx = 0
+        let best = Math.abs(priceLabels[0] - currentPrice)
+        priceLabels.forEach((p, i) => {
+            const diff = Math.abs(p - currentPrice)
+            if (diff < best) {
+                best = diff
+                idx = i
+            }
+        })
+        return idx
+    }, [currentPrice, priceLabels])
+
+    const timeLabels = useMemo(() => {
+        if (!grid) return []
+        const windowMs = (grid.timeframe_sec || selectedTimeframe) * 1000
+        if (windowMs <= 0) return []
+        const viewportDuration = viewport.visibleEnd - viewport.visibleStart
+        const baseCount = Math.round(viewportDuration / windowMs)
+        const count = Math.min(12, Math.max(6, baseCount))
+        const gridStart = new Date(grid.start_time).getTime()
+        const startWindow =
+            Math.floor((viewport.visibleStart - gridStart) / windowMs) * windowMs + gridStart
+        return Array.from({ length: count }, (_, i) => startWindow + i * windowMs)
+    }, [grid, selectedTimeframe, viewport.visibleStart, viewport.visibleEnd])
 
     const { user, refreshUser, authenticated } = useAuth()
     const practiceBalance = user?.practice_balance ?? 1000
@@ -416,60 +453,121 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                         </div>
                     )}
 
-                    <div
-                        ref={containerRef}
-                        className="flex-1 relative overflow-hidden cursor-crosshair touch-none grid-canvas"
-                        onMouseDown={viewport.handleMouseDown}
-                        onMouseMove={viewport.handleMouseMove}
-                        onMouseUp={viewport.handleMouseUp}
-                        onMouseLeave={viewport.handleMouseLeave}
-                        onTouchStart={viewport.handleTouchStart}
-                        onTouchMove={viewport.handleTouchMove}
-                        onTouchEnd={viewport.handleTouchEnd}
-                    >
-                        {!authenticated ? (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground bg-background/50 backdrop-blur-sm z-10">
-                                <div className="p-6 rounded-lg bg-card border border-border text-center shadow-lg">
-                                    <h3 className="text-lg font-semibold text-foreground mb-2">
-                                        Authentication Required
-                                    </h3>
-                                    <p className="text-sm">Please login to view the live market grid</p>
-                                </div>
-                            </div>
-                        ) : !grid ? (
-                            <GridSkeleton />
-                        ) : (
-                            <>
-                                <GridCanvas
-                                    width={viewport.dimensions.width}
-                                    height={viewport.dimensions.height}
-                                    grid={grid}
-                                    cells={cells}
-                                    prices={prices}
-                                    currentPrice={currentPrice}
-                                    selectedCells={selectedCells}
-                                    visibleTimeRange={{ start: viewport.visibleStart, end: viewport.visibleEnd }}
-                                    visiblePriceRange={{ min: viewport.visibleMinPrice, max: viewport.visibleMaxPrice }}
-                                    mousePos={viewport.mousePos}
-                                    isDragging={viewport.isDragging}
-                                    onCellClick={handleCellClick}
-                                    betResults={betResults}
-                                    cellStakes={cellStakes}
-                                    cellPrices={cellPrices}
-                                    recentCellIds={recentCells}
-                                    contestEndTime={timeBoundary?.end}
-                                />
-                                {(viewport.viewportCenterTime !== null || viewport.viewportCenterPrice !== null) && (
-                                    <button
-                                        onClick={viewport.resetViewport}
-                                        className="absolute bottom-6 right-4 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg shadow-lg transition-all font-medium text-xs flex items-center gap-2"
+                    <div className="flex-1 flex flex-col min-h-0">
+                        <div className="flex flex-1 min-h-0">
+                            {/* Y-axis labels */}
+                            <div className="w-16 border-r border-border bg-card/60 flex flex-col justify-between px-2 py-3 text-[10px] font-mono">
+                                {priceLabels.map((price, index) => (
+                                    <div
+                                        key={`${price}-${index}`}
+                                        className={[
+                                            'text-right',
+                                            index === livePriceIndex
+                                                ? 'text-primary font-semibold'
+                                                : 'text-muted-foreground',
+                                        ].join(' ')}
                                     >
-                                        <Crosshair className="w-4 h-4" />
-                                        Re-center View
-                                    </button>
+                                        ${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                        {index === livePriceIndex ? ' \u2190' : ''}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Grid canvas */}
+                            <div
+                                ref={containerRef}
+                                className="flex-1 relative overflow-hidden cursor-crosshair touch-none grid-canvas"
+                                onMouseDown={viewport.handleMouseDown}
+                                onMouseMove={viewport.handleMouseMove}
+                                onMouseUp={viewport.handleMouseUp}
+                                onMouseLeave={viewport.handleMouseLeave}
+                                onTouchStart={viewport.handleTouchStart}
+                                onTouchMove={viewport.handleTouchMove}
+                                onTouchEnd={viewport.handleTouchEnd}
+                            >
+                                {!authenticated ? (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground bg-background/50 backdrop-blur-sm z-10">
+                                        <div className="p-6 rounded-lg bg-card border border-border text-center shadow-lg">
+                                            <h3 className="text-lg font-semibold text-foreground mb-2">
+                                                Authentication Required
+                                            </h3>
+                                            <p className="text-sm">Please login to view the live market grid</p>
+                                        </div>
+                                    </div>
+                                ) : !grid ? (
+                                    <GridSkeleton />
+                                ) : (
+                                    <>
+                                        <GridCanvas
+                                            width={viewport.dimensions.width}
+                                            height={viewport.dimensions.height}
+                                            grid={grid}
+                                            cells={cells}
+                                            prices={prices}
+                                            currentPrice={currentPrice}
+                                            selectedCells={selectedCells}
+                                            visibleTimeRange={{ start: viewport.visibleStart, end: viewport.visibleEnd }}
+                                            visiblePriceRange={{ min: viewport.visibleMinPrice, max: viewport.visibleMaxPrice }}
+                                            mousePos={viewport.mousePos}
+                                            isDragging={viewport.isDragging}
+                                            onCellClick={handleCellClick}
+                                            betResults={betResults}
+                                            cellStakes={cellStakes}
+                                            cellPrices={cellPrices}
+                                            recentCellIds={recentCells}
+                                            contestEndTime={timeBoundary?.end}
+                                        />
+                                        {(viewport.viewportCenterTime !== null || viewport.viewportCenterPrice !== null) && (
+                                            <button
+                                                onClick={viewport.resetViewport}
+                                                className="absolute bottom-6 right-4 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg shadow-lg transition-all font-medium text-xs flex items-center gap-2"
+                                            >
+                                                <Crosshair className="w-4 h-4" />
+                                                Re-center View
+                                            </button>
+                                        )}
+                                    </>
                                 )}
-                            </>
-                        )}
+                            </div>
+                        </div>
+
+                        {/* X-axis labels */}
+                        <div className="flex h-7 border-t border-border bg-card/60">
+                            <div className="w-16 border-r border-border" />
+                            <div
+                                className="flex-1 grid text-[10px] font-mono"
+                                style={{ gridTemplateColumns: `repeat(${Math.max(timeLabels.length, 1)}, minmax(0, 1fr))` }}
+                            >
+                                {timeLabels.map((t) => {
+                                    const diffMinutes = Math.round((t - Date.now()) / 60000)
+                                    const label = diffMinutes === 0
+                                        ? 'NOW'
+                                        : `${diffMinutes > 0 ? '+' : ''}${diffMinutes}m`
+                                    const status = diffMinutes === 0
+                                        ? 'now'
+                                        : diffMinutes > 0 && diffMinutes <= frozenWindows
+                                            ? 'frozen'
+                                            : diffMinutes > 0
+                                                ? 'bettable'
+                                                : 'settled'
+                                    const className = status === 'now'
+                                        ? 'text-foreground font-semibold'
+                                        : status === 'frozen'
+                                            ? 'text-primary/40'
+                                            : status === 'bettable'
+                                                ? 'text-primary/70 font-medium'
+                                                : 'text-muted-foreground'
+                                    return (
+                                        <div
+                                            key={t}
+                                            className={`flex items-center justify-center ${className}`}
+                                        >
+                                            {label}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
                     </div>
                 </main>
 
