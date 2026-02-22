@@ -46,6 +46,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return isNaN(parsed) ? 5 : parsed
     })
     const [pendingStake, setPendingStake] = useState(0)
+    const [recentCells, setRecentCells] = useState<Record<string, boolean>>({})
+    const recentTimersRef = useRef<Record<string, number>>({})
 
     // Sidebar collapse (desktop)
     const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -109,6 +111,33 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     betResultsRef.current = betResults
     const isPlacingBetRef = useRef(false)
     const placedCellsRef = useRef<Set<string>>(new Set())
+
+    const markRecentCell = useCallback((cellId: string) => {
+        setRecentCells(prev => ({ ...prev, [cellId]: true }))
+        if (typeof window === 'undefined') return
+        if (recentTimersRef.current[cellId]) {
+            window.clearTimeout(recentTimersRef.current[cellId])
+        }
+        recentTimersRef.current[cellId] = window.setTimeout(() => {
+            setRecentCells(prev => {
+                const next = { ...prev }
+                delete next[cellId]
+                return next
+            })
+            delete recentTimersRef.current[cellId]
+        }, 2500)
+    }, [])
+
+    useEffect(() => {
+        return () => {
+            Object.values(recentTimersRef.current).forEach((id) => {
+                if (typeof window !== 'undefined') {
+                    window.clearTimeout(id)
+                }
+            })
+            recentTimersRef.current = {}
+        }
+    }, [])
 
     // Confetti on new wins
     useEffect(() => {
@@ -184,6 +213,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         isPlacingBetRef.current = true
         placedCellsRef.current.add(cellId)
         addOptimisticCell(cellId)
+        markRecentCell(cellId)
         setPendingStake(prev => prev + stake)
         setIsBetLoading(true)
 
@@ -237,7 +267,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         }
     }, [
         isPracticeMode, selectedAsset, refreshUser,
-        addOptimisticCell, removeOptimisticCell, updateCellId, cells,
+        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell,
     ])
 
     const handleCellClick = useCallback(async (cellId: string) => {
@@ -426,6 +456,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                     betResults={betResults}
                                     cellStakes={cellStakes}
                                     cellPrices={cellPrices}
+                                    recentCellIds={recentCells}
                                     contestEndTime={timeBoundary?.end}
                                 />
                                 {(viewport.viewportCenterTime !== null || viewport.viewportCenterPrice !== null) && (

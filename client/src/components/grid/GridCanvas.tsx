@@ -28,6 +28,7 @@ interface GridCanvasProps {
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap
+    recentCellIds?: Record<string, boolean>
     contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
 }
 
@@ -47,6 +48,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     betResults,
     cellStakes,
     cellPrices,
+    recentCellIds,
     contestEndTime,
 }) => {
     const { start: viewportStart, end: viewportEnd } = visibleTimeRange
@@ -147,6 +149,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 betResults={betResults}
                 cellStakes={cellStakes}
                 cellPrices={cellPrices}
+                recentCellIds={recentCellIds}
                 getX={getX}
                 getY={getY}
                 onCellClick={onCellClick}

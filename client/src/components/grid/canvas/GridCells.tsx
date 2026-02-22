@@ -16,6 +16,7 @@ interface GridCellsProps {
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap
+    recentCellIds?: Record<string, boolean>
     frozenWindows?: number
     getX: (t: number) => number
     getY: (p: number) => number
@@ -35,6 +36,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
     betResults,
     cellStakes,
     cellPrices,
+    recentCellIds,
     frozenWindows = 2,
     getX,
     getY,
@@ -192,6 +194,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
 
                 const status = betResults[slot.id] || betResults[slot.virtualId]
                 const isResolving = status === 'pending' && now > slot.t_end
+                const isRecent = Boolean(recentCellIds?.[slot.id] || recentCellIds?.[slot.virtualId])
 
                 let className = "fill-transparent stroke-transparent transition-colors duration-200"
 
@@ -245,6 +248,10 @@ export const GridCells: React.FC<GridCellsProps> = ({
                     style.fill = `rgba(255, 140, 0, ${intensity * 0.5})`
                     style.stroke = `rgba(255, 140, 0, ${Math.min(1, intensity + 0.2)})`
                     className = "transition-colors duration-500"
+                }
+
+                if (isRecent && !status && !isResolving) {
+                    className = `${className} animate-cell-pulse`
                 }
 
                 const rectX = slot.x
