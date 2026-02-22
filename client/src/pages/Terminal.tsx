@@ -9,12 +9,15 @@ import { useNavigate } from 'react-router-dom'
 import { useContest } from '@/contexts/ContestContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOnboarding } from '@/contexts/OnboardingContext'
+import { toast } from 'sonner'
+
+const ADD_FUNDS_PROMPT_KEY = 'blip_add_funds_prompted'
 
 export const Terminal = () => {
     useAccount() // Keep for wagmi state
     const { authenticated, loading, user } = useAuth()
     const navigate = useNavigate()
-    const { selectedContest, sessionMode, isWaitingForStart } = useContest()
+    const { selectedContest, sessionMode, isWaitingForStart, isPracticeMode } = useContest()
     const { startOnboarding, isOnboardingActive } = useOnboarding()
 
     // Redirect to landing if not authenticated
@@ -33,6 +36,26 @@ export const Terminal = () => {
             return () => clearTimeout(timer)
         }
     }, [loading, authenticated, user, startOnboarding, isOnboardingActive])
+
+    useEffect(() => {
+        if (loading || !authenticated || !user || isPracticeMode) return
+        if ((user.balance ?? 0) > 0) return
+        if (typeof window === 'undefined') return
+
+        const prompted = localStorage.getItem(ADD_FUNDS_PROMPT_KEY) === 'true'
+        if (prompted) return
+
+        toast.info('Add funds to start betting.', {
+            action: {
+                label: 'Add Funds',
+                onClick: () => {
+                    document.querySelector<HTMLButtonElement>('[data-wallet-trigger]')?.click()
+                },
+            },
+        })
+
+        localStorage.setItem(ADD_FUNDS_PROMPT_KEY, 'true')
+    }, [loading, authenticated, user, isPracticeMode])
 
     // Show nothing while checking auth
     if (loading || !authenticated) {
