@@ -120,9 +120,20 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         const newWins = Object.entries(betResults).filter(
             ([id, s]) => s === 'won' && prev[id] !== 'won'
         )
-        if (newWins.length > 0) triggerConfetti()
+        if (newWins.length > 0) {
+            triggerConfetti()
+            const payout = newWins.reduce((sum, [cellId]) => {
+                const position = positions.find(p => p.cell_id === cellId)
+                return position?.payout ? sum + position.payout : sum
+            }, 0)
+            if (payout > 0) {
+                toast.success(`You won $${payout.toFixed(2)}!`)
+            } else {
+                toast.success('You won!')
+            }
+        }
         prevBetResultsRef.current = { ...betResults }
-    }, [betResults, triggerConfetti])
+    }, [betResults, positions, triggerConfetti])
 
     useEffect(() => {
         if (!isPracticeMode && timeRemaining === 0 && selectedContest) {
