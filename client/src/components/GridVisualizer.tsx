@@ -29,8 +29,8 @@ import {
 import { useGridSocket } from '../hooks/useGridSocket'
 import { useBetQuote } from '../hooks/useBetQuote'
 
-const BET_CONFIRMATION_KEY = 'blip_bet_confirmation_enabled'
-const SIDEBAR_COLLAPSED_KEY = 'blip_sidebar_collapsed'
+const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
+const SIDEBAR_COLLAPSED_KEY = 'blocksride_sidebar_collapsed'
 
 interface GridVisualizerProps {
     assetId?: string
@@ -41,7 +41,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 }) => {
     const selectedAsset = initialAssetId
     const [currentStake, setCurrentStake] = useState<number>(() => {
-        const stored = localStorage.getItem('blip_active_chip')
+        const stored = localStorage.getItem('blocksride_active_chip')
         const parsed = stored ? parseFloat(stored) : NaN
         return isNaN(parsed) ? 5 : parsed
     })

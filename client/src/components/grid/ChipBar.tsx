@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 
 const CHIP_AMOUNTS = [1, 5, 10, 25] as const
-const CHIP_STORAGE_KEY = 'blip_active_chip'
+const CHIP_STORAGE_KEY = 'blocksride_active_chip'
 
 interface ChipBarProps {
     value: number

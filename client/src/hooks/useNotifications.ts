@@ -29,8 +29,8 @@ const SOUNDS = {
   alert: '/sounds/alert.mp3',
 }
 
-const STORAGE_KEY_SOUND = 'blip_sound_enabled'
-const STORAGE_KEY_PERMISSION_ASKED = 'blip_notification_permission_asked'
+const STORAGE_KEY_SOUND = 'blocksride_sound_enabled'
+const STORAGE_KEY_PERMISSION_ASKED = 'blocksride_notification_permission_asked'
 
 export function useNotifications(): UseNotificationsReturn {
   const [permission, setPermission] = useState<NotificationPermission>('default')
