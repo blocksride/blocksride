@@ -30,9 +30,8 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
               y1={0}
               x2={x}
               y2={height}
-              className="stroke-foreground/20"
+              className="stroke-border/80"
               strokeWidth="1"
-              strokeDasharray="4 4"
             />
           </React.Fragment>
         )
@@ -49,9 +48,8 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
               y1={y}
               x2={width}
               y2={y}
-              className="stroke-foreground/20"
+              className="stroke-border/80"
               strokeWidth="1"
-              strokeDasharray="4 4"
             />
           </React.Fragment>
         )
