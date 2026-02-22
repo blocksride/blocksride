@@ -25,7 +25,6 @@ export function TerminalHeader() {
   const navigate = useNavigate()
   const { authenticated, signOut } = useAuth()
   const { isPracticeMode, selectedContest, exitToSelection } = useContest()
-  const [currentTime, setCurrentTime] = useState(new Date())
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [priceDelta, setPriceDelta] = useState<number | null>(null)
   const prevPriceRef = useRef<number | null>(null)
@@ -45,11 +44,6 @@ export function TerminalHeader() {
     }
     window.addEventListener('claims:update', handler)
     return () => window.removeEventListener('claims:update', handler)
-  }, [])
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -162,20 +156,6 @@ export function TerminalHeader() {
           )}
           {/* Wallet Manager - shows balance, click to open deposit/withdraw */}
           <WalletManager />
-
-          {/* Time (desktop) */}
-          <div className="hidden sm:flex items-center gap-2 px-2 md:px-3 py-1 bg-zinc-900 border border-zinc-800 rounded text-[10px] md:text-xs">
-            <span className="text-zinc-400">
-              {currentTime.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-              })}
-            </span>
-            <span className="text-zinc-700">|</span>
-            <span className="text-green-500 font-bold tabular-nums">
-              {currentTime.toLocaleTimeString('en-US', { hour12: false })}
-            </span>
-          </div>
 
           {/* Logout (desktop) */}
           {authenticated && (
