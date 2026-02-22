@@ -49,6 +49,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const [recentCells, setRecentCells] = useState<Record<string, boolean>>({})
     const recentTimersRef = useRef<Record<string, number>>({})
     const [claimsOpen, setClaimsOpen] = useState(false)
+    const [currentTime, setCurrentTime] = useState(new Date())
 
     // Sidebar collapse (desktop)
     const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -78,7 +79,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     })
 
     const selectedTimeframe = 60
-    const frozenWindows = 2
     const { isPracticeMode, selectedContest, timeRemaining, exitToSelection } = useContest()
     const [showContestEnded, setShowContestEnded] = useState(false)
 
@@ -139,6 +139,11 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             })
             recentTimersRef.current = {}
         }
+    }, [])
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setCurrentTime(new Date()), 1000)
+        return () => window.clearInterval(timer)
     }, [])
 
     // Confetti on new wins
@@ -219,18 +224,18 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return idx
     }, [currentPrice, priceLabels])
 
-    const timeLabels = useMemo(() => {
-        if (!grid) return []
-        const windowMs = (grid.timeframe_sec || selectedTimeframe) * 1000
-        if (windowMs <= 0) return []
-        const viewportDuration = viewport.visibleEnd - viewport.visibleStart
-        const baseCount = Math.round(viewportDuration / windowMs)
-        const count = Math.min(12, Math.max(6, baseCount))
-        const gridStart = new Date(grid.start_time).getTime()
-        const startWindow =
-            Math.floor((viewport.visibleStart - gridStart) / windowMs) * windowMs + gridStart
-        return Array.from({ length: count }, (_, i) => startWindow + i * windowMs)
-    }, [grid, selectedTimeframe, viewport.visibleStart, viewport.visibleEnd])
+    const timeLabel = useMemo(() => {
+        return currentTime.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        })
+    }, [currentTime])
+
+    const timeZoneLabel = useMemo(() => {
+        const parts = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(new Date())
+        return parts.find((part) => part.type === 'timeZoneName')?.value ?? ''
+    }, [])
 
     const { user, refreshUser, authenticated } = useAuth()
     const practiceBalance = user?.practice_balance ?? 1000
@@ -543,24 +548,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
                     <div className="flex-1 flex flex-col min-h-0">
                         <div className="flex flex-1 min-h-0">
-                            {/* Y-axis labels */}
-                            <div className="w-16 border-r border-border bg-card/60 flex flex-col justify-between px-2 py-3 text-[10px] font-mono">
-                                {priceLabels.map((price, index) => (
-                                    <div
-                                        key={`${price}-${index}`}
-                                        className={[
-                                            'text-right',
-                                            index === livePriceIndex
-                                                ? 'text-primary font-semibold'
-                                                : 'text-muted-foreground',
-                                        ].join(' ')}
-                                    >
-                                        ${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                                        {index === livePriceIndex ? ' \u2190' : ''}
-                                    </div>
-                                ))}
-                            </div>
-
                             {/* Grid canvas */}
                             <div
                                 ref={containerRef}
@@ -586,9 +573,9 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                     <GridSkeleton />
                                 ) : (
                                     <>
-                                        <GridCanvas
-                                            width={viewport.dimensions.width}
-                                            height={viewport.dimensions.height}
+                                    <GridCanvas
+                                        width={viewport.dimensions.width}
+                                        height={viewport.dimensions.height}
                                             grid={grid}
                                             cells={cells}
                                             prices={prices}
@@ -603,11 +590,27 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                             cellStakes={cellStakes}
                                             cellPrices={cellPrices}
                                             recentCellIds={recentCells}
-                                            contestEndTime={timeBoundary?.end}
-                                        />
-                                        {(viewport.viewportCenterTime !== null || viewport.viewportCenterPrice !== null) && (
-                                            <button
-                                                onClick={viewport.resetViewport}
+                                        contestEndTime={timeBoundary?.end}
+                                    />
+                                    <div className="absolute top-3 right-3 z-20 flex flex-col gap-1">
+                                        <button
+                                            onClick={viewport.zoomIn}
+                                            className="w-8 h-8 rounded bg-card/90 border border-border text-foreground hover:bg-card flex items-center justify-center text-sm font-bold"
+                                            aria-label="Zoom in"
+                                        >
+                                            +
+                                        </button>
+                                        <button
+                                            onClick={viewport.zoomOut}
+                                            className="w-8 h-8 rounded bg-card/90 border border-border text-foreground hover:bg-card flex items-center justify-center text-sm font-bold"
+                                            aria-label="Zoom out"
+                                        >
+                                            -
+                                        </button>
+                                    </div>
+                                    {(viewport.viewportCenterTime !== null || viewport.viewportCenterPrice !== null) && (
+                                        <button
+                                            onClick={viewport.resetViewport}
                                                 className="absolute bottom-6 right-4 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg shadow-lg transition-all font-medium text-xs flex items-center gap-2"
                                             >
                                                 <Crosshair className="w-4 h-4" />
@@ -617,44 +620,36 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                     </>
                                 )}
                             </div>
+
+                            {/* Y-axis labels (right) */}
+                            <div className="w-16 border-l border-border bg-card/60 flex flex-col justify-between px-2 py-3 text-[10px] font-mono">
+                                {priceLabels.map((price, index) => (
+                                    <div
+                                        key={`${price}-${index}`}
+                                        className={[
+                                            'text-left',
+                                            index === livePriceIndex
+                                                ? 'text-primary font-semibold'
+                                                : 'text-muted-foreground',
+                                        ].join(' ')}
+                                    >
+                                        ${price.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                        {index === livePriceIndex ? ' \u2190' : ''}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        {/* X-axis labels */}
-                        <div className="flex h-7 border-t border-border bg-card/60">
-                            <div className="w-16 border-r border-border" />
-                            <div
-                                className="flex-1 grid text-[10px] font-mono"
-                                style={{ gridTemplateColumns: `repeat(${Math.max(timeLabels.length, 1)}, minmax(0, 1fr))` }}
-                            >
-                                {timeLabels.map((t) => {
-                                    const diffMinutes = Math.round((t - Date.now()) / 60000)
-                                    const label = diffMinutes === 0
-                                        ? 'NOW'
-                                        : `${diffMinutes > 0 ? '+' : ''}${diffMinutes}m`
-                                    const status = diffMinutes === 0
-                                        ? 'now'
-                                        : diffMinutes > 0 && diffMinutes <= frozenWindows
-                                            ? 'frozen'
-                                            : diffMinutes > 0
-                                                ? 'bettable'
-                                                : 'settled'
-                                    const className = status === 'now'
-                                        ? 'text-foreground font-semibold'
-                                        : status === 'frozen'
-                                            ? 'text-primary/40'
-                                            : status === 'bettable'
-                                                ? 'text-primary/70 font-medium'
-                                                : 'text-muted-foreground'
-                                    return (
-                                        <div
-                                            key={t}
-                                            className={`flex items-center justify-center ${className}`}
-                                        >
-                                            {label}
-                                        </div>
-                                    )
-                                })}
+                        {/* Time bar */}
+                        <div className="flex h-7 border-t border-border bg-card/60 items-center">
+                            <div className="flex-1 flex items-center justify-between px-3 text-[10px] font-mono text-muted-foreground">
+                                <span className="uppercase tracking-[0.2em]">Local time</span>
+                                <span className="text-foreground">
+                                    {timeLabel}
+                                    {timeZoneLabel ? ` ${timeZoneLabel}` : ''}
+                                </span>
                             </div>
+                            <div className="w-16 border-l border-border" />
                         </div>
                     </div>
                 </main>

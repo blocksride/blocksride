@@ -23,8 +23,8 @@ export function useGridViewport(
     const [viewportCenterTime, setViewportCenterTime] = useState<number | null>(
         null
     )
-    // Default to showing ~40 price bands (~±20 rows) - user can pan/zoom for more
-    const [viewportPriceRange, setViewportPriceRange] = useState(() => Math.max(10, priceInterval * 40))
+    // Default to showing ~10 price bands (~±5 rows) - user can pan/zoom for more
+    const [viewportPriceRange, setViewportPriceRange] = useState(() => Math.max(10, priceInterval * 10))
     const [viewportCenterPrice, setViewportCenterPrice] = useState<number | null>(
         null
     )
@@ -82,8 +82,8 @@ export function useGridViewport(
     useEffect(() => {
         // Show 10x the timeframe (e.g., 60 sec timeframe = 10 minutes visible)
         setViewportTimeRange(selectedTimeframe * 10 * 1000)
-        // Show ~40 price bands (~±20 rows) - user can pan to see more
-        const idealRange = Math.max(10, priceInterval * 40)
+        // Show ~10 price bands (~±5 rows) - user can pan to see more
+        const idealRange = Math.max(10, priceInterval * 10)
         setViewportPriceRange(idealRange)
         setViewportCenterTime(null)
         setViewportCenterPrice(null)
@@ -297,6 +297,23 @@ export function useGridViewport(
         setDragStart(prev => ({ ...prev, hasMoved: false }))
     }
 
+    const zoomViewport = (factor: number) => {
+        setViewportTimeRange((prev) =>
+            Math.max(30000, Math.min(24 * 60 * 60 * 1000, prev * factor))
+        )
+        const minPriceRange = Math.max(10, priceInterval * 10)
+        const maxPriceRange = Math.max(200, priceInterval * 100)
+        setViewportPriceRange((prev) =>
+            Math.max(minPriceRange, Math.min(maxPriceRange, prev * factor))
+        )
+        if (viewportCenterTime === null) setViewportCenterTime(now)
+        if (viewportCenterPrice === null)
+            setViewportCenterPrice(currentPrice || anchorPrice || 3000)
+    }
+
+    const zoomIn = () => zoomViewport(0.9)
+    const zoomOut = () => zoomViewport(1.1)
+
     const resetViewport = () => {
         setViewportCenterTime(null)
         setViewportCenterPrice(null)
@@ -328,6 +345,8 @@ export function useGridViewport(
         handleTouchStart,
         handleTouchMove,
         handleTouchEnd,
+        zoomIn,
+        zoomOut,
         resetViewport,
         timeBoundary, // Expose for grid rendering
     }
