@@ -3,9 +3,9 @@ import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ContestHub } from '@/components/contest/ContestHub'
 import { ContestWaiting } from '@/components/contest/ContestWaiting'
 import { TerminalHeader } from '@/components/terminal/TerminalHeader'
+import { GuestTerminal } from '@/components/terminal/GuestTerminal'
 import { useAccount } from 'wagmi'
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useContest } from '@/contexts/ContestContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOnboarding } from '@/contexts/OnboardingContext'
@@ -16,16 +16,8 @@ const ADD_FUNDS_PROMPT_KEY = 'blocksride_add_funds_prompted'
 export const Terminal = () => {
     useAccount() // Keep for wagmi state
     const { authenticated, loading, user } = useAuth()
-    const navigate = useNavigate()
     const { selectedContest, sessionMode, isWaitingForStart, isPracticeMode } = useContest()
     const { startOnboarding, isOnboardingActive } = useOnboarding()
-
-    // Redirect to landing if not authenticated
-    useEffect(() => {
-        if (!loading && !authenticated) {
-            navigate('/')
-        }
-    }, [loading, authenticated, navigate])
 
     // Check if user needs onboarding
     useEffect(() => {
@@ -58,8 +50,17 @@ export const Terminal = () => {
     }, [loading, authenticated, user, isPracticeMode])
 
     // Show nothing while checking auth
-    if (loading || !authenticated) {
+    if (loading) {
         return null
+    }
+
+    if (!authenticated) {
+        return (
+            <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden dark">
+                <TerminalHeader />
+                <GuestTerminal assetId="ETH-USD" />
+            </div>
+        )
     }
 
     // Show contest hub when in selection mode
