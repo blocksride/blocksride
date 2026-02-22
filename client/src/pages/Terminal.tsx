@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useOnboarding } from '@/contexts/OnboardingContext'
 import { toast } from 'sonner'
 
-const ADD_FUNDS_PROMPT_KEY = 'blip_add_funds_prompted'
+const ADD_FUNDS_PROMPT_KEY = 'blocksride_add_funds_prompted'
 
 export const Terminal = () => {
     useAccount() // Keep for wagmi state

@@ -3,7 +3,7 @@ import { Wallet, FlaskConical, TrendingUp, Loader2 } from 'lucide-react'
 import { ChipBar } from './ChipBar'
 import type { BetQuote } from '../../types/grid'
 
-const CHIP_TIP_STORAGE_KEY = 'blip_chip_tip_seen'
+const CHIP_TIP_STORAGE_KEY = 'blocksride_chip_tip_seen'
 
 interface TradeControlsProps {
     stake: number
