@@ -123,6 +123,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     const frozenEndX = clampX(getX(frozenEndTime))
     const bettableStartX = frozenEndX
     const bettableEndX = width
+    const zoneLabelY = height - 6
 
     return (
         <svg width={width} height={height} className="block bg-background">
@@ -238,6 +239,54 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 currentPrice={currentPrice}
                 getY={getY}
             />
+
+            {/* Zone labels */}
+            <g className="pointer-events-none">
+                {settledEndX > settledStartX + 24 && (
+                    <text
+                        x={(settledStartX + settledEndX) / 2}
+                        y={zoneLabelY}
+                        textAnchor="middle"
+                        fill="currentColor"
+                        className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted-foreground"
+                    >
+                        Settled
+                    </text>
+                )}
+                {nowEndX > nowStartX + 24 && (
+                    <text
+                        x={(nowStartX + nowEndX) / 2}
+                        y={zoneLabelY}
+                        textAnchor="middle"
+                        fill="currentColor"
+                        className="text-[9px] font-mono uppercase tracking-[0.2em] text-foreground"
+                    >
+                        Now
+                    </text>
+                )}
+                {frozenEndX > frozenStartX + 24 && (
+                    <text
+                        x={(frozenStartX + frozenEndX) / 2}
+                        y={zoneLabelY}
+                        textAnchor="middle"
+                        fill="currentColor"
+                        className="text-[9px] font-mono uppercase tracking-[0.2em] text-primary/40"
+                    >
+                        Frozen
+                    </text>
+                )}
+                {bettableEndX > bettableStartX + 24 && (
+                    <text
+                        x={(bettableStartX + bettableEndX) / 2}
+                        y={zoneLabelY}
+                        textAnchor="middle"
+                        fill="currentColor"
+                        className="text-[9px] font-mono uppercase tracking-[0.2em] text-primary/70"
+                    >
+                        Bettable
+                    </text>
+                )}
+            </g>
 
             <Crosshair
                 width={width}
