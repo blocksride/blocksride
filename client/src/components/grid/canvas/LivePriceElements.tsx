@@ -26,8 +26,6 @@ export const LivePriceElements: React.FC<LivePriceElementsProps> = ({
     const circleRef = useRef<SVGCircleElement>(null)
     const extensionLineRef = useRef<SVGLineElement>(null)
     const extensionAreaRef = useRef<SVGPathElement>(null)
-    const timeLabelGroupRef = useRef<SVGGElement>(null)
-    const timeLabelTextRef = useRef<SVGTextElement>(null)
 
     // Store viewport params in refs to avoid recreating RAF callback
     const paramsRef = useRef({
@@ -120,20 +118,6 @@ export const LivePriceElements: React.FC<LivePriceElementsProps> = ({
                 extensionAreaRef.current.style.display = 'none'
             }
 
-            // Update time label
-            if (timeLabelGroupRef.current && timeLabelTextRef.current) {
-                const labelX = nowX - 28
-                const labelY = h - 25
-                timeLabelGroupRef.current.setAttribute('transform', `translate(${labelX}, ${labelY})`)
-
-                const timeStr = new Date(now).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                })
-                timeLabelTextRef.current.textContent = timeStr
-            }
-
             animationId = requestAnimationFrame(animate)
         }
 
@@ -185,22 +169,6 @@ export const LivePriceElements: React.FC<LivePriceElementsProps> = ({
                 strokeWidth="1.5"
             />
 
-            {/* Time label */}
-            <g ref={timeLabelGroupRef} transform="translate(0, 0)">
-                <rect width="56" height="20" rx="3" className="fill-primary" />
-                <text
-                    ref={timeLabelTextRef}
-                    x="28"
-                    y="14"
-                    className="fill-primary-foreground"
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontWeight="bold"
-                    style={{ fontFamily: 'monospace' }}
-                >
-                    00:00:00
-                </text>
-            </g>
         </>
     )
 }
