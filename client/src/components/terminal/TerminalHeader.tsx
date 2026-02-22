@@ -91,7 +91,7 @@ export function TerminalHeader() {
             onKeyDown={(e) => e.key === 'Enter' && navigate('/')}
             aria-label="Go to home page"
           >
-            <BlocksrideLogo size={22} wordmark variant="white" />
+            <BlocksrideLogo size={22} wordmark variant="color" />
           </div>
 
           <div className="hidden sm:block h-4 w-px bg-zinc-800" />
