@@ -277,20 +277,19 @@ export function WalletManager() {
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
                 <button
-                    className="group flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 rounded transition-all"
+                    className="group flex items-center gap-2 px-3 py-1.5 bg-secondary/60 hover:bg-secondary/80 border border-border rounded transition-all text-xs font-mono text-muted-foreground hover:text-foreground"
                     data-wallet-trigger
-                    aria-label={authenticated ? `Wallet balance: $${dbBalance.toFixed(2)}` : 'Sign in'}
+                    aria-label={authenticated ? `Wallet: ${walletAddress ?? 'connected'}` : 'Sign in'}
                 >
                     {authenticated ? (
-                        <>
-                            <Wallet className="w-4 h-4 text-emerald-500" />
-                            <span className="text-xs font-bold font-mono text-emerald-400">
-                                ${dbBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                        </>
+                        <span>
+                            {walletAddress
+                                ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
+                                : `$${dbBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        </span>
                     ) : (
-                        <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 group-hover:text-zinc-200">
-                            <span className="text-yellow-500">●</span>
+                        <div className="flex items-center gap-2">
+                            <span className="text-primary">●</span>
                             sign in
                         </div>
                     )}
