@@ -3,6 +3,8 @@ import { Wallet, FlaskConical, TrendingUp, Loader2 } from 'lucide-react'
 import { ChipBar } from './ChipBar'
 import type { BetQuote } from '../../types/grid'
 
+const CHIP_TIP_STORAGE_KEY = 'blip_chip_tip_seen'
+
 interface TradeControlsProps {
     stake: number
     onStakeChange: (amount: number) => void
@@ -22,6 +24,27 @@ export const TradeControls: React.FC<TradeControlsProps> = ({
     quoteLoading = false,
     selectedCellId,
 }) => {
+    const [showChipTip, setShowChipTip] = React.useState(false)
+
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return
+        const seen = localStorage.getItem(CHIP_TIP_STORAGE_KEY) === 'true'
+        if (!seen) setShowChipTip(true)
+    }, [])
+
+    const handleStakeChange = (amount: number) => {
+        onStakeChange(amount)
+        if (showChipTip) {
+            localStorage.setItem(CHIP_TIP_STORAGE_KEY, 'true')
+            setShowChipTip(false)
+        }
+    }
+
+    const dismissChipTip = () => {
+        localStorage.setItem(CHIP_TIP_STORAGE_KEY, 'true')
+        setShowChipTip(false)
+    }
+
     return (
         <div className="p-4 border-b border-border bg-card" data-onboarding="trade-controls">
             <div className="flex flex-col gap-3">
@@ -50,7 +73,24 @@ export const TradeControls: React.FC<TradeControlsProps> = ({
                 </div>
 
                 {/* Chip bar */}
-                <ChipBar value={stake} onChange={onStakeChange} balance={balance} />
+                <div className="relative">
+                    <ChipBar value={stake} onChange={handleStakeChange} balance={balance} />
+                    {showChipTip && (
+                        <div className="absolute -top-12 left-0 z-20">
+                            <div className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground text-[10px] font-mono rounded-md shadow-lg">
+                                Pick a chip to set your stake
+                                <button
+                                    onClick={dismissChipTip}
+                                    className="text-[10px] underline underline-offset-2 hover:text-primary-foreground/80"
+                                    aria-label="Dismiss chip tip"
+                                >
+                                    Got it
+                                </button>
+                            </div>
+                            <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-primary ml-3" />
+                        </div>
+                    )}
+                </div>
 
                 {/* Bet Preview */}
                 {selectedCellId && (
