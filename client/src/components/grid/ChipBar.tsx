@@ -7,6 +7,7 @@ interface ChipBarProps {
     value: number
     onChange: (amount: number) => void
     balance: number
+    onAddFunds?: () => void
 }
 
 /**
@@ -14,11 +15,23 @@ interface ChipBarProps {
  * Preset chips: $1 $5 $10 $25, plus a custom-amount input (···).
  * Active chip highlights with amber glow; selection persists to localStorage.
  */
-export const ChipBar: React.FC<ChipBarProps> = ({ value, onChange, balance }) => {
+export const ChipBar: React.FC<ChipBarProps> = ({ value, onChange, balance, onAddFunds }) => {
     const [customOpen, setCustomOpen] = useState(false)
     const [customInput, setCustomInput] = useState('')
 
     const isPreset = (CHIP_AMOUNTS as readonly number[]).includes(value)
+    const isOutOfFunds = balance <= 0
+
+    const handleAddFunds = () => {
+        if (onAddFunds) {
+            onAddFunds()
+            return
+        }
+        if (isOutOfFunds && typeof document !== 'undefined') {
+            const trigger = document.querySelector('[data-wallet-trigger]') as HTMLButtonElement | null
+            trigger?.click()
+        }
+    }
 
     const handleChipClick = (amount: number) => {
         setCustomOpen(false)
@@ -42,6 +55,26 @@ export const ChipBar: React.FC<ChipBarProps> = ({ value, onChange, balance }) =>
             setCustomOpen(false)
             setCustomInput('')
         }
+    }
+
+    if (isOutOfFunds) {
+        return (
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={handleAddFunds}
+                    className={[
+                        'flex-1 h-9 rounded-md text-xs font-mono font-semibold transition-all duration-150 select-none',
+                        'border border-primary bg-primary text-primary-foreground hover:bg-primary/90',
+                        'focus:outline-none focus-visible:ring-1 focus-visible:ring-primary',
+                    ].join(' ')}
+                >
+                    Add Funds
+                </button>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                    Balance $0.00
+                </span>
+            </div>
+        )
     }
 
     return (
