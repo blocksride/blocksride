@@ -56,6 +56,8 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
 
     const viewportDuration = viewportEnd - viewportStart
     const visiblePriceDiff = visibleMaxPrice - visibleMinPrice
+    const now = Date.now()
+    const frozenWindows = 2
 
     const getX = (t: number) => {
         return ((t - viewportStart) / viewportDuration) * width
@@ -105,8 +107,73 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
 
     if (!grid) return null
 
+    const windowDuration = (grid.timeframe_sec || 60) * 1000
+    const gridStartTime = new Date(grid.start_time).getTime()
+    const currentWindowIndex = Math.floor((now - gridStartTime) / windowDuration)
+    const currentWindowStart = gridStartTime + currentWindowIndex * windowDuration
+    const currentWindowEnd = currentWindowStart + windowDuration
+    const frozenEndTime = currentWindowStart + (frozenWindows + 1) * windowDuration
+
+    const clampX = (x: number) => Math.min(width, Math.max(0, x))
+    const settledStartX = 0
+    const settledEndX = clampX(getX(currentWindowStart))
+    const nowStartX = clampX(getX(currentWindowStart))
+    const nowEndX = clampX(getX(currentWindowEnd))
+    const frozenStartX = clampX(getX(currentWindowEnd))
+    const frozenEndX = clampX(getX(frozenEndTime))
+    const bettableStartX = frozenEndX
+    const bettableEndX = width
+
     return (
         <svg width={width} height={height} className="block bg-background">
+            {/* Zone bands */}
+            {settledEndX > settledStartX && (
+                <rect
+                    x={settledStartX}
+                    y={0}
+                    width={settledEndX - settledStartX}
+                    height={height}
+                    className="fill-background"
+                />
+            )}
+            {nowEndX > nowStartX && (
+                <rect
+                    x={nowStartX}
+                    y={0}
+                    width={nowEndX - nowStartX}
+                    height={height}
+                    className="fill-secondary/20"
+                />
+            )}
+            {frozenEndX > frozenStartX && (
+                <rect
+                    x={frozenStartX}
+                    y={0}
+                    width={frozenEndX - frozenStartX}
+                    height={height}
+                    className="fill-primary/10"
+                />
+            )}
+            {bettableEndX > bettableStartX && (
+                <rect
+                    x={bettableStartX}
+                    y={0}
+                    width={bettableEndX - bettableStartX}
+                    height={height}
+                    className="fill-primary/5"
+                />
+            )}
+            {bettableStartX > 0 && bettableStartX < width && (
+                <line
+                    x1={bettableStartX}
+                    x2={bettableStartX}
+                    y1={0}
+                    y2={height}
+                    className="stroke-primary/40"
+                    strokeWidth="2"
+                />
+            )}
+
             <GridBackground
                 width={width}
                 height={height}
@@ -161,9 +228,9 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 height={height}
                 viewportStart={viewportStart}
                 viewportEnd={viewportEnd}
-                gridStartTime={new Date(grid.start_time).getTime()}
-                windowDuration={(grid.timeframe_sec || 60) * 1000}
-                frozenWindows={2}
+                gridStartTime={gridStartTime}
+                windowDuration={windowDuration}
+                frozenWindows={frozenWindows}
             />
 
             <CurrentPriceIndicator
