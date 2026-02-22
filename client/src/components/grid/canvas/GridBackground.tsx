@@ -34,20 +34,6 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
               strokeWidth="1"
               strokeDasharray="4 4"
             />
-            {height > 20 && (
-              <text
-                x={x + 5}
-                y={height - 10}
-                fontSize="10"
-                className="fill-foreground font-mono font-bold"
-              >
-                {new Date(t).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false
-                })}
-              </text>
-            )}
           </React.Fragment>
         )
       })}
@@ -67,17 +53,6 @@ export const GridBackground: React.FC<GridBackgroundProps> = ({
               strokeWidth="1"
               strokeDasharray="4 4"
             />
-            {width > 40 && (
-              <text
-                x={width - 8}
-                y={y - 5}
-                fontSize="10"
-                textAnchor="end"
-                className="fill-foreground font-mono font-bold"
-              >
-                {p.toFixed(2)}
-              </text>
-            )}
           </React.Fragment>
         )
       })}
