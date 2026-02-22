@@ -7,6 +7,7 @@ import { Toaster } from './components/ui/sonner'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { OfflineBanner } from './components/NetworkStatus'
 import AppRoutes from './router/routes'
+import { Analytics } from '@vercel/analytics/react'
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
               </ErrorBoundary>
               <BettingOnboarding />
               <Toaster />
+              <Analytics />
             </OnboardingProvider>
           </ContestProvider>
         </AuthProvider>
