@@ -48,6 +48,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const [pendingStake, setPendingStake] = useState(0)
     const [recentCells, setRecentCells] = useState<Record<string, boolean>>({})
     const recentTimersRef = useRef<Record<string, number>>({})
+    const [claimsOpen, setClaimsOpen] = useState(false)
 
     // Sidebar collapse (desktop)
     const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -236,6 +237,34 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const platformBalance = user?.balance ?? 0
     const userBalance = isPracticeMode ? practiceBalance : platformBalance
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
+
+    const claimItems = useMemo(() => {
+        return positions
+            .filter((p) => (p.payout ?? 0) > 0 && (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED'))
+            .map((p) => {
+                const cell = cells.find((c) => c.cell_id === p.cell_id)
+                const range = cell
+                    ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
+                    : p.cell_id
+                return {
+                    id: p.position_id,
+                    range,
+                    payout: p.payout ?? 0,
+                }
+            })
+    }, [positions, betResults, cells])
+
+    useEffect(() => {
+        window.dispatchEvent(new CustomEvent('claims:update', {
+            detail: { count: claimItems.length },
+        }))
+    }, [claimItems.length])
+
+    useEffect(() => {
+        const handler = () => setClaimsOpen((prev) => !prev)
+        window.addEventListener('claims:toggle', handler)
+        return () => window.removeEventListener('claims:toggle', handler)
+    }, [])
 
     // Toggle sidebar collapse
     const toggleSidebar = useCallback(() => {
@@ -430,6 +459,65 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             )}
 
             <div className="flex-1 flex relative overflow-hidden">
+                {/* Claims panel */}
+                {claimsOpen && (
+                    <>
+                        <div
+                            className="absolute inset-0 bg-black/40 z-40"
+                            onClick={() => setClaimsOpen(false)}
+                            aria-hidden="true"
+                        />
+                        <div className="absolute top-0 right-0 h-full w-72 bg-card border-l border-border z-50 flex flex-col animate-slide-in-right">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+                                <span className="text-sm font-semibold text-foreground">Pending Claims</span>
+                                <button
+                                    onClick={() => setClaimsOpen(false)}
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    aria-label="Close claims panel"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                                {claimItems.length === 0 ? (
+                                    <div className="text-xs text-muted-foreground">
+                                        No pending claims yet.
+                                    </div>
+                                ) : (
+                                    claimItems.map((claim) => (
+                                        <div key={claim.id} className="bg-secondary/30 border border-border rounded-lg p-3">
+                                            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+                                                Settled
+                                            </div>
+                                            <div className="text-xs font-mono text-foreground mb-2">
+                                                {claim.range}
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-sm font-mono font-semibold text-trade-up">
+                                                    ${claim.payout.toFixed(2)}
+                                                </div>
+                                                <button
+                                                    className="px-3 py-1 text-[11px] font-semibold rounded border border-primary/30 text-primary/70 cursor-not-allowed"
+                                                    disabled
+                                                >
+                                                    Claim
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            <div className="p-3 border-t border-border">
+                                <button
+                                    className="w-full h-10 rounded-lg bg-primary/20 text-primary font-mono font-semibold text-sm border border-primary/30 cursor-not-allowed"
+                                    disabled
+                                >
+                                    Claim All
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )}
                 {/* ── Grid canvas ─────────────────────────────────────────── */}
                 <main className="flex-1 relative flex flex-col bg-background min-w-0">
                     {/* Contest timer */}

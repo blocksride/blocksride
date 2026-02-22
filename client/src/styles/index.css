@@ -212,6 +212,21 @@ body {
     }
   }
 
+  .animate-slide-in-right {
+    animation: slideInRight 0.18s ease-out;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
   @keyframes cellPulse {
     0%, 100% {
       opacity: 0.85;

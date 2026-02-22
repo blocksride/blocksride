@@ -29,13 +29,23 @@ export function TerminalHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [priceDelta, setPriceDelta] = useState<number | null>(null)
   const prevPriceRef = useRef<number | null>(null)
+  const [pendingClaims, setPendingClaims] = useState(0)
 
   // Get asset info from contest
   const assetId = selectedContest?.asset_id || 'ETH-USD'
   const [symbol, quote] = assetId.split('-')
   const logoUrl = LOGO_URLS[symbol] || LOGO_URLS.ETH
   const currentPrice = useCurrentPrice(assetId)
-  const pendingClaims = 0
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ count?: number }>).detail
+      if (detail && typeof detail.count === 'number') {
+        setPendingClaims(detail.count)
+      }
+    }
+    window.addEventListener('claims:update', handler)
+    return () => window.removeEventListener('claims:update', handler)
+  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
@@ -142,6 +152,7 @@ export function TerminalHeader() {
         <div className="flex items-center gap-2 md:gap-3">
           {pendingClaims > 0 && (
             <button
+              onClick={() => window.dispatchEvent(new CustomEvent('claims:toggle'))}
               className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[11px] font-mono font-semibold"
               aria-label={`Pending claims: ${pendingClaims}`}
             >
