@@ -152,21 +152,12 @@ const Step = ({ n, title, body }: { n: string; title: string; body: string }) =>
 // ── Landing ───────────────────────────────────────────────────────────────────
 export const Landing = () => {
     const navigate = useNavigate()
-    const { authenticated, loading, signIn, signOut, walletAddress } = useAuth()
-    const [signInError, setSignInError] = useState<string | null>(null)
+    const { authenticated, loading, signOut, walletAddress } = useAuth()
     const [upcomingContests, setUpcomingContests] = useState<Contest[]>([])
     const [ethPrice, setEthPrice] = useState('---')
     const [ethChange, setEthChange] = useState('---')
     const [timeStr, setTimeStr] = useState('')
     const howRef = useRef<HTMLElement>(null)
-
-    const handleLogin = async () => {
-        setSignInError(null)
-        try { await signIn() } catch (e) {
-            const m = e instanceof Error ? e.message : 'Sign in failed'
-            setSignInError(m.includes('rejected') ? 'Login cancelled. Try again.' : m)
-        }
-    }
 
     // Clock
     useEffect(() => {
@@ -196,12 +187,10 @@ export const Landing = () => {
         api.getUpcomingContests().then(r => setUpcomingContests(r.data.contests || [])).catch(() => {})
     }, [])
 
-    // Auto-navigate
+    // Auto-navigate authenticated users straight to terminal
     useEffect(() => {
         if (!loading && authenticated) navigate('/terminal')
     }, [loading, authenticated, navigate])
-
-    useEffect(() => { if (!authenticated) setSignInError(null) }, [authenticated])
 
     const isUp = !ethChange.startsWith('-')
 
@@ -228,9 +217,9 @@ export const Landing = () => {
                             </Button>
                         </>
                     ) : (
-                        <Button size="sm" onClick={handleLogin} disabled={loading}
+                        <Button size="sm" onClick={() => navigate('/terminal')}
                             className="h-8 px-5 text-xs font-mono font-bold bg-primary text-primary-foreground hover:bg-primary/90 uppercase tracking-wide shadow-[0_0_14px_hsl(var(--primary)/0.4)]">
-                            {loading ? 'Loading…' : 'Connect Wallet'}
+                            Launch App
                         </Button>
                     )}
                 </div>
@@ -276,25 +265,6 @@ export const Landing = () => {
                                 {isUp ? '+' : ''}{ethChange}%
                             </span>
                         )}
-                    </div>
-
-                    {/* CTA */}
-                    <div className="flex flex-col items-center gap-3">
-                        {authenticated ? (
-                            <Button onClick={() => navigate('/terminal')} size="lg"
-                                className="h-13 px-10 text-base font-mono font-bold bg-primary text-primary-foreground hover:bg-primary/90 uppercase tracking-widest rounded-lg shadow-[0_0_30px_hsl(var(--primary)/0.4)] transition-all hover:shadow-[0_0_40px_hsl(var(--primary)/0.55)]">
-                                Open Terminal <ArrowRight className="w-5 h-5 ml-2" />
-                            </Button>
-                        ) : (
-                            <Button onClick={handleLogin} size="lg" disabled={loading}
-                                className="h-13 px-10 text-base font-mono font-bold bg-primary text-primary-foreground hover:bg-primary/90 uppercase tracking-widest rounded-lg shadow-[0_0_30px_hsl(var(--primary)/0.4)] transition-all hover:shadow-[0_0_40px_hsl(var(--primary)/0.55)]">
-                                {loading ? 'Loading…' : 'Start Betting'} <ArrowRight className="w-5 h-5 ml-2" />
-                            </Button>
-                        )}
-                        {signInError && <p className="text-xs text-trade-down font-mono">{signInError}</p>}
-                        <p className="text-[11px] text-muted-foreground/60 font-mono">
-                            Non-custodial · No gas fees · Base mainnet
-                        </p>
                     </div>
 
                     {/* Scroll cue */}
@@ -361,7 +331,7 @@ export const Landing = () => {
                             </h3>
                             <div className="max-w-lg mx-auto space-y-3">
                                 {upcomingContests.slice(0, 3).map(c => (
-                                    <div key={c.contest_id} onClick={handleLogin}
+                                    <div key={c.contest_id} onClick={() => navigate('/terminal')}
                                         className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/40 transition-all cursor-pointer group">
                                         <div>
                                             <div className="text-sm font-semibold text-foreground">{c.name}</div>
@@ -378,11 +348,14 @@ export const Landing = () => {
 
                     {/* Bottom CTA */}
                     <div className="mt-16 flex flex-col items-center gap-4">
-                        <Button onClick={authenticated ? () => navigate('/terminal') : handleLogin}
-                            size="lg" disabled={loading}
-                            className="h-12 px-10 font-mono font-bold text-sm uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg shadow-[0_0_24px_hsl(var(--primary)/0.35)] transition-all">
-                            {authenticated ? 'Open Terminal' : 'Launch App'} <ArrowRight className="w-4 h-4 ml-2" />
-                        </Button>
+                        <a href="https://t.me/blocksride" target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-3 h-13 px-10 text-base font-mono font-bold bg-primary text-primary-foreground hover:bg-primary/90 uppercase tracking-widest rounded-lg shadow-[0_0_30px_hsl(var(--primary)/0.4)] transition-all hover:shadow-[0_0_40px_hsl(var(--primary)/0.55)]">
+                            {/* Telegram icon */}
+                            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                            </svg>
+                            Join Us
+                        </a>
                         <p className="text-[11px] font-mono text-muted-foreground/50">blocksride.xyz</p>
                     </div>
                 </div>
