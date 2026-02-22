@@ -23,8 +23,8 @@ export function useGridViewport(
     const [viewportCenterTime, setViewportCenterTime] = useState<number | null>(
         null
     )
-    // Default to showing ~10 price bands - user can pan to see more
-    const [viewportPriceRange, setViewportPriceRange] = useState(() => Math.max(10, priceInterval * 10))
+    // Default to showing ~40 price bands (~±20 rows) - user can pan/zoom for more
+    const [viewportPriceRange, setViewportPriceRange] = useState(() => Math.max(10, priceInterval * 40))
     const [viewportCenterPrice, setViewportCenterPrice] = useState<number | null>(
         null
     )
@@ -82,8 +82,8 @@ export function useGridViewport(
     useEffect(() => {
         // Show 10x the timeframe (e.g., 60 sec timeframe = 10 minutes visible)
         setViewportTimeRange(selectedTimeframe * 10 * 1000)
-        // Show ~10 price bands - user can pan to see more
-        const idealRange = Math.max(10, priceInterval * 10)
+        // Show ~40 price bands (~±20 rows) - user can pan to see more
+        const idealRange = Math.max(10, priceInterval * 40)
         setViewportPriceRange(idealRange)
         setViewportCenterTime(null)
         setViewportCenterPrice(null)
