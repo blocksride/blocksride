@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useContest } from '@/contexts/ContestContext'
@@ -27,17 +27,29 @@ export function TerminalHeader() {
   const { isPracticeMode, selectedContest, exitToSelection } = useContest()
   const [currentTime, setCurrentTime] = useState(new Date())
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [priceDelta, setPriceDelta] = useState<number | null>(null)
+  const prevPriceRef = useRef<number | null>(null)
 
   // Get asset info from contest
   const assetId = selectedContest?.asset_id || 'ETH-USD'
   const [symbol, quote] = assetId.split('-')
   const logoUrl = LOGO_URLS[symbol] || LOGO_URLS.ETH
   const currentPrice = useCurrentPrice(assetId)
+  const pendingClaims = 0
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (currentPrice === null) return
+    if (prevPriceRef.current !== null && prevPriceRef.current > 0) {
+      const delta = ((currentPrice - prevPriceRef.current) / prevPriceRef.current) * 100
+      setPriceDelta(delta)
+    }
+    prevPriceRef.current = currentPrice
+  }, [currentPrice])
 
   const handleLogout = () => {
     signOut()
@@ -91,6 +103,16 @@ export function TerminalHeader() {
           )}>
             ${currentPrice ? currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '--.--'}
           </span>
+          {priceDelta !== null && (
+            <span className={cn(
+              'text-[11px] font-mono px-2 py-0.5 rounded',
+              priceDelta >= 0
+                ? 'text-trade-up bg-trade-up/15'
+                : 'text-trade-down bg-trade-down/15'
+            )}>
+              {priceDelta >= 0 ? '▲' : '▼'} {Math.abs(priceDelta).toFixed(2)}%
+            </span>
+          )}
 
           <div className="hidden md:block h-4 w-px bg-zinc-800" />
 
@@ -118,6 +140,15 @@ export function TerminalHeader() {
 
         {/* Right: Wallet + Time + Logout */}
         <div className="flex items-center gap-2 md:gap-3">
+          {pendingClaims > 0 && (
+            <button
+              className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[11px] font-mono font-semibold"
+              aria-label={`Pending claims: ${pendingClaims}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.6)]" />
+              Claims ({pendingClaims})
+            </button>
+          )}
           {/* Wallet Manager - shows balance, click to open deposit/withdraw */}
           <WalletManager />
 
