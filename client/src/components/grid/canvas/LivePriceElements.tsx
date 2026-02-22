@@ -22,8 +22,6 @@ export const LivePriceElements: React.FC<LivePriceElementsProps> = ({
     lastPricePoint,
     currentPrice,
 }) => {
-    const nowLineRef = useRef<SVGLineElement>(null)
-    const circleRef = useRef<SVGCircleElement>(null)
     const extensionLineRef = useRef<SVGLineElement>(null)
     const extensionAreaRef = useRef<SVGPathElement>(null)
 
@@ -79,21 +77,6 @@ export const LivePriceElements: React.FC<LivePriceElementsProps> = ({
             const nowX = getX(now)
             const priceY = curPrice !== null ? getY(curPrice) : null
 
-            // Update vertical "now" line
-            if (nowLineRef.current) {
-                nowLineRef.current.setAttribute('x1', String(nowX))
-                nowLineRef.current.setAttribute('x2', String(nowX))
-            }
-
-            // Update circle at intersection
-            if (circleRef.current && priceY !== null) {
-                circleRef.current.setAttribute('cx', String(nowX))
-                circleRef.current.setAttribute('cy', String(priceY))
-                circleRef.current.style.display = ''
-            } else if (circleRef.current) {
-                circleRef.current.style.display = 'none'
-            }
-
             // Update extension line from last price point to now
             if (extensionLineRef.current && lastPoint && curPrice !== null) {
                 const lastX = getX(lastPoint.time)
@@ -144,29 +127,6 @@ export const LivePriceElements: React.FC<LivePriceElementsProps> = ({
                 className="stroke-primary"
                 strokeWidth="2"
                 strokeLinejoin="round"
-            />
-
-            {/* Vertical "now" line */}
-            <line
-                ref={nowLineRef}
-                x1={0}
-                x2={0}
-                y1={0}
-                y2={height}
-                className="stroke-primary"
-                strokeWidth="1"
-                strokeDasharray="2 2"
-                opacity="0.8"
-            />
-
-            {/* Circle at current time/price intersection */}
-            <circle
-                ref={circleRef}
-                cx={0}
-                cy={0}
-                r="4"
-                className="fill-primary stroke-background"
-                strokeWidth="1.5"
             />
 
         </>
