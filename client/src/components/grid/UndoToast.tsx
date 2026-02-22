@@ -118,13 +118,10 @@ export const UndoToast: React.FC<UndoToastProps> = ({
             {/* Text */}
             <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                 <span className="font-semibold text-foreground leading-tight">
-                    Bet placed · ${amount.toFixed(2)}
+                    {priceLabel
+                        ? `Bet $${amount.toFixed(2)} on ${priceLabel}`
+                        : `Bet $${amount.toFixed(2)}`}
                 </span>
-                {priceLabel && (
-                    <span className="text-[11px] text-muted-foreground truncate">
-                        {priceLabel}
-                    </span>
-                )}
             </div>
 
             {/* Undo link */}
@@ -137,7 +134,7 @@ export const UndoToast: React.FC<UndoToastProps> = ({
                 ].join(' ')}
                 aria-label="Undo bet placement"
             >
-                Undo
+                Undo {secondsLeft}...
             </button>
         </div>
     )
