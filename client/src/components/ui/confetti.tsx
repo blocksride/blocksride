@@ -76,7 +76,6 @@ export const Confetti: React.FC<ConfettiProps> = ({ show, onComplete }) => {
 }
 
 // Hook for triggering confetti
-// eslint-disable-next-line react-refresh/only-export-components
 export function useConfetti() {
     const [showConfetti, setShowConfetti] = useState(false)
 
