@@ -189,7 +189,6 @@ export const ContestProvider = ({ children }: ContestProviderProps) => {
     )
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const useContest = () => {
     const context = useContext(ContestContext)
     if (!context) {
@@ -199,7 +198,6 @@ export const useContest = () => {
 }
 
 // Helper function to format time remaining
-// eslint-disable-next-line react-refresh/only-export-components
 export const formatTimeRemaining = (seconds: number): string => {
     if (seconds <= 0) return '0:00'
 
