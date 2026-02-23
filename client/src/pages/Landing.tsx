@@ -8,6 +8,7 @@ import { GridCanvas } from '@/components/grid/GridCanvas'
 import { useGridViewport } from '@/hooks/useGridViewport'
 import { Grid, Cell, PricePoint } from '@/types/grid'
 import { BlocksrideLogo } from '@/components/BlocksrideLogo'
+import { sdk } from '@farcaster/miniapp-sdk'
 
 // ── Deterministic seeded RNG ──────────────────────────────────────────────────
 function seededRng(seed: number) {
@@ -152,7 +153,9 @@ const Step = ({ n, title, body }: { n: string; title: string; body: string }) =>
 // ── Landing ───────────────────────────────────────────────────────────────────
 export const Landing = () => {
     const navigate = useNavigate()
-    const { authenticated, loading, signOut, walletAddress } = useAuth()
+    const { authenticated, loading, signOut, walletAddress, signIn } = useAuth()
+    const [isMiniApp, setIsMiniApp] = useState(false)
+    const miniAppLoginRef = useRef(false)
     const [upcomingContests, setUpcomingContests] = useState<Contest[]>([])
     const [ethPrice, setEthPrice] = useState('---')
     const [ethChange, setEthChange] = useState('---')
@@ -192,6 +195,41 @@ export const Landing = () => {
         if (!loading && authenticated) navigate('/terminal')
     }, [loading, authenticated, navigate])
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        let cancelled = false
+
+        const loadMiniAppContext = async () => {
+            try {
+                const inMiniApp = await sdk.isInMiniApp()
+                if (!inMiniApp || cancelled) return
+                setIsMiniApp(true)
+
+                const context = await sdk.context
+                if (cancelled) return
+                api.logMiniAppContext({
+                    context,
+                    user_agent: navigator.userAgent,
+                    url: window.location.href,
+                }).catch(() => {
+                    // Optional analytics log; ignore failures
+                })
+
+                if (!authenticated && !loading && !miniAppLoginRef.current) {
+                    miniAppLoginRef.current = true
+                    signIn()
+                }
+            } catch (error) {
+                console.error('Failed to load mini app context:', error)
+            }
+        }
+
+        loadMiniAppContext()
+        return () => {
+            cancelled = true
+        }
+    }, [authenticated, loading, signIn])
+
     const isUp = !ethChange.startsWith('-')
 
     return (
@@ -199,7 +237,14 @@ export const Landing = () => {
 
             {/* ── Minimal header ────────────────────────────────────────── */}
             <header className="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-6 lg:px-10 border-b border-border/60 bg-background/80 backdrop-blur-md">
-                <BlocksrideLogo size={28} wordmark />
+                <div className="flex items-center gap-3">
+                    <BlocksrideLogo size={28} wordmark />
+                    {isMiniApp && (
+                        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-primary/80 border border-primary/30 px-2 py-0.5 rounded-full">
+                            Base Mini App
+                        </span>
+                    )}
+                </div>
 
                 <div className="flex items-center gap-3">
                     {authenticated ? (
