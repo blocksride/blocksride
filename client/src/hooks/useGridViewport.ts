@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface Dimensions {
     width: number
@@ -72,12 +72,12 @@ export function useGridViewport(
     const visibleMaxPrice = centerPrice + viewportPriceRange / 2
 
     // Helper to clamp time within boundaries
-    const clampTime = (time: number): number => {
+    const clampTime = useCallback((time: number): number => {
         if (!timeBoundary) return time
         const minCenter = timeBoundary.start + viewportTimeRange / 2
         const maxCenter = timeBoundary.end - viewportTimeRange / 2
         return Math.max(minCenter, Math.min(maxCenter, time))
-    }
+    }, [timeBoundary, viewportTimeRange])
 
     useEffect(() => {
         // Show 10x the timeframe (e.g., 60 sec timeframe = 10 minutes visible)
@@ -153,8 +153,10 @@ export function useGridViewport(
         anchorPrice,
         now,
         centerTime,
+        clampedCenterTime,
         centerPrice,
         interactive,
+        clampTime,
         priceInterval
     ])
 
