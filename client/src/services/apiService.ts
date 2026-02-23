@@ -95,6 +95,9 @@ export const api = {
             asset_id: assetId,
             stake,
         }),
+
+    logMiniAppContext: (payload: MiniAppContextPayload) =>
+        axiosInstance.post(`/analytics/miniapp`, payload),
 }
 
 export interface LeaderboardEntry {
@@ -152,4 +155,10 @@ export interface WithdrawalRequest {
     created_at: string
     processed_at?: string
     completed_at?: string
+}
+
+export interface MiniAppContextPayload {
+    context: unknown
+    user_agent: string
+    url: string
 }

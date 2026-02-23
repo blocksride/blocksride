@@ -1,0 +1,25 @@
+{
+  "accountAssociation": {
+    "header": "REPLACE_WITH_HEADER",
+    "payload": "REPLACE_WITH_PAYLOAD",
+    "signature": "REPLACE_WITH_SIGNATURE"
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "BlocksRide",
+    "homeUrl": "https://blocksride.xyz",
+    "iconUrl": "https://blocksride.xyz/logo/blocksride-mark-color.png",
+    "splashImageUrl": "https://blocksride.xyz/logo/blocksride-logo-color.png",
+    "splashBackgroundColor": "#0C0A08",
+    "subtitle": "60 seconds prediction market",
+    "description": "Trade 60-second prediction markets on crypto prices.",
+    "primaryCategory": "finance",
+    "tags": ["prediction", "crypto", "markets"],
+    "heroImageUrl": "https://blocksride.xyz/logo/blocksride-logo-color.png",
+    "tagline": "60 seconds prediction market",
+    "ogTitle": "BlocksRide",
+    "ogDescription": "60-second prediction markets on crypto prices.",
+    "ogImageUrl": "https://blocksride.xyz/logo/blocksride-logo-color.png",
+    "noindex": true
+  }
+}
