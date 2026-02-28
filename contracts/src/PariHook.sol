@@ -12,6 +12,7 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/type
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -483,11 +484,8 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 windowId,
         uint256 amount
     ) external nonReentrant whenNotPaused {
-        // TODO: Implement bet placement logic
-        // TODO: Validate window is in betting zone (+4, +5, +6)
-        // TODO: Transfer USDC from user via poolManager.unlock()
-        // TODO: Update window state (totalPool, cellStakes, userStakes)
-        // TODO: Emit BetPlaced event
+        PoolId poolId = key.toId();
+        _placeBet(poolId, cellId, windowId, amount, msg.sender);
     }
 
     /**
@@ -542,8 +540,23 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         bytes32 r,
         bytes32 s
     ) external nonReentrant whenNotPaused {
-        // TODO: Call USDC.permit() to approve this contract
-        // TODO: Call internal _placeBet()
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+
+        // Call USDC permit to approve this contract
+        // Note: This uses the EIP-2612 permit interface which some USDC implementations support
+        IERC20Permit(cfg.usdcToken).permit(
+            msg.sender,
+            address(this),
+            amount,
+            deadline,
+            v,
+            r,
+            s
+        );
+
+        // Place the bet
+        _placeBet(poolId, cellId, windowId, amount, msg.sender);
     }
 
     // =============================================================
@@ -743,8 +756,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @return Current window ID
      */
     function getCurrentWindow(PoolKey calldata key) external view returns (uint256) {
-        // TODO: Calculate (block.timestamp - gridEpoch) / windowDuration
-        return 0;
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        require(cfg.gridEpoch != 0, "Grid not configured");
+
+        return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
     }
 
     /**
@@ -754,8 +770,14 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @return end Last bettable window ID
      */
     function getBettableWindows(PoolKey calldata key) external view returns (uint256 start, uint256 end) {
-        // TODO: Calculate current + frozenWindows + 1 through current + frozenWindows + 3
-        return (0, 0);
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        require(cfg.gridEpoch != 0, "Grid not configured");
+
+        uint256 current = (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+        start = current + cfg.frozenWindows + 1; // First bettable window
+        end = current + cfg.frozenWindows + 3;   // Last bettable window (3 windows total)
+        return (start, end);
     }
 
     /**
@@ -846,10 +868,44 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 amount,
         address user
     ) internal {
-        // TODO: Implement core bet logic
-        // TODO: Validate betting zone
-        // TODO: Update window state
-        // TODO: Transfer USDC via poolManager.unlock()
+        GridConfig storage cfg = gridConfigs[poolId];
+        require(cfg.gridEpoch != 0, "Grid not configured");
+
+        // Calculate current window and bettable range
+        uint256 currentWindow = (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+        uint256 bettableStart = currentWindow + cfg.frozenWindows + 1;
+        uint256 bettableEnd = currentWindow + cfg.frozenWindows + 3;
+
+        // Validate window is in betting zone
+        require(
+            windowId >= bettableStart && windowId <= bettableEnd,
+            "Window not in betting zone"
+        );
+
+        // Validate amount
+        require(amount > 0, "Amount must be > 0");
+
+        // Validate cell stake limit
+        Window storage window = windows[poolId][windowId];
+        require(
+            window.cellStakes[cellId] + amount <= cfg.maxStakePerCell,
+            "Exceeds max stake per cell"
+        );
+
+        // Transfer USDC from user to this contract
+        require(
+            IERC20(cfg.usdcToken).transferFrom(user, address(this), amount),
+            "USDC transfer failed"
+        );
+
+        // Update window state
+        window.totalPool += amount;
+        window.organicPool += amount;
+        window.cellStakes[cellId] += amount;
+        window.userStakes[cellId][user] += amount;
+
+        // Emit event
+        emit BetPlaced(poolId, windowId, cellId, user, amount);
     }
 
     /**
