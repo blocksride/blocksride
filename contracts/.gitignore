@@ -4,6 +4,7 @@ selfnotes/
 cache/
 out/
 broadcast/
+lib/
 
 # Dotenv file
 .env
