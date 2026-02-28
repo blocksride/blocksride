@@ -1,1 +1,9 @@
 selfnotes/
+
+# Foundry
+cache/
+out/
+broadcast/
+
+# Dotenv file
+.env
