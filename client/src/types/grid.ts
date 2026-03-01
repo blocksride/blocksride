@@ -36,7 +36,8 @@ export enum PositionState {
     PENDING = 'PENDING',
     ACTIVE = 'ACTIVE',
     LOCKED = 'LOCKED',
-    RESOLVED = 'RESOLVED'
+    RESOLVED = 'RESOLVED',
+    VOIDED = 'VOIDED',
 }
 
 export interface Position {
@@ -45,7 +46,7 @@ export interface Position {
     asset_id: string
     cell_id: string
     stake: number
-    state: PositionState | 'PENDING' | 'ACTIVE' | 'LOCKED' | 'RESOLVED'
+    state: PositionState | 'PENDING' | 'ACTIVE' | 'LOCKED' | 'RESOLVED' | 'VOIDED'
     is_practice: boolean
     created_at?: string
     payout?: number

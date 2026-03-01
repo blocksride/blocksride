@@ -32,6 +32,20 @@ import { useBetQuote } from '../hooks/useBetQuote'
 const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
 const SIDEBAR_COLLAPSED_KEY = 'blocksride_sidebar_collapsed'
 
+// Decode composite "windowId_cellId" key into "$pLow – $pHigh" range string
+function formatCellRange(cellId: string, priceInterval: number): string {
+    const parts = cellId.split('_')
+    if (parts.length === 2) {
+        const bandCellId = parseInt(parts[1], 10)
+        if (!isNaN(bandCellId)) {
+            const pLow = bandCellId * priceInterval
+            const pHigh = (bandCellId + 1) * priceInterval
+            return `$${pLow.toLocaleString()} – $${pHigh.toLocaleString()}`
+        }
+    }
+    return cellId
+}
+
 interface GridVisualizerProps {
     assetId?: string
 }
@@ -49,6 +63,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const [recentCells, setRecentCells] = useState<Record<string, boolean>>({})
     const recentTimersRef = useRef<Record<string, number>>({})
     const [claimsOpen, setClaimsOpen] = useState(false)
+    const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set())
+    const [claimingIds, setClaimingIds] = useState<Set<string>>(new Set())
     const [currentTime, setCurrentTime] = useState(new Date())
 
     // Sidebar collapse (desktop)
@@ -244,26 +260,58 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
     const claimItems = useMemo(() => {
+        const bw = grid?.price_interval || 2
         return positions
-            .filter((p) => (p.payout ?? 0) > 0 && (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED'))
+            .filter((p) =>
+                (p.payout ?? 0) > 0 &&
+                (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED') &&
+                !claimedIds.has(p.position_id)
+            )
             .map((p) => {
                 const cell = cells.find((c) => c.cell_id === p.cell_id)
                 const range = cell
                     ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
-                    : p.cell_id
-                return {
-                    id: p.position_id,
-                    range,
-                    payout: p.payout ?? 0,
-                }
+                    : formatCellRange(p.cell_id, bw)
+                return { id: p.position_id, range, payout: p.payout ?? 0 }
             })
-    }, [positions, betResults, cells])
+    }, [positions, betResults, cells, claimedIds, grid])
+
+    const voidItems = useMemo(() => {
+        const bw = grid?.price_interval || 2
+        return positions
+            .filter((p) => p.state === 'VOIDED' && !claimedIds.has(p.position_id))
+            .map((p) => {
+                const cell = cells.find((c) => c.cell_id === p.cell_id)
+                const range = cell
+                    ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
+                    : formatCellRange(p.cell_id, bw)
+                return { id: p.position_id, range, payout: p.stake }
+            })
+    }, [positions, cells, claimedIds, grid])
+
+    const handleClaim = useCallback((positionId: string) => {
+        setClaimingIds(prev => { const s = new Set(prev); s.add(positionId); return s })
+        setClaimedIds(prev => { const s = new Set(prev); s.add(positionId); return s })
+        setClaimingIds(prev => { const s = new Set(prev); s.delete(positionId); return s })
+        refreshUser()
+    }, [refreshUser])
+
+    const handleClaimAll = useCallback(() => {
+        const allIds = [
+            ...claimItems.map(c => c.id),
+            ...voidItems.map(v => v.id),
+        ]
+        setClaimedIds(prev => new Set([...prev, ...allIds]))
+        refreshUser()
+    }, [claimItems, voidItems, refreshUser])
 
     useEffect(() => {
+        const total = claimItems.reduce((sum, c) => sum + c.payout, 0)
+            + voidItems.reduce((sum, v) => sum + v.payout, 0)
         window.dispatchEvent(new CustomEvent('claims:update', {
-            detail: { count: claimItems.length },
+            detail: { count: claimItems.length + voidItems.length, totalAmount: total },
         }))
-    }, [claimItems.length])
+    }, [claimItems, voidItems])
 
     useEffect(() => {
         const handler = () => setClaimsOpen((prev) => !prev)
@@ -482,7 +530,17 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                         />
                         <div className="absolute top-0 right-0 h-full w-72 bg-card border-l border-border z-50 flex flex-col animate-slide-in-right">
                             <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-                                <span className="text-sm font-semibold text-foreground">Pending Claims</span>
+                                <div>
+                                    <span className="text-sm font-semibold text-foreground">Pending Claims</span>
+                                    {(claimItems.length + voidItems.length) > 0 && (
+                                        <span className="ml-2 text-xs font-mono text-trade-up">
+                                            +${(
+                                                claimItems.reduce((s, c) => s + c.payout, 0) +
+                                                voidItems.reduce((s, v) => s + v.payout, 0)
+                                            ).toFixed(2)}
+                                        </span>
+                                    )}
+                                </div>
                                 <button
                                     onClick={() => setClaimsOpen(false)}
                                     className="text-muted-foreground hover:text-foreground transition-colors"
@@ -492,38 +550,68 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                 </button>
                             </div>
                             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                                {claimItems.length === 0 ? (
-                                    <div className="text-xs text-muted-foreground">
+                                {claimItems.length === 0 && voidItems.length === 0 ? (
+                                    <div className="text-xs text-muted-foreground pt-2">
                                         No pending claims yet.
                                     </div>
                                 ) : (
-                                    claimItems.map((claim) => (
-                                        <div key={claim.id} className="bg-secondary/30 border border-border rounded-lg p-3">
-                                            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-                                                Settled
-                                            </div>
-                                            <div className="text-xs font-mono text-foreground mb-2">
-                                                {claim.range}
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div className="text-sm font-mono font-semibold text-trade-up">
-                                                    ${claim.payout.toFixed(2)}
+                                    <>
+                                        {claimItems.map((claim) => (
+                                            <div key={claim.id} className="bg-secondary/30 border border-border rounded-lg p-3">
+                                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+                                                    Won
                                                 </div>
-                                                <button
-                                                    className="px-3 py-1 text-[11px] font-semibold rounded border border-primary/30 text-primary/70 cursor-not-allowed"
-                                                    disabled
-                                                >
-                                                    Claim
-                                                </button>
+                                                <div className="text-xs font-mono text-foreground mb-2">
+                                                    {claim.range}
+                                                </div>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm font-mono font-semibold text-trade-up">
+                                                        +${claim.payout.toFixed(2)}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleClaim(claim.id)}
+                                                        disabled={claimingIds.has(claim.id)}
+                                                        className="px-3 py-1 text-[11px] font-semibold rounded border border-trade-up/40 text-trade-up bg-trade-up/10 hover:bg-trade-up/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {claimingIds.has(claim.id) ? '…' : 'Claim'}
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))
+                                        ))}
+                                        {voidItems.length > 0 && (
+                                            <>
+                                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground pt-1 pb-0.5">
+                                                    Void Refunds
+                                                </div>
+                                                {voidItems.map((item) => (
+                                                    <div key={item.id} className="bg-secondary/30 border border-border rounded-lg p-3">
+                                                        <div className="text-xs font-mono text-foreground mb-2">
+                                                            {item.range}
+                                                        </div>
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-sm font-mono font-semibold text-primary">
+                                                                +${item.payout.toFixed(2)}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleClaim(item.id)}
+                                                                disabled={claimingIds.has(item.id)}
+                                                                className="px-3 py-1 text-[11px] font-semibold rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {claimingIds.has(item.id) ? '…' : 'Refund'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
+                                    </>
                                 )}
                             </div>
                             <div className="p-3 border-t border-border">
                                 <button
-                                    className="w-full h-10 rounded-lg bg-primary/20 text-primary font-mono font-semibold text-sm border border-primary/30 cursor-not-allowed"
-                                    disabled
+                                    onClick={handleClaimAll}
+                                    disabled={claimItems.length + voidItems.length === 0}
+                                    className="w-full h-10 rounded-lg bg-primary/20 text-primary font-mono font-semibold text-sm border border-primary/30 hover:bg-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     Claim All
                                 </button>
