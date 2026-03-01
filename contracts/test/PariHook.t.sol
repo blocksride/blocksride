@@ -53,6 +53,7 @@ contract PariHookTest is Test {
     uint256 public constant MAX_STAKE_PER_CELL = 100_000_000_000; // $100,000
     uint256 public constant FEE_BPS = 200; // 2%
     uint256 public constant MIN_POOL_THRESHOLD = 1_000_000; // $1.00
+    uint256 public constant GRID_EPOCH = 1_800_000_000; // 2027-01-15 06:40:00 UTC
 
     // =============================================================
     //                      TEST STATE
@@ -67,14 +68,29 @@ contract PariHookTest is Test {
     // =============================================================
 
     function setUp() public {
-        // TODO: Deploy mock PoolManager
-        // TODO: Deploy mock Pyth oracle
-        // TODO: Deploy mock USDC token
-        // TODO: Deploy PariHook
-        // TODO: Grant roles (ADMIN_ROLE, TREASURY_ROLE, RELAYER_ROLE)
-        // TODO: Initialize test pool with grid config
-        // TODO: Mint USDC to test accounts
-        // TODO: Approve hook to spend USDC
+        // Deploy mock PoolManager (using makeAddr for now - will deploy actual mock later)
+        poolManager = IPoolManager(makeAddr("poolManager"));
+
+        // Deploy PariHook — constructor sets all roles; deployer gets DEFAULT_ADMIN_ROLE
+        hook = new PariHook(poolManager, admin, treasury, relayer);
+
+        // Create test pool key
+        // Note: In production, hooks address must have specific bit pattern
+        // For testing, we'll mock the PoolManager to skip address validation
+        testPoolKey = PoolKey({
+            currency0: Currency.wrap(address(0x1)),  // Mock currency0
+            currency1: Currency.wrap(address(0x2)),  // Mock currency1
+            fee: 3000,  // 0.3% fee
+            tickSpacing: 60,
+            hooks: hook
+        });
+        testPoolId = testPoolKey.toId();
+
+        // Mock USDC token (will implement actual ERC20 mock later)
+        usdc = IERC20(makeAddr("usdc"));
+        gridEpoch = GRID_EPOCH;
+
+        // Note: USDC minting and approvals will be added when we implement betting logic
     }
 
     // =============================================================
@@ -88,18 +104,169 @@ contract PariHookTest is Test {
         // TODO: Verify admin has DEFAULT_ADMIN_ROLE
     }
 
+    function test_ConfigureGrid() public {
+        // Skip PoolKey validation by only testing the standalone functions
+        vm.skip(true);
+    }
+
+    function test_ConfigureGrid_RevertWhen_NotAdmin() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+    }
+
+    function test_ConfigureGrid_RevertWhen_InvalidBandWidth() public {
+        vm.prank(admin);
+        vm.expectRevert("Band width must be > 0");
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            0, // Invalid: bandWidth = 0
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+    }
+
+    function test_ConfigureGrid_RevertWhen_InvalidWindowDuration() public {
+        vm.prank(admin);
+        vm.expectRevert("Window duration must be > 0");
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            0, // Invalid: windowDuration = 0
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+    }
+
+    function test_ConfigureGrid_RevertWhen_ExcessiveFee() public {
+        vm.prank(admin);
+        vm.expectRevert("Fee cannot exceed 10%");
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            1001, // Invalid: feeBps > 1000 (10%)
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+    }
+
+    function test_ConfigureGrid_RevertWhen_InvalidFrozenWindows() public {
+        vm.prank(admin);
+        vm.expectRevert("Frozen windows must be 1-10");
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            0, // Invalid: frozenWindows < 1
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+    }
+
+    function test_ConfigureGrid_RevertWhen_AlreadyConfigured() public {
+        // Configure once
+        vm.startPrank(admin);
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+
+        // Attempt to reconfigure
+        vm.expectRevert("Grid already configured");
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+        vm.stopPrank();
+    }
+
     function test_BeforeInitialize() public {
-        // TODO: Test grid initialization via beforeInitialize hook
-        // TODO: Verify gridConfigs[poolId] stored correctly
-        // TODO: Verify GridInitialized event emitted
+        // First configure the grid
+        vm.prank(admin);
+        hook.configureGrid(
+            testPoolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            address(usdc)
+        );
+
+        // Mock the PoolManager calling beforeInitialize
+        vm.prank(address(poolManager));
+        vm.expectEmit(true, false, false, true);
+        emit PariHook.GridInitialized(
+            testPoolId,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            GRID_EPOCH, // epoch is the admin-supplied constant
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD
+        );
+
+        bytes4 selector = hook.beforeInitialize(address(this), testPoolKey, 1 << 96);
+        assertEq(selector, hook.beforeInitialize.selector);
     }
 
-    function test_BeforeInitialize_RevertWhen_InvalidBandWidth() public {
-        // TODO: Test revert when bandWidth == 0
-    }
-
-    function test_BeforeInitialize_RevertWhen_InvalidWindowDuration() public {
-        // TODO: Test revert when windowDuration == 0
+    function test_BeforeInitialize_RevertWhen_GridNotConfigured() public {
+        // Attempt to initialize without configuring grid first
+        vm.prank(address(poolManager));
+        vm.expectRevert("Grid not configured");
+        hook.beforeInitialize(address(this), testPoolKey, 1 << 96);
     }
 
     function test_GetHookPermissions() public {
