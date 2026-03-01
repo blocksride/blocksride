@@ -17,10 +17,11 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
 
       - name: Check formatting
         run: forge fmt --check
+        working-directory: contracts
 
       - name: Run Slither
         uses: crytic/slither-action@v0.3.0

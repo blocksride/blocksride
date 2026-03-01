@@ -12,6 +12,7 @@ import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@uniswap/v4-core/src/type
 import {ModifyLiquidityParams, SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -100,7 +101,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param deadline Signature expiration timestamp
      */
     struct BetIntent {
-        address user;      // must match field order in BET_INTENT_TYPEHASH
+        address user; // must match field order in BET_INTENT_TYPEHASH
         bytes32 poolId;
         uint256 cellId;
         uint256 windowId;
@@ -118,7 +119,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param deadline Signature expiration timestamp
      */
     struct ClaimIntent {
-        address user;      // must match field order in CLAIM_INTENT_TYPEHASH
+        address user; // must match field order in CLAIM_INTENT_TYPEHASH
         bytes32 poolId;
         uint256[] windowIds;
         uint256 nonce;
@@ -161,9 +162,8 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     );
 
     /// @notice EIP-712 ClaimIntent typehash
-    bytes32 public constant CLAIM_INTENT_TYPEHASH = keccak256(
-        "ClaimIntent(address user,bytes32 poolId,uint256[] windowIds,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 public constant CLAIM_INTENT_TYPEHASH =
+        keccak256("ClaimIntent(address user,bytes32 poolId,uint256[] windowIds,uint256 nonce,uint256 deadline)");
 
     // =============================================================
     //                          EVENTS
@@ -182,11 +182,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     );
 
     event BetPlaced(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        uint256 indexed cellId,
-        address user,
-        uint256 amount
+        PoolId indexed poolId, uint256 indexed windowId, uint256 indexed cellId, address user, uint256 amount
     );
 
     event WindowSettled(
@@ -197,57 +193,23 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 redemptionRate
     );
 
-    event WindowVoided(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        uint256 totalRefundable
-    );
+    event WindowVoided(PoolId indexed poolId, uint256 indexed windowId, uint256 totalRefundable);
 
     event WindowRolledOver(
-        PoolId indexed poolId,
-        uint256 indexed fromWindowId,
-        uint256 indexed toWindowId,
-        uint256 carryAmount
+        PoolId indexed poolId, uint256 indexed fromWindowId, uint256 indexed toWindowId, uint256 carryAmount
     );
 
-    event PayoutPushed(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        address indexed winner,
-        uint256 amount
-    );
+    event PayoutPushed(PoolId indexed poolId, uint256 indexed windowId, address indexed winner, uint256 amount);
 
-    event PayoutClaimed(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        address indexed winner,
-        uint256 amount
-    );
+    event PayoutClaimed(PoolId indexed poolId, uint256 indexed windowId, address indexed winner, uint256 amount);
 
-    event RefundClaimed(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        address indexed user,
-        uint256 amount
-    );
+    event RefundClaimed(PoolId indexed poolId, uint256 indexed windowId, address indexed user, uint256 amount);
 
-    event FeeCollected(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        uint256 amount
-    );
+    event FeeCollected(PoolId indexed poolId, uint256 indexed windowId, uint256 amount);
 
-    event BackstopDeposited(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        uint256 amount
-    );
+    event BackstopDeposited(PoolId indexed poolId, uint256 indexed windowId, uint256 amount);
 
-    event FeesWithdrawn(
-        PoolId indexed poolId,
-        address indexed recipient,
-        uint256 amount
-    );
+    event FeesWithdrawn(PoolId indexed poolId, address indexed recipient, uint256 amount);
 
     // =============================================================
     //                        CONSTRUCTOR
@@ -262,12 +224,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @dev DEFAULT_ADMIN_ROLE is granted to msg.sender (deployer) — should be a cold hardware wallet
      *      used only to grant/revoke roles. Transfer it after deploy if needed.
      */
-    constructor(
-        IPoolManager _poolManager,
-        address _admin,
-        address _treasury,
-        address _relayer
-    ) {
+    constructor(IPoolManager _poolManager, address _admin, address _treasury, address _relayer) {
         poolManager = _poolManager;
 
         // TODO: Re-enable hook address validation for production deployment
@@ -320,11 +277,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      *      admin-specified future timestamp — we do not override it here.
      * @param key Pool key containing currencies and hook address
      */
-    function beforeInitialize(
-        address,
-        PoolKey calldata key,
-        uint160
-    ) external override returns (bytes4) {
+    function beforeInitialize(address, PoolKey calldata key, uint160) external override returns (bytes4) {
         require(msg.sender == address(poolManager), "Only PoolManager");
 
         PoolId poolId = key.toId();
@@ -405,21 +358,16 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         });
     }
 
-    function afterInitialize(
-        address,
-        PoolKey calldata,
-        uint160,
-        int24
-    ) external pure override returns (bytes4) {
+    function afterInitialize(address, PoolKey calldata, uint160, int24) external pure override returns (bytes4) {
         revert("Hook not implemented");
     }
 
-    function beforeAddLiquidity(
-        address,
-        PoolKey calldata,
-        ModifyLiquidityParams calldata,
-        bytes calldata
-    ) external pure override returns (bytes4) {
+    function beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        external
+        pure
+        override
+        returns (bytes4)
+    {
         revert("Hook not implemented");
     }
 
@@ -434,12 +382,12 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         revert("Hook not implemented");
     }
 
-    function beforeRemoveLiquidity(
-        address,
-        PoolKey calldata,
-        ModifyLiquidityParams calldata,
-        bytes calldata
-    ) external pure override returns (bytes4) {
+    function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
+        external
+        pure
+        override
+        returns (bytes4)
+    {
         revert("Hook not implemented");
     }
 
@@ -454,42 +402,39 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         revert("Hook not implemented");
     }
 
-    function beforeSwap(
-        address,
-        PoolKey calldata,
-        SwapParams calldata,
-        bytes calldata
-    ) external pure override returns (bytes4, BeforeSwapDelta, uint24) {
+    function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
+        external
+        pure
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
         revert("Hook not implemented");
     }
 
-    function afterSwap(
-        address,
-        PoolKey calldata,
-        SwapParams calldata,
-        BalanceDelta,
-        bytes calldata
-    ) external pure override returns (bytes4, int128) {
+    function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
+        external
+        pure
+        override
+        returns (bytes4, int128)
+    {
         revert("Hook not implemented");
     }
 
-    function beforeDonate(
-        address,
-        PoolKey calldata,
-        uint256,
-        uint256,
-        bytes calldata
-    ) external pure override returns (bytes4) {
+    function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
+        external
+        pure
+        override
+        returns (bytes4)
+    {
         revert("Hook not implemented");
     }
 
-    function afterDonate(
-        address,
-        PoolKey calldata,
-        uint256,
-        uint256,
-        bytes calldata
-    ) external pure override returns (bytes4) {
+    function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
+        external
+        pure
+        override
+        returns (bytes4)
+    {
         revert("Hook not implemented");
     }
 
@@ -505,17 +450,12 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowId Target window ID
      * @param amount USDC amount to bet
      */
-    function placeBet(
-        PoolKey calldata key,
-        uint256 cellId,
-        uint256 windowId,
-        uint256 amount
-    ) external nonReentrant whenNotPaused {
-        // TODO: Implement bet placement logic
-        // TODO: Validate window is in betting zone (+4, +5, +6)
-        // TODO: Transfer USDC from user via poolManager.unlock()
-        // TODO: Update window state (totalPool, cellStakes, userStakes)
-        // TODO: Emit BetPlaced event
+    function placeBet(PoolKey calldata key, uint256 cellId, uint256 windowId, uint256 amount)
+        external
+        nonReentrant
+        whenNotPaused
+    {
+        _placeBet(key.toId(), cellId, windowId, amount, msg.sender);
     }
 
     /**
@@ -539,10 +479,31 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 deadline,
         bytes calldata sig
     ) external nonReentrant whenNotPaused onlyRole(RELAYER_ROLE) {
-        // TODO: Verify EIP-712 signature over BetIntent{user,poolId,cellId,windowId,amount,nonce,deadline}
-        // TODO: Check deadline not expired
-        // TODO: Check nonce == betNonces[user], then increment betNonces[user]
-        // TODO: Call internal _placeBet()
+        require(block.timestamp <= deadline, "Signature expired");
+        require(nonce == betNonces[user], "Invalid nonce");
+        betNonces[user]++;
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                BET_INTENT_TYPEHASH, user, bytes32(PoolId.unwrap(key.toId())), cellId, windowId, amount, nonce, deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+
+        require(sig.length == 65, "Invalid signature length");
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        bytes memory sigMem = sig;
+        assembly {
+            r := mload(add(sigMem, 32))
+            s := mload(add(sigMem, 64))
+            v := byte(0, mload(add(sigMem, 96)))
+        }
+        address signer = ecrecover(digest, v, r, s);
+        require(signer != address(0) && signer == user, "Invalid signature");
+
+        _placeBet(key.toId(), cellId, windowId, amount, user);
     }
 
     /**
@@ -562,15 +523,17 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 cellId,
         uint256 windowId,
         uint256 amount,
-        uint256 permitAmount,  // use type(uint256).max for one-time MAX approval
+        uint256 permitAmount, // use type(uint256).max for one-time MAX approval
         uint256 deadline,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external nonReentrant whenNotPaused {
-        // TODO: If USDC.allowance(msg.sender, address(this)) < amount, call USDC.permit(...)
-        //       with permitAmount. Using MAX uint256 means all future bets skip the permit.
-        // TODO: Call internal _placeBet()
+        address usdcToken = gridConfigs[key.toId()].usdcToken;
+        if (IERC20(usdcToken).allowance(msg.sender, address(this)) < amount) {
+            IERC20Permit(usdcToken).permit(msg.sender, address(this), permitAmount, deadline, v, r, s);
+        }
+        _placeBet(key.toId(), cellId, windowId, amount, msg.sender);
     }
 
     // =============================================================
@@ -585,11 +548,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowId Window to settle
      * @param pythUpdateData Pyth VAA bytes — fetch from Hermes API at timestamp=windowEnd
      */
-    function settle(
-        PoolKey calldata key,
-        uint256 windowId,
-        bytes calldata pythUpdateData
-    ) external payable nonReentrant {
+    function settle(PoolKey calldata key, uint256 windowId, bytes calldata pythUpdateData)
+        external
+        payable
+        nonReentrant
+    {
         // TODO: Verify window has ended: windowEnd = gridEpoch + (windowId+1)*windowDuration <= block.timestamp
         // TODO: Verify !windows[poolId][windowId].settled && !windows[poolId][windowId].voided
         // TODO: Parse Pyth price — parsePriceFeedUpdatesUnique(updateData, feedIds,
@@ -622,11 +585,10 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowId Settled window
      * @param winners Array of winning user addresses
      */
-    function pushPayouts(
-        PoolKey calldata key,
-        uint256 windowId,
-        address[] calldata winners
-    ) external onlyRole(TREASURY_ROLE) {
+    function pushPayouts(PoolKey calldata key, uint256 windowId, address[] calldata winners)
+        external
+        onlyRole(TREASURY_ROLE)
+    {
         // TODO: Verify window is settled
         // TODO: Loop through winners
         // TODO: Calculate payout = userStakes[winningCell][user] * redemptionRate / 1e18
@@ -640,10 +602,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param key Pool key
      * @param windowIds Array of window IDs to claim from
      */
-    function claimAll(
-        PoolKey calldata key,
-        uint256[] calldata windowIds
-    ) external nonReentrant {
+    function claimAll(PoolKey calldata key, uint256[] calldata windowIds) external nonReentrant {
         // TODO: Loop through windowIds
         // TODO: Verify window is settled
         // TODO: Calculate payout from userStakes[winningCell][msg.sender]
@@ -680,10 +639,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param key Pool key
      * @param windowId Voided window ID
      */
-    function claimRefund(
-        PoolKey calldata key,
-        uint256 windowId
-    ) external nonReentrant {
+    function claimRefund(PoolKey calldata key, uint256 windowId) external nonReentrant {
         // TODO: Verify window is voided
         // TODO: Refund all cellStakes for msg.sender (sum across all cells)
         // TODO: Transfer USDC from poolManager
@@ -702,11 +658,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowId Target window to seed
      * @param amount   USDC amount (6 decimals)
      */
-    function depositBackstop(
-        PoolKey calldata key,
-        uint256 windowId,
-        uint256 amount
-    ) external onlyRole(TREASURY_ROLE) {
+    function depositBackstop(PoolKey calldata key, uint256 windowId, uint256 amount) external onlyRole(TREASURY_ROLE) {
         // TODO: Transfer USDC from treasury to poolManager via unlock()
         // TODO: windows[poolId][windowId].backstopPool += amount
         // TODO: windows[poolId][windowId].totalPool += amount
@@ -720,10 +672,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param key Pool key
      * @param amount USDC amount to withdraw
      */
-    function withdrawFees(
-        PoolKey calldata key,
-        uint256 amount
-    ) external onlyRole(TREASURY_ROLE) {
+    function withdrawFees(PoolKey calldata key, uint256 amount) external onlyRole(TREASURY_ROLE) {
         // TODO: Verify amount <= collectedFees[poolId]
         // TODO: Transfer USDC from poolManager to treasury
         // TODO: Decrement collectedFees[poolId]
@@ -775,30 +724,25 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      */
     function currentWindowId(PoolKey calldata key) external view returns (uint256) {
         GridConfig storage cfg = gridConfigs[key.toId()];
-        // TODO: return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration
-        return 0;
+        if (block.timestamp < cfg.gridEpoch) return 0;
+        return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
     }
 
     /// @notice Alias kept for backward-compatibility during development.
     function getCurrentWindow(PoolKey calldata key) external view returns (uint256) {
         GridConfig storage cfg = gridConfigs[key.toId()];
-        // TODO: return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration
-        return 0;
+        if (block.timestamp < cfg.gridEpoch) return 0;
+        return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
     }
 
     /**
      * @notice Returns window state summary. Used by keeper and frontend.
      */
-    function getWindow(
-        PoolKey calldata key,
-        uint256 windowId
-    ) external view returns (
-        uint256 totalPool,
-        bool settled,
-        bool voided,
-        uint256 winningCell,
-        uint256 redemptionRate
-    ) {
+    function getWindow(PoolKey calldata key, uint256 windowId)
+        external
+        view
+        returns (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate)
+    {
         Window storage w = windows[key.toId()][windowId];
         return (w.totalPool, w.settled, w.voided, w.winningCell, w.redemptionRate);
     }
@@ -807,11 +751,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @notice Returns true if the user has unclaimed winnings for the window.
      *         Used by frontend for "Pending Claims" badge.
      */
-    function hasPendingClaim(
-        PoolKey calldata key,
-        uint256 windowId,
-        address user
-    ) external view returns (bool) {
+    function hasPendingClaim(PoolKey calldata key, uint256 windowId, address user) external view returns (bool) {
         PoolId poolId = key.toId();
         Window storage w = windows[poolId][windowId];
         if (!w.settled || w.voided) return false;
@@ -823,11 +763,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @notice Returns total unclaimed USDC across multiple windows.
      *         Frontend discovers windowIds via BetPlaced event logs.
      */
-    function getPendingClaims(
-        PoolKey calldata key,
-        uint256[] calldata windowIds,
-        address user
-    ) external view returns (uint256 totalUnclaimed) {
+    function getPendingClaims(PoolKey calldata key, uint256[] calldata windowIds, address user)
+        external
+        view
+        returns (uint256 totalUnclaimed)
+    {
         PoolId poolId = key.toId();
         for (uint256 i = 0; i < windowIds.length; i++) {
             uint256 wid = windowIds[i];
@@ -847,30 +787,27 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @return end Last bettable window ID
      */
     function getBettableWindows(PoolKey calldata key) external view returns (uint256 start, uint256 end) {
-        // TODO: Calculate current + frozenWindows + 1 through current + frozenWindows + 3
-        return (0, 0);
+        GridConfig storage cfg = gridConfigs[key.toId()];
+        uint256 current = block.timestamp < cfg.gridEpoch ? 0 : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+        start = current + cfg.frozenWindows + 1;
+        end = current + cfg.frozenWindows + 3;
     }
 
     /**
      * @notice Get user's stake in a specific cell (single lookup).
      */
-    function getUserStake(
-        PoolKey calldata key,
-        uint256 windowId,
-        uint256 cellId,
-        address user
-    ) external view returns (uint256) {
+    function getUserStake(PoolKey calldata key, uint256 windowId, uint256 cellId, address user)
+        external
+        view
+        returns (uint256)
+    {
         return windows[key.toId()][windowId].userStakes[cellId][user];
     }
 
     /**
      * @notice Get total stakes on a specific cell (single lookup).
      */
-    function getCellStake(
-        PoolKey calldata key,
-        uint256 windowId,
-        uint256 cellId
-    ) external view returns (uint256) {
+    function getCellStake(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
         return windows[key.toId()][windowId].cellStakes[cellId];
     }
 
@@ -879,11 +816,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      *         Frontend calls with the visible cell range for live multiplier display.
      * @param cellIds Absolute cell IDs to query (frontend supplies the visible range)
      */
-    function getCellStakes(
-        PoolKey calldata key,
-        uint256 windowId,
-        uint256[] calldata cellIds
-    ) external view returns (uint256[] memory stakes) {
+    function getCellStakes(PoolKey calldata key, uint256 windowId, uint256[] calldata cellIds)
+        external
+        view
+        returns (uint256[] memory stakes)
+    {
         Window storage w = windows[key.toId()][windowId];
         stakes = new uint256[](cellIds.length);
         for (uint256 i = 0; i < cellIds.length; i++) {
@@ -895,12 +832,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @notice Returns user stakes for an explicit list of cellIds in a window.
      * @param cellIds Absolute cell IDs to query
      */
-    function getUserStakes(
-        PoolKey calldata key,
-        uint256 windowId,
-        address user,
-        uint256[] calldata cellIds
-    ) external view returns (uint256[] memory stakes) {
+    function getUserStakes(PoolKey calldata key, uint256 windowId, address user, uint256[] calldata cellIds)
+        external
+        view
+        returns (uint256[] memory stakes)
+    {
         Window storage w = windows[key.toId()][windowId];
         stakes = new uint256[](cellIds.length);
         for (uint256 i = 0; i < cellIds.length; i++) {
@@ -916,12 +852,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param user User address
      * @return Expected payout in USDC (0 if not settled or user didn't win)
      */
-    function calculatePayout(
-        PoolKey calldata key,
-        uint256 windowId,
-        uint256 cellId,
-        address user
-    ) external view returns (uint256) {
+    function calculatePayout(PoolKey calldata key, uint256 windowId, uint256 cellId, address user)
+        external
+        view
+        returns (uint256)
+    {
         // TODO: Check if window settled and cellId == winningCell
         // TODO: Return userStakes[cellId][user] * redemptionRate / 1e18
         return 0;
@@ -934,11 +869,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param cellId Cell ID
      * @return Multiplier in 1e18 precision (e.g., 1.5e18 = 1.5x)
      */
-    function getLiveMultiplier(
-        PoolKey calldata key,
-        uint256 windowId,
-        uint256 cellId
-    ) external view returns (uint256) {
+    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
         // TODO: Calculate (totalPool * (10000 - feeBps) / 10000) * 1e18 / cellStakes[cellId]
         return 0;
     }
@@ -955,17 +886,42 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param amount USDC amount
      * @param user User address
      */
-    function _placeBet(
-        PoolId poolId,
-        uint256 cellId,
-        uint256 windowId,
-        uint256 amount,
-        address user
-    ) internal {
-        // TODO: Implement core bet logic
-        // TODO: Validate betting zone
-        // TODO: Update window state
-        // TODO: Transfer USDC via poolManager.unlock()
+    function _placeBet(PoolId poolId, uint256 cellId, uint256 windowId, uint256 amount, address user) internal {
+        GridConfig storage cfg = gridConfigs[poolId];
+        require(cfg.bandWidth != 0, "Grid not configured");
+        require(amount > 0, "Amount must be > 0");
+
+        uint256 current = block.timestamp < cfg.gridEpoch ? 0 : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+        uint256 bettableStart = current + cfg.frozenWindows + 1;
+        uint256 bettableEnd = current + cfg.frozenWindows + 3;
+        require(windowId >= bettableStart && windowId <= bettableEnd, "Window not in betting zone");
+
+        Window storage window = windows[poolId][windowId];
+        require(window.cellStakes[cellId] + amount <= cfg.maxStakePerCell, "Exceeds max stake per cell");
+
+        // ⚠️ P0 PRE-MAINNET ISSUE: USDC custody pattern
+        //
+        // CURRENT: USDC held directly by this hook contract via transferFrom()
+        // REQUIRED: USDC must flow through poolManager.unlock() → unlockCallback() → poolManager.settle()
+        //
+        // Per architecture.md §4: "USDC is held by the V4 PoolManager, not the hook."
+        // This creates a separate attack surface and defeats the V4 unlock/callback pattern.
+        //
+        // Acceptable as stepping stone for MVP testing, but MUST be refactored before mainnet:
+        // 1. User calls placeBet() → triggers poolManager.unlock(unlockData)
+        // 2. PoolManager calls hook.unlockCallback(unlockData)
+        // 3. Hook validates bet, calls poolManager.settle() to transfer USDC from user to PoolManager
+        // 4. PoolManager holds all USDC; hook only tracks accounting
+        //
+        // TODO: Implement PoolManager unlock/callback pattern before mainnet deployment
+        require(IERC20(cfg.usdcToken).transferFrom(user, address(this), amount), "USDC transfer failed");
+
+        window.totalPool += amount;
+        window.organicPool += amount;
+        window.cellStakes[cellId] += amount;
+        window.userStakes[cellId][user] += amount;
+
+        emit BetPlaced(poolId, windowId, cellId, user, amount);
     }
 
     /**
@@ -993,11 +949,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param fromWindowId Source window
      * @param toWindowId Destination window
      */
-    function _rollover(
-        PoolId poolId,
-        uint256 fromWindowId,
-        uint256 toWindowId
-    ) internal {
+    function _rollover(PoolId poolId, uint256 fromWindowId, uint256 toWindowId) internal {
         // TODO: Move totalPool to next window's backstopPool
         // TODO: Mark source window as settled (no redemptionRate)
         // TODO: Emit WindowRolledOver event
@@ -1011,12 +963,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param s Signature component
      * @return True if signature valid
      */
-    function _verifyBetSignature(
-        BetIntent memory intent,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) internal view returns (bool) {
+    function _verifyBetSignature(BetIntent memory intent, uint8 v, bytes32 r, bytes32 s) internal view returns (bool) {
         // TODO: Reconstruct EIP-712 hash
         // TODO: Recover signer via ecrecover
         // TODO: Verify signer == intent.user
@@ -1031,12 +978,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param s Signature component
      * @return True if signature valid
      */
-    function _verifyClaimSignature(
-        ClaimIntent memory intent,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) internal view returns (bool) {
+    function _verifyClaimSignature(ClaimIntent memory intent, uint8 v, bytes32 r, bytes32 s)
+        internal
+        view
+        returns (bool)
+    {
         // TODO: Reconstruct EIP-712 hash
         // TODO: Recover signer via ecrecover
         // TODO: Verify signer == intent.user
