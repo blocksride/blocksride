@@ -1005,6 +1005,21 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         Window storage window = windows[poolId][windowId];
         require(window.cellStakes[cellId] + amount <= cfg.maxStakePerCell, "Exceeds max stake per cell");
 
+        // ⚠️ P0 PRE-MAINNET ISSUE: USDC custody pattern
+        //
+        // CURRENT: USDC held directly by this hook contract via transferFrom()
+        // REQUIRED: USDC must flow through poolManager.unlock() → unlockCallback() → poolManager.settle()
+        //
+        // Per architecture.md §4: "USDC is held by the V4 PoolManager, not the hook."
+        // This creates a separate attack surface and defeats the V4 unlock/callback pattern.
+        //
+        // Acceptable as stepping stone for MVP testing, but MUST be refactored before mainnet:
+        // 1. User calls placeBet() → triggers poolManager.unlock(unlockData)
+        // 2. PoolManager calls hook.unlockCallback(unlockData)
+        // 3. Hook validates bet, calls poolManager.settle() to transfer USDC from user to PoolManager
+        // 4. PoolManager holds all USDC; hook only tracks accounting
+        //
+        // TODO: Implement PoolManager unlock/callback pattern before mainnet deployment
         require(IERC20(cfg.usdcToken).transferFrom(user, address(this), amount), "USDC transfer failed");
 
         window.totalPool += amount;

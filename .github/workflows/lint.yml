@@ -21,6 +21,7 @@ jobs:
 
       - name: Check formatting
         run: forge fmt --check
+        working-directory: contracts
 
       - name: Run Slither
         uses: crytic/slither-action@v0.3.0
