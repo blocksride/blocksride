@@ -24,6 +24,8 @@ import {
     History,
     Activity,
     DollarSign,
+    Check,
+    X,
 } from 'lucide-react'
 
 import { useGridSocket } from '../hooks/useGridSocket'
@@ -44,6 +46,23 @@ function formatCellRange(cellId: string, priceInterval: number): string {
         }
     }
     return cellId
+}
+
+function formatTimeAgo(dateStr: string | undefined): string {
+    if (!dateStr) return ''
+    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
+    if (mins < 1) return 'just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+}
+
+function getWindowLabel(cellId: string, windowIndex?: number): string {
+    if (windowIndex !== undefined) return `Wnd #${windowIndex}`
+    const parts = cellId.split('_')
+    if (parts.length === 2 && !isNaN(parseInt(parts[0], 10))) return `Wnd #${parts[0]}`
+    return ''
 }
 
 interface GridVisualizerProps {
@@ -264,54 +283,73 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return positions
             .filter((p) =>
                 (p.payout ?? 0) > 0 &&
-                (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED') &&
-                !claimedIds.has(p.position_id)
+                (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED')
             )
             .map((p) => {
                 const cell = cells.find((c) => c.cell_id === p.cell_id)
                 const range = cell
                     ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
                     : formatCellRange(p.cell_id, bw)
-                return { id: p.position_id, range, payout: p.payout ?? 0 }
+                const payout = p.payout ?? 0
+                const stake = p.stake
+                const multiplier = stake > 0 ? payout / stake : null
+                const windowLabel = getWindowLabel(p.cell_id)
+                const timeAgo = formatTimeAgo(p.resolved_at || p.created_at)
+                return { id: p.position_id, range, payout, stake, multiplier, windowLabel, timeAgo }
             })
-    }, [positions, betResults, cells, claimedIds, grid])
+    }, [positions, betResults, cells, grid])
 
     const voidItems = useMemo(() => {
         const bw = grid?.price_interval || 2
         return positions
-            .filter((p) => p.state === 'VOIDED' && !claimedIds.has(p.position_id))
+            .filter((p) => p.state === 'VOIDED')
             .map((p) => {
                 const cell = cells.find((c) => c.cell_id === p.cell_id)
                 const range = cell
                     ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
                     : formatCellRange(p.cell_id, bw)
-                return { id: p.position_id, range, payout: p.stake }
+                const windowLabel = getWindowLabel(p.cell_id)
+                const timeAgo = formatTimeAgo(p.created_at)
+                return { id: p.position_id, range, payout: p.stake, stake: p.stake, windowLabel, timeAgo }
             })
-    }, [positions, cells, claimedIds, grid])
+    }, [positions, cells, grid])
+
+    const unclaimedWins = useMemo(() => claimItems.filter(c => !claimedIds.has(c.id)), [claimItems, claimedIds])
+    const unclaimedVoids = useMemo(() => voidItems.filter(v => !claimedIds.has(v.id)), [voidItems, claimedIds])
+    const unclaimedCount = unclaimedWins.length + unclaimedVoids.length
+    const unclaimedTotal = useMemo(
+        () => unclaimedWins.reduce((s, c) => s + c.payout, 0) + unclaimedVoids.reduce((s, v) => s + v.payout, 0),
+        [unclaimedWins, unclaimedVoids]
+    )
 
     const handleClaim = useCallback((positionId: string) => {
         setClaimingIds(prev => { const s = new Set(prev); s.add(positionId); return s })
-        setClaimedIds(prev => { const s = new Set(prev); s.add(positionId); return s })
-        setClaimingIds(prev => { const s = new Set(prev); s.delete(positionId); return s })
-        refreshUser()
+        setTimeout(() => {
+            setClaimingIds(prev => { const s = new Set(prev); s.delete(positionId); return s })
+            setClaimedIds(prev => { const s = new Set(prev); s.add(positionId); return s })
+            refreshUser()
+        }, 500)
     }, [refreshUser])
 
     const handleClaimAll = useCallback(() => {
         const allIds = [
-            ...claimItems.map(c => c.id),
-            ...voidItems.map(v => v.id),
+            ...unclaimedWins.map(c => c.id),
+            ...unclaimedVoids.map(v => v.id),
         ]
-        setClaimedIds(prev => new Set([...prev, ...allIds]))
-        refreshUser()
-    }, [claimItems, voidItems, refreshUser])
+        if (allIds.length === 0) return
+        setClaimingIds(new Set(allIds))
+        setTimeout(() => {
+            setClaimedIds(prev => new Set([...prev, ...allIds]))
+            setClaimingIds(new Set())
+            refreshUser()
+        }, 600)
+    }, [unclaimedWins, unclaimedVoids, refreshUser])
 
     useEffect(() => {
-        const total = claimItems.reduce((sum, c) => sum + c.payout, 0)
-            + voidItems.reduce((sum, v) => sum + v.payout, 0)
         window.dispatchEvent(new CustomEvent('claims:update', {
-            detail: { count: claimItems.length + voidItems.length, totalAmount: total },
+            detail: { count: unclaimedCount, totalAmount: unclaimedTotal },
         }))
-    }, [claimItems, voidItems])
+    }, [unclaimedCount, unclaimedTotal])
 
     useEffect(() => {
         const handler = () => setClaimsOpen((prev) => !prev)
@@ -528,92 +566,162 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                             onClick={() => setClaimsOpen(false)}
                             aria-hidden="true"
                         />
-                        <div className="absolute top-0 right-0 h-full w-72 bg-card border-l border-border z-50 flex flex-col animate-slide-in-right">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-                                <div>
-                                    <span className="text-sm font-semibold text-foreground">Pending Claims</span>
-                                    {(claimItems.length + voidItems.length) > 0 && (
-                                        <span className="ml-2 text-xs font-mono text-trade-up">
-                                            +${(
-                                                claimItems.reduce((s, c) => s + c.payout, 0) +
-                                                voidItems.reduce((s, v) => s + v.payout, 0)
-                                            ).toFixed(2)}
-                                        </span>
-                                    )}
-                                </div>
+                        <div className="absolute top-0 right-0 h-full w-80 bg-zinc-950 border-l border-zinc-800 z-50 flex flex-col animate-slide-in-right">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                                <span className="text-sm font-semibold text-white">Pending Claims</span>
                                 <button
                                     onClick={() => setClaimsOpen(false)}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
                                     aria-label="Close claims panel"
                                 >
-                                    ✕
+                                    <X className="w-4 h-4" />
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+
+                            {/* Summary banner */}
+                            {unclaimedCount > 0 && (
+                                <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-trade-up/10 border border-trade-up/25 flex items-center justify-between shrink-0">
+                                    <span className="text-xs text-zinc-400">
+                                        {unclaimedCount} position{unclaimedCount !== 1 ? 's' : ''} to claim
+                                    </span>
+                                    <span className="text-sm font-mono font-bold text-trade-up">
+                                        +${unclaimedTotal.toFixed(2)}
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Scrollable list */}
+                            <div className="flex-1 overflow-y-auto py-3 px-3 space-y-2 min-h-0">
                                 {claimItems.length === 0 && voidItems.length === 0 ? (
-                                    <div className="text-xs text-muted-foreground pt-2">
-                                        No pending claims yet.
+                                    <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+                                        <DollarSign className="w-8 h-8 text-zinc-700" />
+                                        <div>
+                                            <p className="text-sm font-medium text-zinc-400">No positions yet</p>
+                                            <p className="text-xs text-zinc-600 mt-1">Win a round to see your claims here</p>
+                                        </div>
                                     </div>
                                 ) : (
                                     <>
-                                        {claimItems.map((claim) => (
-                                            <div key={claim.id} className="bg-secondary/30 border border-border rounded-lg p-3">
-                                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-                                                    Won
-                                                </div>
-                                                <div className="text-xs font-mono text-foreground mb-2">
-                                                    {claim.range}
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <div className="text-sm font-mono font-semibold text-trade-up">
-                                                        +${claim.payout.toFixed(2)}
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleClaim(claim.id)}
-                                                        disabled={claimingIds.has(claim.id)}
-                                                        className="px-3 py-1 text-[11px] font-semibold rounded border border-trade-up/40 text-trade-up bg-trade-up/10 hover:bg-trade-up/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        {claimingIds.has(claim.id) ? '…' : 'Claim'}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
+                                        {/* Wins */}
+                                        {claimItems.length > 0 && (
+                                            <>
+                                                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 px-1 pt-1">Wins</p>
+                                                {claimItems.map((claim) => {
+                                                    const isClaimed = claimedIds.has(claim.id)
+                                                    const isClaiming = claimingIds.has(claim.id)
+                                                    return (
+                                                        <div
+                                                            key={claim.id}
+                                                            className={`flex rounded-lg overflow-hidden border border-zinc-800 transition-opacity duration-300${isClaimed ? ' opacity-40' : ''}`}
+                                                        >
+                                                            <div className="w-1 shrink-0 bg-trade-up" />
+                                                            <div className="flex items-center justify-between flex-1 px-3 py-2.5 bg-zinc-900/60">
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-[10px] font-mono text-zinc-500">{claim.windowLabel}</span>
+                                                                        {claim.timeAgo && <span className="text-[10px] text-zinc-600">· {claim.timeAgo}</span>}
+                                                                    </div>
+                                                                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{claim.range}</p>
+                                                                    <div className="flex items-center gap-1 mt-1">
+                                                                        <span className="text-[10px] font-mono text-zinc-500">${claim.stake.toFixed(2)}</span>
+                                                                        <span className="text-[10px] text-zinc-600">→</span>
+                                                                        <span className="text-[11px] font-mono font-semibold text-trade-up">+${claim.payout.toFixed(2)}</span>
+                                                                        {claim.multiplier && (
+                                                                            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-trade-up/15 text-trade-up/80 ml-0.5">
+                                                                                {claim.multiplier.toFixed(1)}×
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="shrink-0 ml-2">
+                                                                    {isClaimed ? (
+                                                                        <div className="w-7 h-7 rounded-full bg-trade-up/20 flex items-center justify-center">
+                                                                            <Check className="w-3.5 h-3.5 text-trade-up" />
+                                                                        </div>
+                                                                    ) : isClaiming ? (
+                                                                        <div className="w-7 h-7 flex items-center justify-center">
+                                                                            <div className="w-4 h-4 rounded-full border-2 border-trade-up/30 border-t-trade-up animate-spin" />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => handleClaim(claim.id)}
+                                                                            className="px-2.5 py-1 text-[11px] font-semibold rounded border border-trade-up/40 text-trade-up bg-trade-up/10 hover:bg-trade-up/25 transition-colors"
+                                                                        >
+                                                                            Claim
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </>
+                                        )}
+
+                                        {/* Void Refunds */}
                                         {voidItems.length > 0 && (
                                             <>
-                                                <div className="text-[10px] uppercase tracking-widest text-muted-foreground pt-1 pb-0.5">
-                                                    Void Refunds
-                                                </div>
-                                                {voidItems.map((item) => (
-                                                    <div key={item.id} className="bg-secondary/30 border border-border rounded-lg p-3">
-                                                        <div className="text-xs font-mono text-foreground mb-2">
-                                                            {item.range}
-                                                        </div>
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="text-sm font-mono font-semibold text-primary">
-                                                                +${item.payout.toFixed(2)}
+                                                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 px-1 pt-2">Void Refunds</p>
+                                                {voidItems.map((item) => {
+                                                    const isClaimed = claimedIds.has(item.id)
+                                                    const isClaiming = claimingIds.has(item.id)
+                                                    return (
+                                                        <div
+                                                            key={item.id}
+                                                            className={`flex rounded-lg overflow-hidden border border-zinc-800 transition-opacity duration-300${isClaimed ? ' opacity-40' : ''}`}
+                                                        >
+                                                            <div className="w-1 shrink-0 bg-amber-500" />
+                                                            <div className="flex items-center justify-between flex-1 px-3 py-2.5 bg-zinc-900/60">
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-[10px] font-mono text-zinc-500">{item.windowLabel}</span>
+                                                                        {item.timeAgo && <span className="text-[10px] text-zinc-600">· {item.timeAgo}</span>}
+                                                                    </div>
+                                                                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{item.range}</p>
+                                                                    <div className="flex items-center gap-1 mt-1">
+                                                                        <span className="text-[10px] text-zinc-500">Void refund</span>
+                                                                        <span className="text-[11px] font-mono font-semibold text-amber-400 ml-1">+${item.payout.toFixed(2)}</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="shrink-0 ml-2">
+                                                                    {isClaimed ? (
+                                                                        <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                                                            <Check className="w-3.5 h-3.5 text-amber-400" />
+                                                                        </div>
+                                                                    ) : isClaiming ? (
+                                                                        <div className="w-7 h-7 flex items-center justify-center">
+                                                                            <div className="w-4 h-4 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin" />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => handleClaim(item.id)}
+                                                                            className="px-2.5 py-1 text-[11px] font-semibold rounded border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/25 transition-colors"
+                                                                        >
+                                                                            Refund
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                            <button
-                                                                onClick={() => handleClaim(item.id)}
-                                                                disabled={claimingIds.has(item.id)}
-                                                                className="px-3 py-1 text-[11px] font-semibold rounded border border-primary/40 text-primary bg-primary/10 hover:bg-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            >
-                                                                {claimingIds.has(item.id) ? '…' : 'Refund'}
-                                                            </button>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    )
+                                                })}
                                             </>
                                         )}
                                     </>
                                 )}
                             </div>
-                            <div className="p-3 border-t border-border">
+
+                            {/* Footer: Claim All */}
+                            <div className="p-3 border-t border-zinc-800 shrink-0">
                                 <button
                                     onClick={handleClaimAll}
-                                    disabled={claimItems.length + voidItems.length === 0}
-                                    className="w-full h-10 rounded-lg bg-primary/20 text-primary font-mono font-semibold text-sm border border-primary/30 hover:bg-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    disabled={unclaimedCount === 0}
+                                    className="w-full h-10 rounded-lg font-mono font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-trade-up text-black hover:opacity-90"
                                 >
-                                    Claim All
+                                    {unclaimedCount > 0
+                                        ? `Claim All · +$${unclaimedTotal.toFixed(2)}`
+                                        : 'Claim All'}
                                 </button>
                             </div>
                         </div>
