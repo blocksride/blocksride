@@ -100,11 +100,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param deadline Signature expiration timestamp
      */
     struct BetIntent {
-        PoolId poolId;
-        uint256 windowId;
+        address user;      // must match field order in BET_INTENT_TYPEHASH
+        bytes32 poolId;
         uint256 cellId;
+        uint256 windowId;
         uint256 amount;
-        address user;
         uint256 nonce;
         uint256 deadline;
     }
@@ -118,9 +118,9 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param deadline Signature expiration timestamp
      */
     struct ClaimIntent {
-        PoolId poolId;
+        address user;      // must match field order in CLAIM_INTENT_TYPEHASH
+        bytes32 poolId;
         uint256[] windowIds;
-        address user;
         uint256 nonce;
         uint256 deadline;
     }
@@ -140,23 +140,29 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     /// @notice Total fees collected per pool: poolId => amount
     mapping(PoolId => uint256) public collectedFees;
 
-    /// @notice Total backstop deposited per pool: poolId => amount
+    /// @notice Per-pool backstop balance: poolId => amount (global, for fee accounting)
     mapping(PoolId => uint256) public backstopBalances;
 
+    /// @notice Backstop depositor per window — used to refund on void: poolId => windowId => depositor
+    mapping(PoolId => mapping(uint256 => address)) public backstopDepositor;
+
+    /// @notice Double-claim prevention: poolId => windowId => user => pushed
+    mapping(PoolId => mapping(uint256 => mapping(address => bool))) public payoutPushed;
+
     /// @notice User nonces for EIP-712 signatures: user => nonce
-    mapping(address => uint256) public nonces;
+    mapping(address => uint256) public betNonces;
 
     /// @notice EIP-712 domain separator
     bytes32 public immutable DOMAIN_SEPARATOR;
 
-    /// @notice EIP-712 BetIntent typehash
+    /// @notice EIP-712 BetIntent typehash — field order must match relayer signing exactly
     bytes32 public constant BET_INTENT_TYPEHASH = keccak256(
-        "BetIntent(bytes32 poolId,uint256 windowId,uint256 cellId,uint256 amount,address user,uint256 nonce,uint256 deadline)"
+        "BetIntent(address user,bytes32 poolId,uint256 cellId,uint256 windowId,uint256 amount,uint256 nonce,uint256 deadline)"
     );
 
     /// @notice EIP-712 ClaimIntent typehash
     bytes32 public constant CLAIM_INTENT_TYPEHASH = keccak256(
-        "ClaimIntent(bytes32 poolId,uint256[] windowIds,address user,uint256 nonce,uint256 deadline)"
+        "ClaimIntent(address user,bytes32 poolId,uint256[] windowIds,uint256 nonce,uint256 deadline)"
     );
 
     // =============================================================
@@ -191,20 +197,27 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     event WindowVoided(
         PoolId indexed poolId,
         uint256 indexed windowId,
-        string reason
+        uint256 totalRefundable
     );
 
     event WindowRolledOver(
         PoolId indexed poolId,
         uint256 indexed fromWindowId,
         uint256 indexed toWindowId,
+        uint256 carryAmount
+    );
+
+    event PayoutPushed(
+        PoolId indexed poolId,
+        uint256 indexed windowId,
+        address indexed winner,
         uint256 amount
     );
 
     event PayoutClaimed(
         PoolId indexed poolId,
         uint256 indexed windowId,
-        address indexed user,
+        address indexed winner,
         uint256 amount
     );
 
@@ -215,22 +228,22 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 amount
     );
 
+    event FeeCollected(
+        PoolId indexed poolId,
+        uint256 indexed windowId,
+        uint256 amount
+    );
+
     event BackstopDeposited(
         PoolId indexed poolId,
+        uint256 indexed windowId,
         uint256 amount
     );
 
     event FeesWithdrawn(
         PoolId indexed poolId,
-        address indexed treasury,
+        address indexed recipient,
         uint256 amount
-    );
-
-    event GridConfigUpdated(
-        PoolId indexed poolId,
-        uint256 frozenWindows,
-        uint256 feeBps,
-        uint256 minPoolThreshold
     );
 
     // =============================================================
@@ -238,10 +251,20 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     // =============================================================
 
     /**
-     * @notice Initialize PariHook with PoolManager
+     * @notice Initialize PariHook with PoolManager and role addresses
      * @param _poolManager Uniswap V4 PoolManager address
+     * @param _admin      Address granted ADMIN_ROLE (protocol parameters; cannot move funds)
+     * @param _treasury   Address granted TREASURY_ROLE (fund movement; cannot change params)
+     * @param _relayer    Address granted RELAYER_ROLE (gasless bet/claim submission)
+     * @dev DEFAULT_ADMIN_ROLE is granted to msg.sender (deployer) — should be a cold hardware wallet
+     *      used only to grant/revoke roles. Transfer it after deploy if needed.
      */
-    constructor(IPoolManager _poolManager) {
+    constructor(
+        IPoolManager _poolManager,
+        address _admin,
+        address _treasury,
+        address _relayer
+    ) {
         poolManager = _poolManager;
 
         // Validate hook permissions
@@ -275,10 +298,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
             )
         );
 
-        // Setup roles
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(ADMIN_ROLE, msg.sender);
-        _grantRole(TREASURY_ROLE, msg.sender);
+        // Role setup — each role held by a separate key
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender); // deployer = cold wallet only
+        _grantRole(ADMIN_ROLE, _admin);
+        _grantRole(TREASURY_ROLE, _treasury);
+        _grantRole(RELAYER_ROLE, _relayer);
     }
 
     // =============================================================
@@ -436,14 +460,13 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 windowId,
         uint256 amount,
         address user,
+        uint256 nonce,
         uint256 deadline,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
+        bytes calldata sig
     ) external nonReentrant whenNotPaused onlyRole(RELAYER_ROLE) {
-        // TODO: Verify EIP-712 signature
-        // TODO: Check deadline and nonce
-        // TODO: Increment user nonce
+        // TODO: Verify EIP-712 signature over BetIntent{user,poolId,cellId,windowId,amount,nonce,deadline}
+        // TODO: Check deadline not expired
+        // TODO: Check nonce == betNonces[user], then increment betNonces[user]
         // TODO: Call internal _placeBet()
     }
 
@@ -464,12 +487,14 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 cellId,
         uint256 windowId,
         uint256 amount,
+        uint256 permitAmount,  // use type(uint256).max for one-time MAX approval
         uint256 deadline,
         uint8 v,
         bytes32 r,
         bytes32 s
     ) external nonReentrant whenNotPaused {
-        // TODO: Call USDC.permit() to approve this contract
+        // TODO: If USDC.allowance(msg.sender, address(this)) < amount, call USDC.permit(...)
+        //       with permitAmount. Using MAX uint256 means all future bets skip the permit.
         // TODO: Call internal _placeBet()
     }
 
@@ -478,41 +503,37 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     // =============================================================
 
     /**
-     * @notice Settle a window using Pyth oracle price
-     * @dev Permissionless - anyone can call after windowEnd
+     * @notice Settle a window using Pyth oracle price. Permissionless — anyone can call after windowEnd.
+     * @dev Auto-voids if Pyth price is unavailable within the 10s grace window.
+     *      Rolls over if no bets on the winning cell. Only takes a fee when winStakes > 0.
      * @param key Pool key
      * @param windowId Window to settle
-     * @param pythUpdateData Pyth VAA (Verifiable Action Approval) bytes
+     * @param pythUpdateData Pyth VAA bytes — fetch from Hermes API at timestamp=windowEnd
      */
     function settle(
         PoolKey calldata key,
         uint256 windowId,
         bytes calldata pythUpdateData
-    ) external nonReentrant {
-        // TODO: Verify window has ended (windowEnd <= block.timestamp)
-        // TODO: Verify window not already settled
-        // TODO: Parse Pyth price at windowEnd timestamp
-        // TODO: Calculate winningCell = closingPrice / bandWidth
-        // TODO: Handle rollover if cellStakes[winningCell] == 0
-        // TODO: Calculate fee and redemptionRate
-        // TODO: Mark window as settled
-        // TODO: Emit WindowSettled event
-    }
-
-    /**
-     * @notice Void a window if settlement fails
-     * @dev Only ADMIN_ROLE can void (oracle unavailable, etc.)
-     * @param key Pool key
-     * @param windowId Window to void
-     * @param reason Human-readable reason
-     */
-    function voidWindow(
-        PoolKey calldata key,
-        uint256 windowId,
-        string calldata reason
-    ) external onlyRole(ADMIN_ROLE) {
-        // TODO: Mark window as voided
-        // TODO: Emit WindowVoided event
+    ) external payable nonReentrant {
+        // TODO: Verify window has ended: windowEnd = gridEpoch + (windowId+1)*windowDuration <= block.timestamp
+        // TODO: Verify !windows[poolId][windowId].settled && !windows[poolId][windowId].voided
+        // TODO: Parse Pyth price — parsePriceFeedUpdatesUnique(updateData, feedIds,
+        //       minPublishTime=windowEnd, maxPublishTime=windowEnd+10)
+        //       If Pyth call reverts (no price in window) → auto-void:
+        //         windows[poolId][windowId].voided = true
+        //         emit WindowVoided(poolId, windowId, windows[poolId][windowId].totalPool)
+        //         return
+        // TODO: Calculate winningCell = closingPrice / bandWidth (floor division)
+        // TODO: If organicPool < minPoolThreshold → auto-void (same path as above)
+        // TODO: If cellStakes[winningCell] == 0 → rollover:
+        //         carry totalPool to next window, no fee taken
+        //         emit WindowRolledOver(poolId, windowId, windowId+1, totalPool)
+        //         return
+        // TODO: fee = totalPool * feeBps / 10000
+        // TODO: netPool = totalPool - fee
+        // TODO: redemptionRate = netPool * 1e18 / cellStakes[winningCell]
+        // TODO: Store winningCell, redemptionRate, settled=true
+        // TODO: emit FeeCollected, emit WindowSettled
     }
 
     // =============================================================
@@ -600,17 +621,23 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     // =============================================================
 
     /**
-     * @notice Deposit backstop funds to prevent rollovers
-     * @param key Pool key
-     * @param amount USDC amount to deposit
+     * @notice Deposit backstop USDC into a specific window's pool.
+     *         Increases winner payout potential. Refunded on void (tracked via backstopDepositor).
+     * @param key      Pool key
+     * @param windowId Target window to seed
+     * @param amount   USDC amount (6 decimals)
      */
     function depositBackstop(
         PoolKey calldata key,
+        uint256 windowId,
         uint256 amount
     ) external onlyRole(TREASURY_ROLE) {
-        // TODO: Transfer USDC from treasury to poolManager
-        // TODO: Update backstopBalances[poolId]
-        // TODO: Emit BackstopDeposited event
+        // TODO: Transfer USDC from treasury to poolManager via unlock()
+        // TODO: windows[poolId][windowId].backstopPool += amount
+        // TODO: windows[poolId][windowId].totalPool += amount
+        // TODO: backstopBalances[poolId] += amount
+        // TODO: backstopDepositor[poolId][windowId] = msg.sender
+        // TODO: emit BackstopDeposited(poolId, windowId, amount)
     }
 
     /**
@@ -628,22 +655,26 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         // TODO: Emit FeesWithdrawn event
     }
 
-    /**
-     * @notice Update grid configuration parameters
-     * @param key Pool key
-     * @param frozenWindows New frozen window count
-     * @param feeBps New fee in basis points
-     * @param minPoolThreshold New minimum pool threshold
-     */
-    function setGridConfig(
-        PoolKey calldata key,
-        uint256 frozenWindows,
-        uint256 feeBps,
-        uint256 minPoolThreshold
-    ) external onlyRole(ADMIN_ROLE) {
-        // TODO: Validate parameters (feeBps <= 1000, etc.)
-        // TODO: Update gridConfigs[poolId]
-        // TODO: Emit GridConfigUpdated event
+    /// @notice Update protocol fee. Max 10% (1000 bps).
+    function setFeeBps(PoolKey calldata key, uint256 feeBps) external onlyRole(ADMIN_ROLE) {
+        // TODO: require(feeBps <= 1000, "Max 10%")
+        // TODO: gridConfigs[key.toId()].feeBps = feeBps
+    }
+
+    /// @notice Update frozen window count (anti-sniping buffer).
+    function setFrozenWindows(PoolKey calldata key, uint256 count) external onlyRole(ADMIN_ROLE) {
+        // TODO: require(count >= 1, "Min 1 frozen window")
+        // TODO: gridConfigs[key.toId()].frozenWindows = count
+    }
+
+    /// @notice Update minimum organic pool threshold for void trigger. 0 = disabled.
+    function setMinPoolThreshold(PoolKey calldata key, uint256 threshold) external onlyRole(ADMIN_ROLE) {
+        // TODO: gridConfigs[key.toId()].minPoolThreshold = threshold
+    }
+
+    /// @notice Update maximum stake per cell (whale cap).
+    function setMaxStakePerCell(PoolKey calldata key, uint256 max) external onlyRole(ADMIN_ROLE) {
+        // TODO: gridConfigs[key.toId()].maxStakePerCell = max
     }
 
     /**
@@ -665,13 +696,73 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     // =============================================================
 
     /**
-     * @notice Get current window ID for a grid
-     * @param key Pool key
-     * @return Current window ID
+     * @notice Returns the current window ID for a pool. Matches architecture.md spec name.
      */
-    function getCurrentWindow(PoolKey calldata key) external view returns (uint256) {
-        // TODO: Calculate (block.timestamp - gridEpoch) / windowDuration
+    function currentWindowId(PoolKey calldata key) external view returns (uint256) {
+        GridConfig storage cfg = gridConfigs[key.toId()];
+        // TODO: return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration
         return 0;
+    }
+
+    /// @notice Alias kept for backward-compatibility during development.
+    function getCurrentWindow(PoolKey calldata key) external view returns (uint256) {
+        GridConfig storage cfg = gridConfigs[key.toId()];
+        // TODO: return (block.timestamp - cfg.gridEpoch) / cfg.windowDuration
+        return 0;
+    }
+
+    /**
+     * @notice Returns window state summary. Used by keeper and frontend.
+     */
+    function getWindow(
+        PoolKey calldata key,
+        uint256 windowId
+    ) external view returns (
+        uint256 totalPool,
+        bool settled,
+        bool voided,
+        uint256 winningCell,
+        uint256 redemptionRate
+    ) {
+        Window storage w = windows[key.toId()][windowId];
+        return (w.totalPool, w.settled, w.voided, w.winningCell, w.redemptionRate);
+    }
+
+    /**
+     * @notice Returns true if the user has unclaimed winnings for the window.
+     *         Used by frontend for "Pending Claims" badge.
+     */
+    function hasPendingClaim(
+        PoolKey calldata key,
+        uint256 windowId,
+        address user
+    ) external view returns (bool) {
+        PoolId poolId = key.toId();
+        Window storage w = windows[poolId][windowId];
+        if (!w.settled || w.voided) return false;
+        if (payoutPushed[poolId][windowId][user]) return false;
+        return w.userStakes[w.winningCell][user] > 0;
+    }
+
+    /**
+     * @notice Returns total unclaimed USDC across multiple windows.
+     *         Frontend discovers windowIds via BetPlaced event logs.
+     */
+    function getPendingClaims(
+        PoolKey calldata key,
+        uint256[] calldata windowIds,
+        address user
+    ) external view returns (uint256 totalUnclaimed) {
+        PoolId poolId = key.toId();
+        for (uint256 i = 0; i < windowIds.length; i++) {
+            uint256 wid = windowIds[i];
+            Window storage w = windows[poolId][wid];
+            if (!w.settled || w.voided) continue;
+            if (payoutPushed[poolId][wid][user]) continue;
+            uint256 stake = w.userStakes[w.winningCell][user];
+            if (stake == 0) continue;
+            totalUnclaimed += (stake * w.redemptionRate) / REDEMPTION_PRECISION;
+        }
     }
 
     /**
@@ -686,12 +777,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     }
 
     /**
-     * @notice Get user's stake in a specific cell
-     * @param key Pool key
-     * @param windowId Window ID
-     * @param cellId Cell ID
-     * @param user User address
-     * @return USDC amount staked
+     * @notice Get user's stake in a specific cell (single lookup).
      */
     function getUserStake(
         PoolKey calldata key,
@@ -699,24 +785,52 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 cellId,
         address user
     ) external view returns (uint256) {
-        PoolId poolId = key.toId();
-        return windows[poolId][windowId].userStakes[cellId][user];
+        return windows[key.toId()][windowId].userStakes[cellId][user];
     }
 
     /**
-     * @notice Get total stakes on a specific cell
-     * @param key Pool key
-     * @param windowId Window ID
-     * @param cellId Cell ID
-     * @return USDC amount staked on cell
+     * @notice Get total stakes on a specific cell (single lookup).
      */
     function getCellStake(
         PoolKey calldata key,
         uint256 windowId,
         uint256 cellId
     ) external view returns (uint256) {
-        PoolId poolId = key.toId();
-        return windows[poolId][windowId].cellStakes[cellId];
+        return windows[key.toId()][windowId].cellStakes[cellId];
+    }
+
+    /**
+     * @notice Returns stake totals for an explicit list of cellIds in a window.
+     *         Frontend calls with the visible cell range for live multiplier display.
+     * @param cellIds Absolute cell IDs to query (frontend supplies the visible range)
+     */
+    function getCellStakes(
+        PoolKey calldata key,
+        uint256 windowId,
+        uint256[] calldata cellIds
+    ) external view returns (uint256[] memory stakes) {
+        Window storage w = windows[key.toId()][windowId];
+        stakes = new uint256[](cellIds.length);
+        for (uint256 i = 0; i < cellIds.length; i++) {
+            stakes[i] = w.cellStakes[cellIds[i]];
+        }
+    }
+
+    /**
+     * @notice Returns user stakes for an explicit list of cellIds in a window.
+     * @param cellIds Absolute cell IDs to query
+     */
+    function getUserStakes(
+        PoolKey calldata key,
+        uint256 windowId,
+        address user,
+        uint256[] calldata cellIds
+    ) external view returns (uint256[] memory stakes) {
+        Window storage w = windows[key.toId()][windowId];
+        stakes = new uint256[](cellIds.length);
+        for (uint256 i = 0; i < cellIds.length; i++) {
+            stakes[i] = w.userStakes[cellIds[i]][user];
+        }
     }
 
     /**
