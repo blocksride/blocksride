@@ -11,3 +11,8 @@ lib/
 
 # Foundry dependencies
 lib/
+
+# NPM
+package.json
+package-lock.json
+node_modules/
