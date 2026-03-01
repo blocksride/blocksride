@@ -9,6 +9,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 /**
  * @title BetPlacementTest
@@ -58,7 +59,9 @@ contract BetPlacementTest is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
         // Deploy PariHook — address(this) is admin so pause/unpause work without vm.prank
-        hook = new PariHook(IPoolManager(address(poolManager)), address(this), treasury, relayer);
+        // Mock Pyth oracle address (not used in bet placement tests)
+        IPyth mockPyth = IPyth(address(1));
+        hook = new PariHook(IPoolManager(address(poolManager)), mockPyth, address(this), treasury, relayer);
 
         // Setup test pool key
         testKey = PoolKey({

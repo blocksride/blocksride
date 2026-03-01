@@ -10,6 +10,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 /**
  * @title PariHookUnitTest
@@ -44,7 +45,9 @@ contract PariHookUnitTest is Test {
         poolManager = IPoolManager(makeAddr("poolManager"));
 
         // Deploy PariHook — constructor sets all roles; deployer gets DEFAULT_ADMIN_ROLE
-        hook = new PariHook(poolManager, admin, treasury, relayer);
+        // Mock Pyth oracle address (not used in unit tests)
+        IPyth mockPyth = IPyth(makeAddr("pythOracle"));
+        hook = new PariHook(poolManager, mockPyth, admin, treasury, relayer);
     }
 
     function _createTestPoolKey() internal view returns (PoolKey memory) {
