@@ -24,7 +24,7 @@ interface GridCanvasProps {
     visiblePriceRange: { min: number; max: number }
     mousePos: { x: number; y: number } | null
     isDragging: boolean
-    onCellClick: (cellId: string, isFuture: boolean, cellData?: unknown) => void
+    onCellClick: (cellId: number, windowId: number) => void
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap

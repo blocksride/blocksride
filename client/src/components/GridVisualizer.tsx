@@ -68,7 +68,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
     // Bet confirmation dialog state
     const [showBetConfirmation, setShowBetConfirmation] = useState(false)
-    const [pendingBetCellId, setPendingBetCellId] = useState<string | null>(null)
+    const [pendingBetCellId, setPendingBetCellId] = useState<[number, number] | null>(null)
     const [pendingBetInfo, setPendingBetInfo] = useState<{
         priceRange: string
         timeWindow: string
@@ -280,27 +280,31 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         })
     }, [])
 
-    const executeBet = useCallback(async (cellId: string, stake: number) => {
+    const executeBet = useCallback(async (cellId: number, windowId: number, stake: number) => {
+        const slotKey = `${windowId}_${cellId}`
         isPlacingBetRef.current = true
-        placedCellsRef.current.add(cellId)
-        addOptimisticCell(cellId)
-        markRecentCell(cellId)
+        placedCellsRef.current.add(slotKey)
+        addOptimisticCell(slotKey)
+        markRecentCell(slotKey)
         setPendingStake(prev => prev + stake)
         setIsBetLoading(true)
 
-        // Find cell for price label
-        const cell = cells.find(c => c.cell_id === cellId)
-        const priceLabel = cell
-            ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
-            : undefined
+        // Price label from formula (no DB cell needed)
+        const bw = grid?.price_interval || 2
+        const priceLabel = `$${(cellId * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })} – $${((cellId + 1) * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 
         try {
-            const response = await api.createPosition(cellId, selectedAsset, stake, isPracticeMode)
+            // Legacy bridge: find DB UUID for practice mode API call
+            const legacyCell = cells.find(c => c.window_index === windowId && c.price_band_index === cellId)
+            const legacyCellId = legacyCell?.cell_id ?? slotKey
+
+            const response = await api.createPosition(legacyCellId, selectedAsset, stake, isPracticeMode)
             const position = response.data
 
-            if (position.cell_id && position.cell_id !== cellId) {
-                updateCellId(cellId, position.cell_id)
-                placedCellsRef.current.delete(cellId)
+            // Rename optimistic key if API returned a different UUID
+            if (position.cell_id && position.cell_id !== slotKey) {
+                updateCellId(slotKey, position.cell_id)
+                placedCellsRef.current.delete(slotKey)
                 placedCellsRef.current.add(position.cell_id)
             }
 
@@ -321,16 +325,16 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 undoFn: () => {
                     // Optimistically roll back the visual state.
                     // When relay API is wired: DELETE /api/relay/bet/:intentId goes here.
-                    removeOptimisticCell(position.cell_id || cellId)
-                    placedCellsRef.current.delete(position.cell_id || cellId)
+                    removeOptimisticCell(position.cell_id || slotKey)
+                    placedCellsRef.current.delete(position.cell_id || slotKey)
                     setPendingStake(prev => Math.max(0, prev - stake))
                     refreshUser()
                 },
             })
         } catch {
             toast.error('Failed to place bet')
-            removeOptimisticCell(cellId)
-            placedCellsRef.current.delete(cellId)
+            removeOptimisticCell(slotKey)
+            placedCellsRef.current.delete(slotKey)
             setPendingStake(prev => Math.max(0, prev - stake))
         } finally {
             isPlacingBetRef.current = false
@@ -338,13 +342,14 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         }
     }, [
         isPracticeMode, selectedAsset, refreshUser,
-        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell,
+        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid,
     ])
 
-    const handleCellClick = useCallback(async (cellId: string) => {
+    const handleCellClick = useCallback(async (cellId: number, windowId: number) => {
+        const slotKey = `${windowId}_${cellId}`
         if (viewport.dragStart.hasMoved) return
         if (isPlacingBetRef.current) return
-        if (placedCellsRef.current.has(cellId)) {
+        if (placedCellsRef.current.has(slotKey)) {
             toast.error('Bet Already Placed', {
                 description: 'Bets are final and cannot be removed once placed.',
                 duration: 3000,
@@ -352,11 +357,11 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        const cell = cells.find(c => c.cell_id === cellId)
-        if (cell) {
-            const now = Date.now()
-            const tEnd = new Date(cell.t_end).getTime()
-            if (now > tEnd) {
+        // Expiry check from formula
+        if (grid) {
+            const tEnd = new Date(grid.start_time).getTime()
+                       + (windowId + 1) * (grid.timeframe_sec || 60) * 1000
+            if (Date.now() > tEnd) {
                 toast.error('Cell Expired', {
                     description: 'Cannot place bet on a cell whose time window has ended.',
                     duration: 3000,
@@ -378,7 +383,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        if (selectedCells.includes(cellId)) {
+        if (selectedCells.includes(slotKey)) {
             toast.error('Bet Already Placed', {
                 description: 'Bets are final and cannot be removed once placed.',
                 duration: 3000,
@@ -393,28 +398,31 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        setQuoteCellId(cellId)
+        setQuoteCellId(slotKey)
 
-        if (betConfirmationEnabled && cell) {
-            const priceRange = `$${cell.p_low.toFixed(2)} – $${cell.p_high.toFixed(2)}`
-            const startTime = new Date(cell.t_start)
-            const endTime = new Date(cell.t_end)
-            const timeWindow = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-            setPendingBetCellId(cellId)
+        if (betConfirmationEnabled) {
+            const bw = grid?.price_interval || 2
+            const priceRange = `$${(cellId * bw).toFixed(2)} – $${((cellId + 1) * bw).toFixed(2)}`
+            const startMs = grid ? new Date(grid.start_time).getTime() : 0
+            const durMs = (grid?.timeframe_sec || 60) * 1000
+            const tStart = new Date(startMs + windowId * durMs)
+            const tEnd = new Date(startMs + (windowId + 1) * durMs)
+            const timeWindow = `${tStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${tEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            setPendingBetCellId([cellId, windowId])
             setPendingBetInfo({ priceRange, timeWindow })
             setShowBetConfirmation(true)
             return
         }
 
-        await executeBet(cellId, currentStake)
+        await executeBet(cellId, windowId, currentStake)
     }, [
         viewport.dragStart.hasMoved, isPracticeMode, authenticated,
-        selectedCells, currentStake, availableBalance, cells,
+        selectedCells, currentStake, availableBalance, grid,
         betConfirmationEnabled, executeBet,
     ])
 
     const handleBetConfirm = useCallback(() => {
-        if (pendingBetCellId) executeBet(pendingBetCellId, currentStake)
+        if (pendingBetCellId) executeBet(pendingBetCellId[0], pendingBetCellId[1], currentStake)
     }, [pendingBetCellId, currentStake, executeBet])
 
     const handleBetCancel = useCallback(() => {
