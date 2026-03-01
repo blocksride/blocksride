@@ -348,28 +348,99 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         [unclaimedWins, unclaimedVoids]
     )
 
-    const handleClaim = useCallback((positionId: string) => {
-        setClaimingIds(prev => { const s = new Set(prev); s.add(positionId); return s })
-        setTimeout(() => {
-            setClaimingIds(prev => { const s = new Set(prev); s.delete(positionId); return s })
-            setClaimedIds(prev => { const s = new Set(prev); s.add(positionId); return s })
+    // Derive on-chain windowIds from a set of positionIds.
+    // Parses composite "${windowId}_${cellId}" keys; falls back to DB cell window_index.
+    const getWindowIds = useCallback((positionIds: string[]): number[] => {
+        const windowIds = new Set<number>()
+        for (const positionId of positionIds) {
+            const position = positions.find(p => p.position_id === positionId)
+            if (!position) continue
+            const parts = position.cell_id.split('_')
+            if (parts.length >= 2) {
+                const wid = parseInt(parts[0], 10)
+                if (!isNaN(wid)) { windowIds.add(wid); continue }
+            }
+            const cell = cells.find(c => c.cell_id === position.cell_id)
+            if (cell?.window_index !== undefined) windowIds.add(cell.window_index)
+        }
+        return [...windowIds]
+    }, [positions, cells])
+
+    const executeClaim = useCallback(async (positionIds: string[]) => {
+        if (positionIds.length === 0) return
+
+        setClaimingIds(prev => { const s = new Set(prev); positionIds.forEach(id => s.add(id)); return s })
+
+        try {
+            if (isPracticeMode) {
+                // Practice wins are pushed by the backend — just mark as claimed locally
+                await new Promise(r => setTimeout(r, 500))
+                setClaimedIds(prev => new Set([...prev, ...positionIds]))
+                refreshUser()
+                return
+            }
+
+            const pool = poolsRef.current.find(p => p.assetId === selectedAsset)
+            if (!pool) {
+                toast.error('Chain not configured', { description: 'No pool found for this asset.' })
+                return
+            }
+
+            const windowIds = getWindowIds(positionIds)
+            if (windowIds.length === 0) {
+                toast.error('Cannot determine window IDs for claim')
+                return
+            }
+
+            const activeWallet =
+                walletsRef.current.find(w => w.walletClientType === 'privy') ??
+                walletsRef.current[0]
+            if (!activeWallet) {
+                toast.error('No wallet connected')
+                return
+            }
+
+            const provider = await activeWallet.getEthereumProvider()
+            const walletClient = createWalletClient({
+                account:   activeWallet.address as `0x${string}`,
+                chain:     activeChain,
+                transport: custom(provider),
+            })
+
+            await betService.signAndSubmitClaim(
+                walletClient,
+                activeWallet.address as `0x${string}`,
+                pool,
+                windowIds,
+                expectedChainId,
+            )
+
+            setClaimedIds(prev => new Set([...prev, ...positionIds]))
             refreshUser()
-        }, 500)
-    }, [refreshUser])
+            toast.success('Claim submitted', { description: 'Your payout is on its way.', duration: 4000 })
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error('Claim failed', { description: msg, duration: 5000 })
+        } finally {
+            setClaimingIds(prev => {
+                const s = new Set(prev)
+                positionIds.forEach(id => s.delete(id))
+                return s
+            })
+        }
+    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds])
+
+    const handleClaim = useCallback((positionId: string) => {
+        executeClaim([positionId])
+    }, [executeClaim])
 
     const handleClaimAll = useCallback(() => {
         const allIds = [
             ...unclaimedWins.map(c => c.id),
             ...unclaimedVoids.map(v => v.id),
         ]
-        if (allIds.length === 0) return
-        setClaimingIds(new Set(allIds))
-        setTimeout(() => {
-            setClaimedIds(prev => new Set([...prev, ...allIds]))
-            setClaimingIds(new Set())
-            refreshUser()
-        }, 600)
-    }, [unclaimedWins, unclaimedVoids, refreshUser])
+        executeClaim(allIds)
+    }, [unclaimedWins, unclaimedVoids, executeClaim])
 
     useEffect(() => {
         window.dispatchEvent(new CustomEvent('claims:update', {

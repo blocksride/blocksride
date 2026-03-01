@@ -23,6 +23,10 @@ export interface ScheduledBet {
     submitAfter: number  // unix timestamp when relay submits the tx
 }
 
+export interface SubmittedClaim {
+    txHash: string
+}
+
 // EIP-712 types matching BetIntent in PariHook.sol
 const BET_INTENT_TYPES = {
     BetIntent: [
@@ -33,6 +37,17 @@ const BET_INTENT_TYPES = {
         { name: 'amount',   type: 'uint256' },
         { name: 'nonce',    type: 'uint256' },
         { name: 'deadline', type: 'uint256' },
+    ],
+} as const
+
+// EIP-712 types matching ClaimIntent in PariHook.sol
+const CLAIM_INTENT_TYPES = {
+    ClaimIntent: [
+        { name: 'user',      type: 'address' },
+        { name: 'poolId',    type: 'bytes32' },
+        { name: 'windowIds', type: 'uint256[]' },
+        { name: 'nonce',     type: 'uint256' },
+        { name: 'deadline',  type: 'uint256' },
     ],
 } as const
 
@@ -103,5 +118,54 @@ export const betService = {
     // DELETE /api/relay/bet/:intentId — cancel within undo window
     cancelBet: async (intentId: string): Promise<void> => {
         await axiosInstance.delete(`/relay/bet/${intentId}`)
+    },
+
+    // GET /api/relay/claim-nonce — on-chain nonce from PariHook.claimNonces(user)
+    getClaimNonce: async (address: string): Promise<bigint> => {
+        const res = await axiosInstance.get<{ nonce: string }>(`/relay/claim-nonce?address=${address}`)
+        return BigInt(res.data.nonce)
+    },
+
+    // Sign a ClaimIntent EIP-712 message and POST to POST /api/relay/claim.
+    // Relay submits claimAllFor immediately (no undo window for claims).
+    signAndSubmitClaim: async (
+        walletClient: WalletClient,
+        userAddress: `0x${string}`,
+        pool: Pool,
+        windowIds: number[],
+        chainId: number,
+    ): Promise<SubmittedClaim> => {
+        const nonce    = await betService.getClaimNonce(userAddress)
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 300) // 5 min
+
+        const signature = await walletClient.signTypedData({
+            account: userAddress,
+            domain: {
+                name:              'PariHook',
+                version:           '1',
+                chainId,
+                verifyingContract: pool.poolKey.hooks as `0x${string}`,
+            },
+            types:       CLAIM_INTENT_TYPES,
+            primaryType: 'ClaimIntent',
+            message: {
+                user:      userAddress,
+                poolId:    pool.poolId as `0x${string}`,
+                windowIds: windowIds.map(BigInt),
+                nonce,
+                deadline,
+            },
+        })
+
+        const res = await axiosInstance.post<SubmittedClaim>('/relay/claim', {
+            poolId:    pool.poolId,
+            windowIds: windowIds.map(String),
+            nonce:     nonce.toString(),
+            deadline:  deadline.toString(),
+            signature,
+            user:      userAddress,
+        })
+
+        return res.data
     },
 }
