@@ -30,6 +30,10 @@ import {
 
 import { useGridSocket } from '../hooks/useGridSocket'
 import { useBetQuote } from '../hooks/useBetQuote'
+import { useWallets } from '@privy-io/react-auth'
+import { createWalletClient, custom } from 'viem'
+import { activeChain, expectedChainId } from '@/providers/Web3Provider'
+import { betService, type Pool } from '../services/betService'
 
 const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
 const SIDEBAR_COLLAPSED_KEY = 'blocksride_sidebar_collapsed'
@@ -273,6 +277,16 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [])
 
     const { user, refreshUser, authenticated } = useAuth()
+    const { wallets } = useWallets()
+    const walletsRef = useRef(wallets)
+    walletsRef.current = wallets
+
+    const [pools, setPools] = useState<Pool[]>([])
+    const poolsRef = useRef<Pool[]>([])
+    poolsRef.current = pools
+    useEffect(() => {
+        betService.getPools().then(setPools).catch(() => {})
+    }, [])
     const practiceBalance = user?.practice_balance ?? 1000
     const platformBalance = user?.balance ?? 0
     const userBalance = isPracticeMode ? practiceBalance : platformBalance
@@ -375,50 +389,99 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         setPendingStake(prev => prev + stake)
         setIsBetLoading(true)
 
-        // Price label from formula (no DB cell needed)
         const bw = grid?.price_interval || 2
         const priceLabel = `$${(cellId * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })} – $${((cellId + 1) * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 
         try {
-            // Legacy bridge: find DB UUID for practice mode API call
-            const legacyCell = cells.find(c => c.window_index === windowId && c.price_band_index === cellId)
-            const legacyCellId = legacyCell?.cell_id ?? slotKey
+            if (isPracticeMode) {
+                // Practice mode — off-chain via legacy positions API
+                const legacyCell = cells.find(c => c.window_index === windowId && c.price_band_index === cellId)
+                const legacyCellId = legacyCell?.cell_id ?? slotKey
 
-            const response = await api.createPosition(legacyCellId, selectedAsset, stake, isPracticeMode)
-            const position = response.data
+                const response = await api.createPosition(legacyCellId, selectedAsset, stake, true)
+                const position = response.data
 
-            // Rename optimistic key if API returned a different UUID
-            if (position.cell_id && position.cell_id !== slotKey) {
-                updateCellId(slotKey, position.cell_id)
-                placedCellsRef.current.delete(slotKey)
-                placedCellsRef.current.add(position.cell_id)
+                if (position.cell_id && position.cell_id !== slotKey) {
+                    updateCellId(slotKey, position.cell_id)
+                    placedCellsRef.current.delete(slotKey)
+                    placedCellsRef.current.add(position.cell_id)
+                }
+
+                prevBetResultsRef.current = { ...betResultsRef.current }
+                hasPlacedBetRef.current = true
+                setPendingStake(prev => Math.max(0, prev - stake))
+                refreshUser()
+                window.dispatchEvent(new CustomEvent('position_updated'))
+                setShowBetConfirmation(false)
+                setPendingBetCellId(null)
+                setPendingBetInfo(null)
+                setQuoteCellId(null)
+
+                setUndoToast({
+                    amount: stake,
+                    priceLabel,
+                    undoFn: () => {
+                        removeOptimisticCell(position.cell_id || slotKey)
+                        placedCellsRef.current.delete(position.cell_id || slotKey)
+                        setPendingStake(prev => Math.max(0, prev - stake))
+                        refreshUser()
+                    },
+                })
+            } else {
+                // On-chain — sign EIP-712 BetIntent and schedule via relay
+                const pool = poolsRef.current.find(p => p.assetId === selectedAsset)
+                if (!pool) {
+                    toast.error('Chain not configured', { description: 'No pool found for this asset.' })
+                    throw new Error('no-pool')
+                }
+
+                const activeWallet =
+                    walletsRef.current.find(w => w.walletClientType === 'privy') ??
+                    walletsRef.current[0]
+                if (!activeWallet) throw new Error('no-wallet')
+
+                const provider = await activeWallet.getEthereumProvider()
+                const walletClient = createWalletClient({
+                    account:   activeWallet.address as `0x${string}`,
+                    chain:     activeChain,
+                    transport: custom(provider),
+                })
+
+                const amountUsdc = BigInt(Math.round(stake * 1_000_000))
+                const { intentId } = await betService.signAndScheduleBet(
+                    walletClient,
+                    activeWallet.address as `0x${string}`,
+                    pool,
+                    cellId,
+                    windowId,
+                    amountUsdc,
+                    expectedChainId,
+                )
+
+                prevBetResultsRef.current = { ...betResultsRef.current }
+                hasPlacedBetRef.current = true
+                setPendingStake(prev => Math.max(0, prev - stake))
+                setShowBetConfirmation(false)
+                setPendingBetCellId(null)
+                setPendingBetInfo(null)
+                setQuoteCellId(null)
+
+                setUndoToast({
+                    amount: stake,
+                    priceLabel,
+                    undoFn: () => {
+                        betService.cancelBet(intentId).catch(() => {})
+                        removeOptimisticCell(slotKey)
+                        placedCellsRef.current.delete(slotKey)
+                        setPendingStake(prev => Math.max(0, prev - stake))
+                    },
+                })
             }
-
-            prevBetResultsRef.current = { ...betResultsRef.current }
-            hasPlacedBetRef.current = true
-            setPendingStake(prev => Math.max(0, prev - stake))
-            refreshUser()
-            window.dispatchEvent(new CustomEvent('position_updated'))
-            setShowBetConfirmation(false)
-            setPendingBetCellId(null)
-            setPendingBetInfo(null)
-            setQuoteCellId(null)
-
-            // Show undo toast (3 second window)
-            setUndoToast({
-                amount: stake,
-                priceLabel,
-                undoFn: () => {
-                    // Optimistically roll back the visual state.
-                    // When relay API is wired: DELETE /api/relay/bet/:intentId goes here.
-                    removeOptimisticCell(position.cell_id || slotKey)
-                    placedCellsRef.current.delete(position.cell_id || slotKey)
-                    setPendingStake(prev => Math.max(0, prev - stake))
-                    refreshUser()
-                },
-            })
-        } catch {
-            toast.error('Failed to place bet')
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : ''
+            if (msg !== 'no-pool' && msg !== 'no-wallet') {
+                toast.error('Failed to place bet')
+            }
             removeOptimisticCell(slotKey)
             placedCellsRef.current.delete(slotKey)
             setPendingStake(prev => Math.max(0, prev - stake))
