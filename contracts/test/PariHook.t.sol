@@ -46,7 +46,8 @@ contract PariHookTest is Test {
     //                      TEST CONSTANTS
     // =============================================================
 
-    bytes32 public constant ETH_USD_FEED_ID = bytes32(uint256(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace));
+    bytes32 public constant ETH_USD_FEED_ID =
+        bytes32(uint256(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace));
     uint256 public constant BAND_WIDTH = 2_000_000; // $2.00 in USDC (6 decimals)
     uint256 public constant WINDOW_DURATION = 60; // 60 seconds
     uint256 public constant FROZEN_WINDOWS = 3;
@@ -78,9 +79,9 @@ contract PariHookTest is Test {
         // Note: In production, hooks address must have specific bit pattern
         // For testing, we'll mock the PoolManager to skip address validation
         testPoolKey = PoolKey({
-            currency0: Currency.wrap(address(0x1)),  // Mock currency0
-            currency1: Currency.wrap(address(0x2)),  // Mock currency1
-            fee: 3000,  // 0.3% fee
+            currency0: Currency.wrap(address(0x1)), // Mock currency0
+            currency1: Currency.wrap(address(0x2)), // Mock currency1
+            fee: 3000, // 0.3% fee
             tickSpacing: 60,
             hooks: hook
         });
@@ -597,11 +598,7 @@ contract PariHookTest is Test {
     //                      FUZZ TESTS
     // =============================================================
 
-    function testFuzz_PlaceBet(
-        uint256 windowId,
-        uint256 cellId,
-        uint256 amount
-    ) public {
+    function testFuzz_PlaceBet(uint256 windowId, uint256 cellId, uint256 amount) public {
         // TODO: Bound inputs to valid ranges
         // TODO: Test random bet placements don't break invariants
     }
@@ -611,11 +608,7 @@ contract PariHookTest is Test {
         // TODO: Verify winningCell always calculated correctly
     }
 
-    function testFuzz_RedemptionRate(
-        uint256 totalPool,
-        uint256 winStakes,
-        uint256 feeBps
-    ) public {
+    function testFuzz_RedemptionRate(uint256 totalPool, uint256 winStakes, uint256 feeBps) public {
         // TODO: Test redemption rate calculation with random inputs
         // TODO: Verify rate never exceeds reasonable bounds
     }
@@ -688,17 +681,19 @@ contract PariHookTest is Test {
         // TODO: Create mock Pyth VAA with given price and timestamp
     }
 
-    function _signBetIntent(
-        uint256 privateKey,
-        PariHook.BetIntent memory intent
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+    function _signBetIntent(uint256 privateKey, PariHook.BetIntent memory intent)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
         // TODO: Generate EIP-712 signature for BetIntent
     }
 
-    function _signClaimIntent(
-        uint256 privateKey,
-        PariHook.ClaimIntent memory intent
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+    function _signClaimIntent(uint256 privateKey, PariHook.ClaimIntent memory intent)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
         // TODO: Generate EIP-712 signature for ClaimIntent
     }
 }

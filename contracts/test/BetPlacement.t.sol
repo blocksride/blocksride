@@ -49,11 +49,7 @@ contract BetPlacementTest is Test {
     uint256 constant LARGE_BET = 1_000_000_000; // $1000
 
     event BetPlaced(
-        PoolId indexed poolId,
-        uint256 indexed windowId,
-        uint256 indexed cellId,
-        address user,
-        uint256 amount
+        PoolId indexed poolId, uint256 indexed windowId, uint256 indexed cellId, address user, uint256 amount
     );
 
     function setUp() public {
@@ -530,5 +526,5 @@ contract MockERC20 is IERC20 {
  * @notice Mock PoolManager for testing
  */
 contract MockPoolManager {
-    // Minimal implementation for testing
+// Minimal implementation for testing
 }

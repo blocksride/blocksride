@@ -28,7 +28,8 @@ contract PariHookUnitTest is Test {
     address public alice = makeAddr("alice");
     address public usdcToken = makeAddr("usdc");
 
-    bytes32 public constant ETH_USD_FEED_ID = bytes32(uint256(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace));
+    bytes32 public constant ETH_USD_FEED_ID =
+        bytes32(uint256(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace));
     uint256 public constant BAND_WIDTH = 2_000_000;
     uint256 public constant WINDOW_DURATION = 60;
     uint256 public constant FROZEN_WINDOWS = 3;
