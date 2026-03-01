@@ -18,6 +18,7 @@ interface GridCellsProps {
     cellPrices?: CellPricesMap
     recentCellIds?: Record<string, boolean>
     frozenWindows?: number
+    activeCellId?: number
     getX: (t: number) => number
     getY: (p: number) => number
     onCellClick: (cellId: number, windowId: number) => void
@@ -38,6 +39,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
     cellPrices,
     recentCellIds,
     frozenWindows = 2,
+    activeCellId,
     getX,
     getY,
     onCellClick,
@@ -344,6 +346,12 @@ export const GridCells: React.FC<GridCellsProps> = ({
                     )
                 }
 
+                // Live price cell: price is in this band, window is open (bettable)
+                const isLiveCell = activeCellId !== undefined
+                    && slot.absoluteCellId === activeCellId
+                    && !isFrozen
+                    && !isAfterContestEnd
+
                 const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
                 const touchPadding = isMobile ? 4 : 0
 
@@ -377,6 +385,19 @@ export const GridCells: React.FC<GridCellsProps> = ({
                                 }
                             }}
                         />
+                        {/* Live price band pulse — cosmetic only, no pointer events */}
+                        {isLiveCell && (
+                            <rect
+                                x={rectX}
+                                y={rectY}
+                                width={rectW}
+                                height={rectH}
+                                fill="rgba(0, 210, 255, 0.12)"
+                                stroke="rgba(0, 210, 255, 0.55)"
+                                strokeWidth={1.5}
+                                className="animate-live-pulse pointer-events-none"
+                            />
+                        )}
                         {/* Show probability and multiplier for playable cells */}
                         {showPricing && (
                             <>

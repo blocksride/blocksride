@@ -108,6 +108,10 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     if (!grid) return null
 
     const windowDuration = (grid.timeframe_sec || 60) * 1000
+    const bandWidthUsdc = Math.round((grid.price_interval || 2) * 1_000_000)
+    const activeCellId = currentPrice !== null && bandWidthUsdc > 0
+        ? Math.floor(currentPrice * 1_000_000 / bandWidthUsdc)
+        : undefined
     const gridStartTime = new Date(grid.start_time).getTime()
     const currentWindowIndex = Math.floor((now - gridStartTime) / windowDuration)
     const currentWindowStart = gridStartTime + currentWindowIndex * windowDuration
@@ -218,6 +222,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 cellStakes={cellStakes}
                 cellPrices={cellPrices}
                 recentCellIds={recentCellIds}
+                activeCellId={activeCellId}
                 getX={getX}
                 getY={getY}
                 onCellClick={onCellClick}

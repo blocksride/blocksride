@@ -243,6 +243,21 @@ body {
     }
   }
 
+  /* Live price cell pulse — fast cyan, open (bettable) windows only */
+  .animate-live-pulse {
+    animation: livePulse 0.55s ease-in-out infinite;
+  }
+
+  @keyframes livePulse {
+    0%, 100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+      filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.55));
+    }
+  }
+
   /* Confetti particles */
   .confetti-particle {
     position: fixed;
