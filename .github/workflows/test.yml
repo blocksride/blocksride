@@ -58,7 +58,7 @@ jobs:
 
       - name: Run Forge coverage
         run: |
-          forge coverage --report summary --report lcov
+          forge coverage --ir-minimum --report summary --report lcov
         working-directory: contracts
         id: coverage
 
