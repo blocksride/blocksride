@@ -526,5 +526,6 @@ contract MockERC20 is IERC20 {
  * @notice Mock PoolManager for testing
  */
 contract MockPoolManager {
-// Minimal implementation for testing
-}
+    // Minimal implementation for testing
+
+    }

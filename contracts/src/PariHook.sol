@@ -869,11 +869,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param cellId Cell ID
      * @return Multiplier in 1e18 precision (e.g., 1.5e18 = 1.5x)
      */
-    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId)
-        external
-        view
-        returns (uint256)
-    {
+    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
         // TODO: Calculate (totalPool * (10000 - feeBps) / 10000) * 1e18 / cellStakes[cellId]
         return 0;
     }
