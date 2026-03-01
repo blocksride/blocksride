@@ -21,7 +21,9 @@ contract BetPlacementTest is Test {
     MockPoolManager public poolManager;
     MockERC20 public usdc;
 
-    address public admin = address(this);
+    address public admin = address(this); // test contract is admin so pause/unpause work without vm.prank
+    address public treasury = makeAddr("treasury");
+    address public relayer = makeAddr("relayer");
     address public user1 = address(0x1);
     address public user2 = address(0x2);
     address public user3 = address(0x3);
@@ -37,6 +39,8 @@ contract BetPlacementTest is Test {
     uint256 constant MAX_STAKE_PER_CELL = 100_000_000_000; // $100,000
     uint256 constant FEE_BPS = 200; // 2%
     uint256 constant MIN_POOL_THRESHOLD = 1_000_000; // $1.00
+    // Forge default timestamp is 1; GRID_EPOCH=100 is in the future at setUp, then we warp past it
+    uint256 constant GRID_EPOCH = 100;
 
     // Test amounts
     uint256 constant INITIAL_USER_BALANCE = 1000_000_000; // $1000 USDC
@@ -57,8 +61,8 @@ contract BetPlacementTest is Test {
         poolManager = new MockPoolManager();
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
-        // Deploy PariHook
-        hook = new PariHook(IPoolManager(address(poolManager)));
+        // Deploy PariHook — address(this) is admin so pause/unpause work without vm.prank
+        hook = new PariHook(IPoolManager(address(poolManager)), address(this), treasury, relayer);
 
         // Setup test pool key
         testKey = PoolKey({
@@ -70,7 +74,7 @@ contract BetPlacementTest is Test {
         });
         testPoolId = testKey.toId();
 
-        // Configure grid
+        // Configure grid (GRID_EPOCH=100 is in the future at forge default timestamp=1)
         hook.configureGrid(
             testKey,
             PYTH_PRICE_FEED_ID,
@@ -80,8 +84,12 @@ contract BetPlacementTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
+
+        // Warp to 1 second past epoch so the grid is live and bettable windows exist
+        vm.warp(GRID_EPOCH + 1);
 
         // Fund test users with USDC
         usdc.mint(user1, INITIAL_USER_BALANCE);
@@ -368,7 +376,7 @@ contract BetPlacementTest is Test {
     function test_GetCurrentWindow() public {
         uint256 currentWindow = hook.getCurrentWindow(testKey);
 
-        // Current window should be non-zero (since gridEpoch is set to block.timestamp in setUp)
+        // window 0 since we're 1 second past epoch (< 1 full windowDuration)
         assertGe(currentWindow, 0);
 
         // Fast forward time and verify window increments
