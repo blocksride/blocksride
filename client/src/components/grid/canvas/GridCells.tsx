@@ -389,6 +389,22 @@ export const GridCells: React.FC<GridCellsProps> = ({
                                 }
                             }}
                         />
+                        {/* Won cell: inner border + outer glow ring (claimable indicator) */}
+                        {status === 'won' && (
+                            <>
+                                <rect
+                                    x={rectX} y={rectY} width={rectW} height={rectH}
+                                    fill="none" stroke="#4ADE80" strokeWidth={1.5} opacity={0.6}
+                                    className="pointer-events-none"
+                                />
+                                <rect
+                                    x={rectX - 3} y={rectY - 3} width={rectW + 6} height={rectH + 6}
+                                    rx={4}
+                                    fill="none" stroke="#4ADE80" strokeWidth={1} opacity={0.22}
+                                    className="pointer-events-none"
+                                />
+                            </>
+                        )}
                         {/* Live price band pulse — cosmetic only, no pointer events */}
                         {isLiveCell && (
                             <rect

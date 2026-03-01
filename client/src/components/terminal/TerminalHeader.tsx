@@ -149,10 +149,10 @@ export function TerminalHeader() {
           {pendingClaims > 0 && (
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('claims:toggle'))}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[11px] font-mono font-semibold"
+              className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded border border-trade-up/22 bg-trade-up/10 text-trade-up text-[11px] font-mono font-semibold hover:bg-trade-up/17 transition-colors"
               aria-label={`Pending claims: $${claimsTotal.toFixed(2)}`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.6)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] shadow-[0_0_6px_rgba(22,163,74,0.7)]" />
               Claims · +${claimsTotal.toFixed(2)}
             </button>
           )}

@@ -708,150 +708,171 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 {claimsOpen && (
                     <>
                         <div
-                            className="absolute inset-0 bg-black/40 z-40"
+                            className="absolute inset-0 bg-black/50 z-40"
                             onClick={() => setClaimsOpen(false)}
                             aria-hidden="true"
                         />
-                        <div className="absolute top-0 right-0 h-full w-80 bg-zinc-950 border-l border-zinc-800 z-50 flex flex-col animate-slide-in-right">
+                        <div className="absolute top-0 right-0 h-full w-[296px] bg-card border-l border-border z-50 flex flex-col animate-slide-in-right">
                             {/* Header */}
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
-                                <span className="text-sm font-semibold text-white">Pending Claims</span>
+                            <div className="flex items-center gap-2 px-4 h-[50px] border-b border-border shrink-0">
+                                <span className="text-[11px] font-bold tracking-[0.06em] uppercase text-muted-foreground flex-1">Pending Claims</span>
+                                {unclaimedCount > 0 && (
+                                    <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full bg-trade-up/12 border border-trade-up/22 text-trade-up">
+                                        {unclaimedCount} item{unclaimedCount !== 1 ? 's' : ''}
+                                    </span>
+                                )}
                                 <button
                                     onClick={() => setClaimsOpen(false)}
-                                    className="p-1 rounded text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors"
+                                    className="w-[26px] h-[26px] flex items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground transition-colors"
                                     aria-label="Close claims panel"
                                 >
-                                    <X className="w-4 h-4" />
+                                    <X className="w-3.5 h-3.5" />
                                 </button>
                             </div>
 
                             {/* Summary banner */}
                             {unclaimedCount > 0 && (
-                                <div className="mx-3 mt-3 px-3 py-2 rounded-lg bg-trade-up/10 border border-trade-up/25 flex items-center justify-between shrink-0">
-                                    <span className="text-xs text-zinc-400">
-                                        {unclaimedCount} position{unclaimedCount !== 1 ? 's' : ''} to claim
-                                    </span>
-                                    <span className="text-sm font-mono font-bold text-trade-up">
-                                        +${unclaimedTotal.toFixed(2)}
-                                    </span>
+                                <div className={`border-b border-border px-4 py-3.5 flex items-center gap-3 shrink-0 ${unclaimedVoids.length > 0 ? 'bg-gradient-to-br from-trade-up/6 to-primary/3' : 'bg-trade-up/5'}`}>
+                                    <div className="w-[34px] h-[34px] rounded-lg bg-trade-up/12 border border-trade-up/20 flex items-center justify-center text-sm shrink-0">⬡</div>
+                                    <div>
+                                        <div className="font-mono text-[22px] font-bold text-trade-up leading-none">+${unclaimedTotal.toFixed(2)}</div>
+                                        <div className="text-[10px] text-muted-foreground mt-0.5 tracking-wide">
+                                            {unclaimedWins.length > 0 && `${unclaimedWins.length} win${unclaimedWins.length !== 1 ? 's' : ''}`}
+                                            {unclaimedWins.length > 0 && unclaimedVoids.length > 0 && ' · '}
+                                            {unclaimedVoids.length > 0 && `${unclaimedVoids.length} void refund${unclaimedVoids.length !== 1 ? 's' : ''}`}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
                             {/* Scrollable list */}
-                            <div className="flex-1 overflow-y-auto py-3 px-3 space-y-2 min-h-0">
+                            <div className="flex-1 overflow-y-auto pb-2 min-h-0">
                                 {claimItems.length === 0 && voidItems.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
-                                        <DollarSign className="w-8 h-8 text-zinc-700" />
-                                        <div>
-                                            <p className="text-sm font-medium text-zinc-400">No positions yet</p>
-                                            <p className="text-xs text-zinc-600 mt-1">Win a round to see your claims here</p>
-                                        </div>
+                                    <div className="flex flex-col items-center justify-center h-full gap-2.5 text-center px-6 py-12">
+                                        <div className="w-12 h-12 rounded-full bg-trade-up/8 border border-trade-up/15 flex items-center justify-center text-xl mb-1">✓</div>
+                                        <p className="text-[13px] font-semibold text-muted-foreground">All caught up</p>
+                                        <p className="text-[11px] text-muted-foreground/60 leading-relaxed max-w-[160px]">Winnings and refunds will appear here when your positions settle.</p>
                                     </div>
                                 ) : (
                                     <>
                                         {/* Wins */}
                                         {claimItems.length > 0 && (
                                             <>
-                                                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 px-1 pt-1">Wins</p>
-                                                {claimItems.map((claim) => {
-                                                    const isClaimed = claimedIds.has(claim.id)
-                                                    const isClaiming = claimingIds.has(claim.id)
-                                                    return (
-                                                        <div
-                                                            key={claim.id}
-                                                            className={`flex rounded-lg overflow-hidden border border-zinc-800 transition-opacity duration-300${isClaimed ? ' opacity-40' : ''}`}
-                                                        >
-                                                            <div className="w-1 shrink-0 bg-trade-up" />
-                                                            <div className="flex items-center justify-between flex-1 px-3 py-2.5 bg-zinc-900/60">
-                                                                <div className="min-w-0">
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <span className="text-[10px] font-mono text-zinc-500">{claim.windowLabel}</span>
-                                                                        {claim.timeAgo && <span className="text-[10px] text-zinc-600">· {claim.timeAgo}</span>}
+                                                <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
+                                                    <span className="text-[9px] font-bold tracking-[0.12em] uppercase text-muted-foreground/60">Won</span>
+                                                    <div className="flex-1 h-px bg-border" />
+                                                </div>
+                                                <div className="px-2.5 space-y-1.5">
+                                                    {claimItems.map((claim) => {
+                                                        const isClaimed = claimedIds.has(claim.id)
+                                                        const isClaiming = claimingIds.has(claim.id)
+                                                        return (
+                                                            <div
+                                                                key={claim.id}
+                                                                className={`rounded-lg bg-background relative transition-opacity duration-300${isClaimed ? ' opacity-40' : isClaiming ? ' bg-trade-up/4' : ''}`}
+                                                                style={{ border: '1px solid hsl(var(--border))', borderLeft: '3px solid hsl(var(--trade-up))' }}
+                                                            >
+                                                                {isClaimed && (
+                                                                    <div className="absolute top-2.5 right-2.5 w-[22px] h-[22px] rounded-full bg-trade-up/15 border border-trade-up/30 flex items-center justify-center">
+                                                                        <Check className="w-3 h-3 text-trade-up" />
                                                                     </div>
-                                                                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{claim.range}</p>
-                                                                    <div className="flex items-center gap-1 mt-1">
-                                                                        <span className="text-[10px] font-mono text-zinc-500">${claim.stake.toFixed(2)}</span>
-                                                                        <span className="text-[10px] text-zinc-600">→</span>
-                                                                        <span className="text-[11px] font-mono font-semibold text-trade-up">+${claim.payout.toFixed(2)}</span>
-                                                                        {claim.multiplier && (
-                                                                            <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-trade-up/15 text-trade-up/80 ml-0.5">
-                                                                                {claim.multiplier.toFixed(1)}×
-                                                                            </span>
+                                                                )}
+                                                                <div className="px-3 py-[11px]">
+                                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                                        <span className="font-mono text-[10px] text-muted-foreground">{claim.windowLabel}</span>
+                                                                        {claim.timeAgo && <span className="text-[10px] text-muted-foreground/50">· {claim.timeAgo}</span>}
+                                                                    </div>
+                                                                    <p className="font-mono text-[13px] font-semibold text-foreground mb-2">{claim.range}</p>
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                                            <span className="font-mono text-[11px] text-muted-foreground">${claim.stake.toFixed(2)}</span>
+                                                                            <span className="text-[10px] text-muted-foreground/40">→</span>
+                                                                            <span className="font-mono text-[15px] font-bold text-trade-up">+${claim.payout.toFixed(2)}</span>
+                                                                            {claim.multiplier && (
+                                                                                <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-trade-up/10 border border-trade-up/18 text-trade-up/70 shrink-0">
+                                                                                    {claim.multiplier.toFixed(1)}×
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {!isClaimed && (
+                                                                            isClaiming ? (
+                                                                                <button disabled className="h-7 px-3 rounded border border-trade-up/30 bg-trade-up/8 text-[11px] font-bold text-trade-up flex items-center gap-1.5 opacity-65 cursor-not-allowed shrink-0">
+                                                                                    <div className="w-3 h-3 rounded-full border-2 border-trade-up/30 border-t-trade-up animate-spin" />
+                                                                                    <span>···</span>
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleClaim(claim.id)}
+                                                                                    className="h-7 px-3 rounded border border-trade-up/30 bg-trade-up/8 text-[11px] font-bold text-trade-up hover:bg-trade-up/20 transition-colors shrink-0"
+                                                                                >
+                                                                                    Claim
+                                                                                </button>
+                                                                            )
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                <div className="shrink-0 ml-2">
-                                                                    {isClaimed ? (
-                                                                        <div className="w-7 h-7 rounded-full bg-trade-up/20 flex items-center justify-center">
-                                                                            <Check className="w-3.5 h-3.5 text-trade-up" />
-                                                                        </div>
-                                                                    ) : isClaiming ? (
-                                                                        <div className="w-7 h-7 flex items-center justify-center">
-                                                                            <div className="w-4 h-4 rounded-full border-2 border-trade-up/30 border-t-trade-up animate-spin" />
-                                                                        </div>
-                                                                    ) : (
-                                                                        <button
-                                                                            onClick={() => handleClaim(claim.id)}
-                                                                            className="px-2.5 py-1 text-[11px] font-semibold rounded border border-trade-up/40 text-trade-up bg-trade-up/10 hover:bg-trade-up/25 transition-colors"
-                                                                        >
-                                                                            Claim
-                                                                        </button>
-                                                                    )}
-                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )
-                                                })}
+                                                        )
+                                                    })}
+                                                </div>
                                             </>
                                         )}
 
                                         {/* Void Refunds */}
                                         {voidItems.length > 0 && (
                                             <>
-                                                <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 px-1 pt-2">Void Refunds</p>
-                                                {voidItems.map((item) => {
-                                                    const isClaimed = claimedIds.has(item.id)
-                                                    const isClaiming = claimingIds.has(item.id)
-                                                    return (
-                                                        <div
-                                                            key={item.id}
-                                                            className={`flex rounded-lg overflow-hidden border border-zinc-800 transition-opacity duration-300${isClaimed ? ' opacity-40' : ''}`}
-                                                        >
-                                                            <div className="w-1 shrink-0 bg-amber-500" />
-                                                            <div className="flex items-center justify-between flex-1 px-3 py-2.5 bg-zinc-900/60">
-                                                                <div className="min-w-0">
-                                                                    <div className="flex items-center gap-1.5">
-                                                                        <span className="text-[10px] font-mono text-zinc-500">{item.windowLabel}</span>
-                                                                        {item.timeAgo && <span className="text-[10px] text-zinc-600">· {item.timeAgo}</span>}
+                                                <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
+                                                    <span className="text-[9px] font-bold tracking-[0.12em] uppercase text-primary/55">Void Refunds</span>
+                                                    <div className="flex-1 h-px bg-border" />
+                                                </div>
+                                                <div className="px-2.5 space-y-1.5">
+                                                    {voidItems.map((item) => {
+                                                        const isClaimed = claimedIds.has(item.id)
+                                                        const isClaiming = claimingIds.has(item.id)
+                                                        return (
+                                                            <div
+                                                                key={item.id}
+                                                                className={`rounded-lg bg-background relative transition-opacity duration-300${isClaimed ? ' opacity-40' : ''}`}
+                                                                style={{ border: '1px solid hsl(var(--border))', borderLeft: '3px solid hsl(var(--primary))' }}
+                                                            >
+                                                                {isClaimed && (
+                                                                    <div className="absolute top-2.5 right-2.5 w-[22px] h-[22px] rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center">
+                                                                        <Check className="w-3 h-3 text-primary" />
                                                                     </div>
-                                                                    <p className="text-xs font-mono text-zinc-300 mt-0.5">{item.range}</p>
-                                                                    <div className="flex items-center gap-1 mt-1">
-                                                                        <span className="text-[10px] text-zinc-500">Void refund</span>
-                                                                        <span className="text-[11px] font-mono font-semibold text-amber-400 ml-1">+${item.payout.toFixed(2)}</span>
+                                                                )}
+                                                                <div className="px-3 py-[11px]">
+                                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                                        <span className="font-mono text-[10px] text-muted-foreground">{item.windowLabel}</span>
+                                                                        {item.timeAgo && <span className="text-[10px] text-primary/55">· Oracle failure</span>}
                                                                     </div>
-                                                                </div>
-                                                                <div className="shrink-0 ml-2">
-                                                                    {isClaimed ? (
-                                                                        <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center">
-                                                                            <Check className="w-3.5 h-3.5 text-amber-400" />
+                                                                    <p className="font-mono text-[13px] font-semibold text-muted-foreground mb-2">{item.range}</p>
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                                            <span className="text-[11px] text-muted-foreground/60">Stake refund</span>
+                                                                            <span className="text-[10px] text-muted-foreground/40">→</span>
+                                                                            <span className="font-mono text-[15px] font-bold text-primary">+${item.payout.toFixed(2)}</span>
                                                                         </div>
-                                                                    ) : isClaiming ? (
-                                                                        <div className="w-7 h-7 flex items-center justify-center">
-                                                                            <div className="w-4 h-4 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin" />
-                                                                        </div>
-                                                                    ) : (
-                                                                        <button
-                                                                            onClick={() => handleClaim(item.id)}
-                                                                            className="px-2.5 py-1 text-[11px] font-semibold rounded border border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/25 transition-colors"
-                                                                        >
-                                                                            Refund
-                                                                        </button>
-                                                                    )}
+                                                                        {!isClaimed && (
+                                                                            isClaiming ? (
+                                                                                <button disabled className="h-7 px-3 rounded border border-primary/30 bg-primary/8 text-[11px] font-bold text-primary flex items-center gap-1.5 opacity-65 cursor-not-allowed shrink-0">
+                                                                                    <div className="w-3 h-3 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                                                                                    <span>···</span>
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleClaim(item.id)}
+                                                                                    className="h-7 px-3 rounded border border-primary/30 bg-primary/8 text-[11px] font-bold text-primary hover:bg-primary/20 transition-colors shrink-0"
+                                                                                >
+                                                                                    Refund
+                                                                                </button>
+                                                                            )
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        </div>
-                                                    )
-                                                })}
+                                                        )
+                                                    })}
+                                                </div>
                                             </>
                                         )}
                                     </>
@@ -859,15 +880,17 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                             </div>
 
                             {/* Footer: Claim All */}
-                            <div className="p-3 border-t border-zinc-800 shrink-0">
+                            <div className="p-3 border-t border-border shrink-0">
                                 <button
                                     onClick={handleClaimAll}
                                     disabled={unclaimedCount === 0}
-                                    className="w-full h-10 rounded-lg font-mono font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed bg-trade-up text-black hover:opacity-90"
+                                    className="w-full h-11 rounded-lg font-mono font-bold text-[13px] tracking-wide transition-opacity flex items-center justify-center gap-2"
+                                    style={unclaimedCount > 0
+                                        ? { background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)', color: '#fff', boxShadow: '0 4px 20px rgba(22,163,74,0.22)' }
+                                        : { background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', border: '1px solid hsl(var(--border))', cursor: 'not-allowed' }
+                                    }
                                 >
-                                    {unclaimedCount > 0
-                                        ? `Claim All · +$${unclaimedTotal.toFixed(2)}`
-                                        : 'Claim All'}
+                                    {unclaimedCount > 0 ? `⬡ Claim All · +$${unclaimedTotal.toFixed(2)}` : 'Nothing to claim'}
                                 </button>
                             </div>
                         </div>
