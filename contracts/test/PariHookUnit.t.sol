@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {console} from "forge-std/console.sol";
 
 import {PariHook} from "../src/PariHook.sol";
+import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -23,6 +24,7 @@ contract PariHookUnitTest is Test {
 
     address public admin = makeAddr("admin");
     address public treasury = makeAddr("treasury");
+    address public relayer = makeAddr("relayer");
     address public alice = makeAddr("alice");
     address public usdcToken = makeAddr("usdc");
 
@@ -33,20 +35,15 @@ contract PariHookUnitTest is Test {
     uint256 public constant MAX_STAKE_PER_CELL = 100_000_000_000;
     uint256 public constant FEE_BPS = 200;
     uint256 public constant MIN_POOL_THRESHOLD = 1_000_000;
+    // Grid epoch: a clean future boundary (next midnight from an arbitrary base timestamp)
+    uint256 public constant GRID_EPOCH = 1_800_000_000; // 2027-01-15 06:40:00 UTC
 
     function setUp() public {
         // Deploy mock PoolManager
         poolManager = IPoolManager(makeAddr("poolManager"));
 
-        // Deploy PariHook as admin
-        vm.prank(admin);
-        hook = new PariHook(poolManager);
-
-        // Grant roles
-        vm.startPrank(admin);
-        hook.grantRole(hook.ADMIN_ROLE(), admin);
-        hook.grantRole(hook.TREASURY_ROLE(), treasury);
-        vm.stopPrank();
+        // Deploy PariHook — constructor sets all roles; deployer gets DEFAULT_ADMIN_ROLE
+        hook = new PariHook(poolManager, admin, treasury, relayer);
     }
 
     function _createTestPoolKey() internal view returns (PoolKey memory) {
@@ -72,10 +69,32 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 
-        // Success - no revert means configuration was stored
+        // Verify all stored values
+        PoolId poolId = poolKey.toId();
+        (
+            bytes32 pythPriceFeedId,
+            uint256 bandWidth,
+            uint256 windowDuration,
+            uint256 frozenWindows,
+            uint256 maxStakePerCell,
+            uint256 feeBps,
+            uint256 gridEpoch,
+            address usdc,
+            uint256 minPoolThreshold
+        ) = hook.gridConfigs(poolId);
+        assertEq(pythPriceFeedId, ETH_USD_FEED_ID);
+        assertEq(bandWidth, BAND_WIDTH);
+        assertEq(windowDuration, WINDOW_DURATION);
+        assertEq(frozenWindows, FROZEN_WINDOWS);
+        assertEq(maxStakePerCell, MAX_STAKE_PER_CELL);
+        assertEq(feeBps, FEE_BPS);
+        assertEq(gridEpoch, GRID_EPOCH, "gridEpoch must match admin-supplied value, not block.timestamp");
+        assertEq(usdc, usdcToken);
+        assertEq(minPoolThreshold, MIN_POOL_THRESHOLD);
     }
 
     function test_ConfigureGrid_RevertWhen_NotAdmin() public {
@@ -92,6 +111,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -110,6 +130,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -128,6 +149,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -146,6 +168,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -164,6 +187,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -182,6 +206,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             1001, // Invalid: > 10%
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -200,6 +225,7 @@ contract PariHookUnitTest is Test {
             0, // Invalid
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -218,6 +244,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             0, // Invalid
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -236,6 +263,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(0) // Invalid
         );
     }
@@ -254,6 +282,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
     }
@@ -273,6 +302,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 
@@ -287,6 +317,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 
@@ -308,38 +339,57 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 
-        // Mock PoolManager calling beforeInitialize
-        vm.prank(address(poolManager));
-
-        uint256 expectedEpoch = block.timestamp;
-
         vm.expectEmit(true, false, false, true);
-        emit PariHook.PoolInitialized(
+        emit PariHook.GridInitialized(
             poolId,
             ETH_USD_FEED_ID,
             BAND_WIDTH,
             WINDOW_DURATION,
             FROZEN_WINDOWS,
-            expectedEpoch,
+            GRID_EPOCH, // epoch is the admin-supplied constant, not block.timestamp
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD
         );
 
-        bytes4 selector = hook.beforeInitialize(address(this), poolKey, 1 << 96);
-        assertEq(selector, hook.beforeInitialize.selector, "Should return correct selector");
+        vm.prank(address(poolManager));
+        bytes4 selector = hook.beforeInitialize(address(0), poolKey, 0);
+        assertEq(selector, IHooks.beforeInitialize.selector, "Should return correct selector");
     }
 
     function test_BeforeInitialize_RevertWhen_GridNotConfigured() public {
         PoolKey memory poolKey = _createTestPoolKey();
 
-        // Attempt to initialize without configuring
         vm.prank(address(poolManager));
-        vm.expectRevert("Grid config not set");
-        hook.beforeInitialize(address(this), poolKey, 1 << 96);
+        vm.expectRevert("Grid not configured");
+        hook.beforeInitialize(address(0), poolKey, 0);
+    }
+
+    function test_BeforeInitialize_RevertWhen_CallerNotPoolManager() public {
+        PoolKey memory poolKey = _createTestPoolKey();
+
+        vm.prank(admin);
+        hook.configureGrid(
+            poolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
+            usdcToken
+        );
+
+        // Alice calls beforeInitialize directly — must revert
+        vm.prank(alice);
+        vm.expectRevert("Only PoolManager");
+        hook.beforeInitialize(address(0), poolKey, 0);
     }
 
     function test_ConfigureGrid_FeeAt10Percent() public {
@@ -356,6 +406,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             1000, // Exactly 10%
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 
@@ -376,6 +427,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 
@@ -396,6 +448,7 @@ contract PariHookUnitTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             usdcToken
         );
 

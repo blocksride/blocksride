@@ -8,3 +8,6 @@ lib/
 
 # Dotenv file
 .env
+
+# Foundry dependencies
+lib/

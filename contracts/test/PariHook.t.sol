@@ -53,6 +53,7 @@ contract PariHookTest is Test {
     uint256 public constant MAX_STAKE_PER_CELL = 100_000_000_000; // $100,000
     uint256 public constant FEE_BPS = 200; // 2%
     uint256 public constant MIN_POOL_THRESHOLD = 1_000_000; // $1.00
+    uint256 public constant GRID_EPOCH = 1_800_000_000; // 2027-01-15 06:40:00 UTC
 
     // =============================================================
     //                      TEST STATE
@@ -70,16 +71,8 @@ contract PariHookTest is Test {
         // Deploy mock PoolManager (using makeAddr for now - will deploy actual mock later)
         poolManager = IPoolManager(makeAddr("poolManager"));
 
-        // Deploy PariHook with admin as deployer
-        vm.prank(admin);
-        hook = new PariHook(poolManager);
-
-        // Grant roles
-        vm.startPrank(admin);
-        hook.grantRole(hook.ADMIN_ROLE(), admin);
-        hook.grantRole(hook.TREASURY_ROLE(), treasury);
-        hook.grantRole(hook.RELAYER_ROLE(), relayer);
-        vm.stopPrank();
+        // Deploy PariHook — constructor sets all roles; deployer gets DEFAULT_ADMIN_ROLE
+        hook = new PariHook(poolManager, admin, treasury, relayer);
 
         // Create test pool key
         // Note: In production, hooks address must have specific bit pattern
@@ -95,6 +88,7 @@ contract PariHookTest is Test {
 
         // Mock USDC token (will implement actual ERC20 mock later)
         usdc = IERC20(makeAddr("usdc"));
+        gridEpoch = GRID_EPOCH;
 
         // Note: USDC minting and approvals will be added when we implement betting logic
     }
@@ -127,6 +121,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
     }
@@ -143,6 +138,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
     }
@@ -159,6 +155,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
     }
@@ -175,6 +172,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             1001, // Invalid: feeBps > 1000 (10%)
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
     }
@@ -191,6 +189,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
     }
@@ -207,6 +206,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
 
@@ -221,6 +221,7 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
         vm.stopPrank();
@@ -238,19 +239,20 @@ contract PariHookTest is Test {
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD,
+            GRID_EPOCH,
             address(usdc)
         );
 
         // Mock the PoolManager calling beforeInitialize
         vm.prank(address(poolManager));
         vm.expectEmit(true, false, false, true);
-        emit PariHook.PoolInitialized(
+        emit PariHook.GridInitialized(
             testPoolId,
             ETH_USD_FEED_ID,
             BAND_WIDTH,
             WINDOW_DURATION,
             FROZEN_WINDOWS,
-            block.timestamp, // gridEpoch set to current timestamp
+            GRID_EPOCH, // epoch is the admin-supplied constant
             MAX_STAKE_PER_CELL,
             FEE_BPS,
             MIN_POOL_THRESHOLD
@@ -263,7 +265,7 @@ contract PariHookTest is Test {
     function test_BeforeInitialize_RevertWhen_GridNotConfigured() public {
         // Attempt to initialize without configuring grid first
         vm.prank(address(poolManager));
-        vm.expectRevert("Grid config not set");
+        vm.expectRevert("Grid not configured");
         hook.beforeInitialize(address(this), testPoolKey, 1 << 96);
     }
 
