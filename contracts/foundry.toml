@@ -1,0 +1,25 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.26"
+optimizer = true
+optimizer_runs = 1000000
+via_ir = false
+evm_version = "cancun"
+
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "@uniswap/v4-core/=lib/v4-core/",
+    "@uniswap/v4-periphery/=lib/v4-periphery/",
+    "forge-std/=lib/forge-std/src/"
+]
+
+# Note: Pyth SDK will be added later during implementation
+
+# CI profile for stricter testing
+[profile.ci]
+verbosity = 4
+fuzz = { runs = 10000 }
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
