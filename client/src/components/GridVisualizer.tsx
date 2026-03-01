@@ -30,6 +30,7 @@ import {
 
 import { useGridSocket } from '../hooks/useGridSocket'
 import { useBetQuote } from '../hooks/useBetQuote'
+import { usePoolMultipliers } from '../hooks/usePoolMultipliers'
 import { useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
@@ -287,6 +288,17 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     useEffect(() => {
         betService.getPools().then(setPools).catch(() => {})
     }, [])
+
+    const activePool = useMemo(
+        () => pools.find(p => p.assetId === selectedAsset) ?? null,
+        [pools, selectedAsset],
+    )
+    const multipliers = usePoolMultipliers(
+        activePool,
+        grid,
+        viewport.visibleMinPrice,
+        viewport.visibleMaxPrice,
+    )
     const practiceBalance = user?.practice_balance ?? 1000
     const platformBalance = user?.balance ?? 0
     const userBalance = isPracticeMode ? practiceBalance : platformBalance
@@ -856,6 +868,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                             betResults={betResults}
                                             cellStakes={cellStakes}
                                             cellPrices={cellPrices}
+                                            multipliers={multipliers}
                                             recentCellIds={recentCells}
                                         contestEndTime={timeBoundary?.end}
                                     />

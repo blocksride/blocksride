@@ -16,6 +16,8 @@ interface GridCellsProps {
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap
+    /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
+    multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
     frozenWindows?: number
     activeCellId?: number
@@ -37,6 +39,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
     betResults,
     cellStakes,
     cellPrices,
+    multipliers,
     recentCellIds,
     frozenWindows = 2,
     activeCellId,
@@ -355,12 +358,13 @@ export const GridCells: React.FC<GridCellsProps> = ({
                 const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
                 const touchPadding = isMobile ? 4 : 0
 
-                // Get cell price info for playable cells
-                const cellPrice = cellPrices?.[stateKey]
+                // On-chain multiplier takes priority; fall back to off-chain probability
+                const onChainMultiplier = multipliers?.[slot.id]
+                const cellPrice = onChainMultiplier == null ? cellPrices?.[stateKey] : undefined
                 const probability = cellPrice?.probability
-                // Add bounds: min probability 0.1% to avoid Infinity, max multiplier 100x
-                const multiplier = probability && probability > 0.001 ? Math.min(1 / probability, 100) : null
-                const showPricing = isPlayable && probability && multiplier && rectW > 30 && rectH > 24
+                const legacyMultiplier = probability && probability > 0.001 ? Math.min(1 / probability, 100) : null
+                const multiplier = onChainMultiplier ?? legacyMultiplier
+                const showPricing = isPlayable && multiplier != null && rectW > 30 && rectH > 24
 
                 return (
                     <g key={slot.id}>
@@ -398,26 +402,28 @@ export const GridCells: React.FC<GridCellsProps> = ({
                                 className="animate-live-pulse pointer-events-none"
                             />
                         )}
-                        {/* Show probability and multiplier for playable cells */}
+                        {/* Show multiplier for playable cells; show probability % only for legacy off-chain data */}
                         {showPricing && (
                             <>
+                                {!onChainMultiplier && probability != null && (
+                                    <text
+                                        x={rectX + rectW / 2}
+                                        y={rectY + rectH / 2 - 6}
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        className="text-[9px] font-mono fill-primary/80 pointer-events-none select-none"
+                                    >
+                                        {(probability * 100).toFixed(0)}%
+                                    </text>
+                                )}
                                 <text
                                     x={rectX + rectW / 2}
-                                    y={rectY + rectH / 2 - 6}
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                    className="text-[9px] font-mono fill-primary/80 pointer-events-none select-none"
-                                >
-                                    {(probability * 100).toFixed(0)}%
-                                </text>
-                                <text
-                                    x={rectX + rectW / 2}
-                                    y={rectY + rectH / 2 + 6}
+                                    y={!onChainMultiplier && probability != null ? rectY + rectH / 2 + 6 : rectY + rectH / 2}
                                     textAnchor="middle"
                                     dominantBaseline="middle"
                                     className="text-[10px] font-mono font-bold fill-trade-up pointer-events-none select-none"
                                 >
-                                    {multiplier.toFixed(1)}x
+                                    {multiplier!.toFixed(1)}x
                                 </text>
                             </>
                         )}

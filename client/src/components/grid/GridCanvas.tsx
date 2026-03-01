@@ -28,6 +28,8 @@ interface GridCanvasProps {
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap
+    /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
+    multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
     contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
 }
@@ -48,6 +50,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     betResults,
     cellStakes,
     cellPrices,
+    multipliers,
     recentCellIds,
     contestEndTime,
 }) => {
@@ -221,6 +224,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 betResults={betResults}
                 cellStakes={cellStakes}
                 cellPrices={cellPrices}
+                multipliers={multipliers}
                 recentCellIds={recentCellIds}
                 activeCellId={activeCellId}
                 getX={getX}
@@ -334,6 +338,7 @@ export const GridCanvas = React.memo(GridCanvasInner, (prevProps, nextProps) => 
         prevProps.betResults !== nextProps.betResults ||
         prevProps.cellStakes !== nextProps.cellStakes ||
         prevProps.cellPrices !== nextProps.cellPrices ||
+        prevProps.multipliers !== nextProps.multipliers ||
         prevProps.contestEndTime !== nextProps.contestEndTime
     ) {
         return false
