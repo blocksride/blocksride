@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Grid, Cell, Position } from '@/types/grid'
-import { useAuth } from '@/contexts/AuthContext'
 import { usePublicPriceFeed } from '@/hooks/usePublicPriceFeed'
 import { useGridViewport } from '@/hooks/useGridViewport'
 import { GridCanvas } from '@/components/grid/GridCanvas'
@@ -15,12 +15,12 @@ interface GuestTerminalProps {
 }
 
 const ASSET_META: Record<string, { defaultPrice: number; priceInterval: number }> = {
-    'ETH-USD': { defaultPrice: 3000, priceInterval: 1 },
-    'BTC-USD': { defaultPrice: 50000, priceInterval: 1 },
+    'ETH-USD': { defaultPrice: 3000, priceInterval: 2 },
+    'BTC-USD': { defaultPrice: 50000, priceInterval: 2 },
 }
 
 export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
-    const { signIn } = useAuth()
+    const navigate = useNavigate()
     const assetMeta = ASSET_META[assetId] || ASSET_META['ETH-USD']
     const { prices, currentPrice } = usePublicPriceFeed(assetId)
 
@@ -118,8 +118,8 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
     }, [])
 
     const promptConnect = useCallback(() => {
-        signIn()
-    }, [signIn])
+        navigate('/', { state: { autoSignIn: true } })
+    }, [navigate])
 
     const handleCellClick = useCallback(() => {
         promptConnect()
@@ -272,7 +272,7 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
                             className="mt-3"
                             onClick={(event) => {
                                 event.stopPropagation()
-                                signIn()
+                                navigate('/', { state: { autoSignIn: true } })
                             }}
                         >
                             Connect to trade
