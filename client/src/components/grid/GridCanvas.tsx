@@ -92,7 +92,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     const priceSteps = useMemo(() => {
         if (!grid) return []
         const steps: number[] = []
-        const priceInterval = grid.price_interval || 1
+        const priceInterval = grid.price_interval || 2
         const anchorPrice = grid.anchor_price
 
         const startBand = Math.floor(
