@@ -57,7 +57,8 @@ contract SettlementTest is Test {
     address public keeper = makeAddr("keeper");
 
     // Grid config constants
-    bytes32 public constant PRICE_FEED_ID = bytes32(uint256(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace)); // ETH/USD
+    bytes32 public constant PRICE_FEED_ID =
+        bytes32(uint256(0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace)); // ETH/USD
     uint256 public constant BAND_WIDTH = 2_000_000; // $2.00
     uint256 public constant WINDOW_DURATION = 60; // 60 seconds
     uint256 public constant FROZEN_WINDOWS = 3;
@@ -239,7 +240,7 @@ contract SettlementTest is Test {
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
 
         // Verify redemption rate: ($50 - $1 fee) / $50 stakes = 0.98x
-        (,, , , uint256 redemptionRate) = hook.getWindow(testKey, windowId);
+        (,,,, uint256 redemptionRate) = hook.getWindow(testKey, windowId);
         uint256 expectedRate = (50_000_000 - 1_000_000) * 1e18 / 50_000_000;
         assertEq(redemptionRate, expectedRate, "Redemption rate should be 0.98x");
     }
@@ -275,12 +276,12 @@ contract SettlementTest is Test {
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
 
         // Verify source window is settled
-        (, bool settled, bool voided, ,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
         assertTrue(settled, "Source window should be settled");
         assertFalse(voided, "Source window should not be voided");
 
         // Verify next window has backstop
-        (uint256 nextTotalPool, , , ,) = hook.getWindow(testKey, windowId + 1);
+        (uint256 nextTotalPool,,,,) = hook.getWindow(testKey, windowId + 1);
         assertEq(nextTotalPool, 30_000_000, "Next window should have rolled over pool");
 
         // Verify no fees collected on rollover
@@ -309,7 +310,7 @@ contract SettlementTest is Test {
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
 
         // Verify window is voided
-        (, bool settled, bool voided, ,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
         assertFalse(settled, "Window should not be marked as settled");
         assertTrue(voided, "Window should be voided");
     }
@@ -332,7 +333,7 @@ contract SettlementTest is Test {
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
 
-        (, , bool voided, ,) = hook.getWindow(testKey, windowId);
+        (,, bool voided,,) = hook.getWindow(testKey, windowId);
         assertTrue(voided, "Window should be auto-voided");
     }
 
@@ -349,7 +350,7 @@ contract SettlementTest is Test {
         vm.prank(admin);
         hook.voidWindow(testKey, windowId);
 
-        (, bool settled, bool voided, ,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
         assertFalse(settled, "Window should not be settled");
         assertTrue(voided, "Window should be voided");
     }
@@ -394,7 +395,9 @@ contract SettlementTest is Test {
 
         pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
 
-        uint256 converted = hook._parsePythPrice{value: 0.01 ether}("", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10));
+        uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
+            "", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+        );
 
         // Expected: 30 * 10^(2+6) = 30 * 10^8 = 3_000_000_000
         assertEq(converted, 3_000_000_000, "Positive exponent conversion failed");
@@ -408,7 +411,9 @@ contract SettlementTest is Test {
 
         pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
 
-        uint256 converted = hook._parsePythPrice{value: 0.01 ether}("", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10));
+        uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
+            "", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+        );
 
         // Expected: 300000000000 * 10^(-8+6) = 300000000000 * 10^-2 = 3_000_000_000
         assertEq(converted, 3_000_000_000, "Negative exponent conversion failed");
@@ -420,7 +425,9 @@ contract SettlementTest is Test {
 
         pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
 
-        uint256 converted = hook._parsePythPrice{value: 0.01 ether}("", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10));
+        uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
+            "", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+        );
 
         // Expected: 3000 * 10^(0+6) = 3000 * 10^6 = 3_000_000_000
         assertEq(converted, 3_000_000_000, "Zero exponent conversion failed");
@@ -484,7 +491,7 @@ contract MockPythOracle is IPyth {
     struct MockPrice {
         int64 price;
         int32 expo;
-        uint publishTime;
+        uint256 publishTime;
     }
 
     mapping(bytes32 => MockPrice) public prices;
@@ -517,34 +524,42 @@ contract MockPythOracle is IPyth {
     }
 
     // Stub implementations for unused IPyth methods
-    function getValidTimePeriod() external pure override returns (uint) {
+    function getValidTimePeriod() external pure override returns (uint256) {
         return 60;
     }
+
     function getPrice(bytes32) external pure override returns (PythStructs.Price memory) {
         revert("Not implemented");
     }
+
     function getEmaPrice(bytes32) external pure override returns (PythStructs.Price memory) {
         revert("Not implemented");
     }
+
     function getPriceUnsafe(bytes32) external pure override returns (PythStructs.Price memory) {
         revert("Not implemented");
     }
-    function getPriceNoOlderThan(bytes32, uint) external pure override returns (PythStructs.Price memory) {
+
+    function getPriceNoOlderThan(bytes32, uint256) external pure override returns (PythStructs.Price memory) {
         revert("Not implemented");
     }
+
     function getEmaPriceUnsafe(bytes32) external pure override returns (PythStructs.Price memory) {
         revert("Not implemented");
     }
-    function getEmaPriceNoOlderThan(bytes32, uint) external pure override returns (PythStructs.Price memory) {
+
+    function getEmaPriceNoOlderThan(bytes32, uint256) external pure override returns (PythStructs.Price memory) {
         revert("Not implemented");
     }
+
     function updatePriceFeeds(bytes[] calldata) external payable override {}
     function updatePriceFeedsIfNecessary(bytes[] calldata, bytes32[] calldata, uint64[] calldata)
         external
         payable
         override
     {}
-    function getUpdateFee(bytes[] calldata) external pure override returns (uint) {
+
+    function getUpdateFee(bytes[] calldata) external pure override returns (uint256) {
         return 0.01 ether;
     }
 }
