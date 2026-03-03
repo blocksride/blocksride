@@ -73,7 +73,7 @@ contract DeployPariHook is Script {
             IPyth(PYTH_ORACLE),
             deployer, // ADMIN_ROLE
             deployer, // TREASURY_ROLE
-            RELAYER   // RELAYER_ROLE
+            RELAYER // RELAYER_ROLE
         );
 
         console.log("PariHook deployed at:", address(pariHook));
