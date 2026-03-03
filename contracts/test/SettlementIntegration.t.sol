@@ -71,6 +71,7 @@ contract SettlementIntegrationTest is Test {
     address public relayer = makeAddr("relayer");
     address public user1 = makeAddr("user1");
     address public keeper = makeAddr("keeper");
+    bool internal forkReady;
 
     // Grid config
     uint256 public constant BAND_WIDTH = 2_000_000; // $2.00
@@ -81,10 +82,29 @@ contract SettlementIntegrationTest is Test {
     uint256 public constant MIN_POOL_THRESHOLD = 1_000_000; // $1.00
     uint256 public constant GRID_EPOCH = 1_800_000_000; // 2027-01-15 06:40:00 UTC
 
+    modifier onlyFork() {
+        if (!forkReady) {
+            vm.skip(true);
+        }
+        _;
+    }
+
     function setUp() public {
-        // Skip if not on fork (requires --fork-url)
+        // Skip entire test suite if not running on a fork
+        // Check if there's code at the Pyth oracle address
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729)
+        }
+        if (codeSize == 0) {
+            // No code at Pyth address = not on fork, skip all tests
+            vm.skip(true);
+            return;
+        }
+
+        // Additional check: try to call Pyth oracle
         try PYTH_ORACLE.getValidTimePeriod() returns (uint256) {
-            // Fork is active, continue
+            forkReady = true;
         } catch {
             vm.skip(true);
             return;
@@ -139,7 +159,7 @@ contract SettlementIntegrationTest is Test {
     //                  REAL PYTH PRICE TESTS
     // =============================================================
 
-    function test_FetchRealPythPrice_CurrentETHPrice() public {
+    function test_FetchRealPythPrice_CurrentETHPrice() public onlyFork {
         console.log("\n=== Fetching REAL ETH/USD price from Pyth Network ===");
 
         // Get current price from Pyth (no update needed for latest price)
@@ -173,7 +193,7 @@ contract SettlementIntegrationTest is Test {
         console.log("\nPyth price fetch successful!");
     }
 
-    function test_FetchRealPythPrice_WithUpdateFee() public {
+    function test_FetchRealPythPrice_WithUpdateFee() public onlyFork {
         console.log("\n=== Testing Pyth Update Fee ===");
 
         // Query update fee for parsing price updates
@@ -188,7 +208,7 @@ contract SettlementIntegrationTest is Test {
         assertLt(updateFee, 0.1 ether, "Update fee should be < 0.1 ETH");
     }
 
-    function test_PriceConversion_RealPythData() public {
+    function test_PriceConversion_RealPythData() public onlyFork {
         console.log("\n=== Testing Price Conversion with Real Pyth Data ===");
 
         // Get current Pyth price
@@ -219,7 +239,7 @@ contract SettlementIntegrationTest is Test {
         assertLt(convertedPrice, 10000_000_000, "Converted price should be < $10000");
     }
 
-    function test_SettlementWithRealPythPrice() public {
+    function test_SettlementWithRealPythPrice() public onlyFork {
         console.log("\n=== Testing Settlement with Real Pyth Price ===");
 
         // Get current price to know which cell to bet on
