@@ -24,13 +24,51 @@ import {
     History,
     Activity,
     DollarSign,
+    Check,
+    X,
 } from 'lucide-react'
 
 import { useGridSocket } from '../hooks/useGridSocket'
 import { useBetQuote } from '../hooks/useBetQuote'
+import { usePoolMultipliers } from '../hooks/usePoolMultipliers'
+import { useWallets } from '@privy-io/react-auth'
+import { createWalletClient, custom } from 'viem'
+import { activeChain, expectedChainId } from '@/providers/Web3Provider'
+import { betService, type Pool } from '../services/betService'
 
 const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
 const SIDEBAR_COLLAPSED_KEY = 'blocksride_sidebar_collapsed'
+
+// Decode composite "windowId_cellId" key into "$pLow – $pHigh" range string
+function formatCellRange(cellId: string, priceInterval: number): string {
+    const parts = cellId.split('_')
+    if (parts.length === 2) {
+        const bandCellId = parseInt(parts[1], 10)
+        if (!isNaN(bandCellId)) {
+            const pLow = bandCellId * priceInterval
+            const pHigh = (bandCellId + 1) * priceInterval
+            return `$${pLow.toLocaleString()} – $${pHigh.toLocaleString()}`
+        }
+    }
+    return cellId
+}
+
+function formatTimeAgo(dateStr: string | undefined): string {
+    if (!dateStr) return ''
+    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000)
+    if (mins < 1) return 'just now'
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+}
+
+function getWindowLabel(cellId: string, windowIndex?: number): string {
+    if (windowIndex !== undefined) return `Wnd #${windowIndex}`
+    const parts = cellId.split('_')
+    if (parts.length === 2 && !isNaN(parseInt(parts[0], 10))) return `Wnd #${parts[0]}`
+    return ''
+}
 
 interface GridVisualizerProps {
     assetId?: string
@@ -49,6 +87,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const [recentCells, setRecentCells] = useState<Record<string, boolean>>({})
     const recentTimersRef = useRef<Record<string, number>>({})
     const [claimsOpen, setClaimsOpen] = useState(false)
+    const [claimedIds, setClaimedIds] = useState<Set<string>>(new Set())
+    const [claimingIds, setClaimingIds] = useState<Set<string>>(new Set())
     const [currentTime, setCurrentTime] = useState(new Date())
 
     // Sidebar collapse (desktop)
@@ -68,7 +108,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
     // Bet confirmation dialog state
     const [showBetConfirmation, setShowBetConfirmation] = useState(false)
-    const [pendingBetCellId, setPendingBetCellId] = useState<string | null>(null)
+    const [pendingBetCellId, setPendingBetCellId] = useState<[number, number] | null>(null)
     const [pendingBetInfo, setPendingBetInfo] = useState<{
         priceRange: string
         timeWindow: string
@@ -238,32 +278,175 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [])
 
     const { user, refreshUser, authenticated } = useAuth()
+    const { wallets } = useWallets()
+    const walletsRef = useRef(wallets)
+    walletsRef.current = wallets
+
+    const [pools, setPools] = useState<Pool[]>([])
+    const poolsRef = useRef<Pool[]>([])
+    poolsRef.current = pools
+    useEffect(() => {
+        betService.getPools().then(setPools).catch(() => {})
+    }, [])
+
+    const activePool = useMemo(
+        () => pools.find(p => p.assetId === selectedAsset) ?? null,
+        [pools, selectedAsset],
+    )
+    const multipliers = usePoolMultipliers(
+        activePool,
+        grid,
+        viewport.visibleMinPrice,
+        viewport.visibleMaxPrice,
+    )
     const practiceBalance = user?.practice_balance ?? 1000
     const platformBalance = user?.balance ?? 0
     const userBalance = isPracticeMode ? practiceBalance : platformBalance
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
     const claimItems = useMemo(() => {
+        const bw = grid?.price_interval || 2
         return positions
-            .filter((p) => (p.payout ?? 0) > 0 && (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED'))
+            .filter((p) =>
+                (p.payout ?? 0) > 0 &&
+                (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED')
+            )
             .map((p) => {
                 const cell = cells.find((c) => c.cell_id === p.cell_id)
                 const range = cell
                     ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
-                    : p.cell_id
-                return {
-                    id: p.position_id,
-                    range,
-                    payout: p.payout ?? 0,
-                }
+                    : formatCellRange(p.cell_id, bw)
+                const payout = p.payout ?? 0
+                const stake = p.stake
+                const multiplier = stake > 0 ? payout / stake : null
+                const windowLabel = getWindowLabel(p.cell_id)
+                const timeAgo = formatTimeAgo(p.resolved_at || p.created_at)
+                return { id: p.position_id, range, payout, stake, multiplier, windowLabel, timeAgo }
             })
-    }, [positions, betResults, cells])
+    }, [positions, betResults, cells, grid])
+
+    const voidItems = useMemo(() => {
+        const bw = grid?.price_interval || 2
+        return positions
+            .filter((p) => p.state === 'VOIDED')
+            .map((p) => {
+                const cell = cells.find((c) => c.cell_id === p.cell_id)
+                const range = cell
+                    ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
+                    : formatCellRange(p.cell_id, bw)
+                const windowLabel = getWindowLabel(p.cell_id)
+                const timeAgo = formatTimeAgo(p.created_at)
+                return { id: p.position_id, range, payout: p.stake, stake: p.stake, windowLabel, timeAgo }
+            })
+    }, [positions, cells, grid])
+
+    const unclaimedWins = useMemo(() => claimItems.filter(c => !claimedIds.has(c.id)), [claimItems, claimedIds])
+    const unclaimedVoids = useMemo(() => voidItems.filter(v => !claimedIds.has(v.id)), [voidItems, claimedIds])
+    const unclaimedCount = unclaimedWins.length + unclaimedVoids.length
+    const unclaimedTotal = useMemo(
+        () => unclaimedWins.reduce((s, c) => s + c.payout, 0) + unclaimedVoids.reduce((s, v) => s + v.payout, 0),
+        [unclaimedWins, unclaimedVoids]
+    )
+
+    // Derive on-chain windowIds from a set of positionIds.
+    // Parses composite "${windowId}_${cellId}" keys; falls back to DB cell window_index.
+    const getWindowIds = useCallback((positionIds: string[]): number[] => {
+        const windowIds = new Set<number>()
+        for (const positionId of positionIds) {
+            const position = positions.find(p => p.position_id === positionId)
+            if (!position) continue
+            const parts = position.cell_id.split('_')
+            if (parts.length >= 2) {
+                const wid = parseInt(parts[0], 10)
+                if (!isNaN(wid)) { windowIds.add(wid); continue }
+            }
+            const cell = cells.find(c => c.cell_id === position.cell_id)
+            if (cell?.window_index !== undefined) windowIds.add(cell.window_index)
+        }
+        return [...windowIds]
+    }, [positions, cells])
+
+    const executeClaim = useCallback(async (positionIds: string[]) => {
+        if (positionIds.length === 0) return
+
+        setClaimingIds(prev => { const s = new Set(prev); positionIds.forEach(id => s.add(id)); return s })
+
+        try {
+            if (isPracticeMode) {
+                // Practice wins are pushed by the backend — just mark as claimed locally
+                await new Promise(r => setTimeout(r, 500))
+                setClaimedIds(prev => new Set([...prev, ...positionIds]))
+                refreshUser()
+                return
+            }
+
+            const pool = poolsRef.current.find(p => p.assetId === selectedAsset)
+            if (!pool) {
+                toast.error('Chain not configured', { description: 'No pool found for this asset.' })
+                return
+            }
+
+            const windowIds = getWindowIds(positionIds)
+            if (windowIds.length === 0) {
+                toast.error('Cannot determine window IDs for claim')
+                return
+            }
+
+            const activeWallet =
+                walletsRef.current.find(w => w.walletClientType === 'privy') ??
+                walletsRef.current[0]
+            if (!activeWallet) {
+                toast.error('No wallet connected')
+                return
+            }
+
+            const provider = await activeWallet.getEthereumProvider()
+            const walletClient = createWalletClient({
+                account:   activeWallet.address as `0x${string}`,
+                chain:     activeChain,
+                transport: custom(provider),
+            })
+
+            await betService.signAndSubmitClaim(
+                walletClient,
+                activeWallet.address as `0x${string}`,
+                pool,
+                windowIds,
+                expectedChainId,
+            )
+
+            setClaimedIds(prev => new Set([...prev, ...positionIds]))
+            refreshUser()
+            toast.success('Claim submitted', { description: 'Your payout is on its way.', duration: 4000 })
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Unknown error'
+            toast.error('Claim failed', { description: msg, duration: 5000 })
+        } finally {
+            setClaimingIds(prev => {
+                const s = new Set(prev)
+                positionIds.forEach(id => s.delete(id))
+                return s
+            })
+        }
+    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds])
+
+    const handleClaim = useCallback((positionId: string) => {
+        executeClaim([positionId])
+    }, [executeClaim])
+
+    const handleClaimAll = useCallback(() => {
+        const allIds = [
+            ...unclaimedWins.map(c => c.id),
+            ...unclaimedVoids.map(v => v.id),
+        ]
+        executeClaim(allIds)
+    }, [unclaimedWins, unclaimedVoids, executeClaim])
 
     useEffect(() => {
         window.dispatchEvent(new CustomEvent('claims:update', {
-            detail: { count: claimItems.length },
+            detail: { count: unclaimedCount, totalAmount: unclaimedTotal },
         }))
-    }, [claimItems.length])
+    }, [unclaimedCount, unclaimedTotal])
 
     useEffect(() => {
         const handler = () => setClaimsOpen((prev) => !prev)
@@ -280,57 +463,110 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         })
     }, [])
 
-    const executeBet = useCallback(async (cellId: string, stake: number) => {
+    const executeBet = useCallback(async (cellId: number, windowId: number, stake: number) => {
+        const slotKey = `${windowId}_${cellId}`
         isPlacingBetRef.current = true
-        placedCellsRef.current.add(cellId)
-        addOptimisticCell(cellId)
-        markRecentCell(cellId)
+        placedCellsRef.current.add(slotKey)
+        addOptimisticCell(slotKey)
+        markRecentCell(slotKey)
         setPendingStake(prev => prev + stake)
         setIsBetLoading(true)
 
-        // Find cell for price label
-        const cell = cells.find(c => c.cell_id === cellId)
-        const priceLabel = cell
-            ? `$${cell.p_low.toLocaleString()} – $${cell.p_high.toLocaleString()}`
-            : undefined
+        const bw = grid?.price_interval || 2
+        const priceLabel = `$${(cellId * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })} – $${((cellId + 1) * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 
         try {
-            const response = await api.createPosition(cellId, selectedAsset, stake, isPracticeMode)
-            const position = response.data
+            if (isPracticeMode) {
+                // Practice mode — off-chain via legacy positions API
+                const legacyCell = cells.find(c => c.window_index === windowId && c.price_band_index === cellId)
+                const legacyCellId = legacyCell?.cell_id ?? slotKey
 
-            if (position.cell_id && position.cell_id !== cellId) {
-                updateCellId(cellId, position.cell_id)
-                placedCellsRef.current.delete(cellId)
-                placedCellsRef.current.add(position.cell_id)
+                const response = await api.createPosition(legacyCellId, selectedAsset, stake, true)
+                const position = response.data
+
+                if (position.cell_id && position.cell_id !== slotKey) {
+                    updateCellId(slotKey, position.cell_id)
+                    placedCellsRef.current.delete(slotKey)
+                    placedCellsRef.current.add(position.cell_id)
+                }
+
+                prevBetResultsRef.current = { ...betResultsRef.current }
+                hasPlacedBetRef.current = true
+                setPendingStake(prev => Math.max(0, prev - stake))
+                refreshUser()
+                window.dispatchEvent(new CustomEvent('position_updated'))
+                setShowBetConfirmation(false)
+                setPendingBetCellId(null)
+                setPendingBetInfo(null)
+                setQuoteCellId(null)
+
+                setUndoToast({
+                    amount: stake,
+                    priceLabel,
+                    undoFn: () => {
+                        removeOptimisticCell(position.cell_id || slotKey)
+                        placedCellsRef.current.delete(position.cell_id || slotKey)
+                        setPendingStake(prev => Math.max(0, prev - stake))
+                        refreshUser()
+                    },
+                })
+            } else {
+                // On-chain — sign EIP-712 BetIntent and schedule via relay
+                const pool = poolsRef.current.find(p => p.assetId === selectedAsset)
+                if (!pool) {
+                    toast.error('Chain not configured', { description: 'No pool found for this asset.' })
+                    throw new Error('no-pool')
+                }
+
+                const activeWallet =
+                    walletsRef.current.find(w => w.walletClientType === 'privy') ??
+                    walletsRef.current[0]
+                if (!activeWallet) throw new Error('no-wallet')
+
+                const provider = await activeWallet.getEthereumProvider()
+                const walletClient = createWalletClient({
+                    account:   activeWallet.address as `0x${string}`,
+                    chain:     activeChain,
+                    transport: custom(provider),
+                })
+
+                const amountUsdc = BigInt(Math.round(stake * 1_000_000))
+                const { intentId } = await betService.signAndScheduleBet(
+                    walletClient,
+                    activeWallet.address as `0x${string}`,
+                    pool,
+                    cellId,
+                    windowId,
+                    amountUsdc,
+                    expectedChainId,
+                )
+
+                prevBetResultsRef.current = { ...betResultsRef.current }
+                hasPlacedBetRef.current = true
+                setPendingStake(prev => Math.max(0, prev - stake))
+                setShowBetConfirmation(false)
+                setPendingBetCellId(null)
+                setPendingBetInfo(null)
+                setQuoteCellId(null)
+
+                setUndoToast({
+                    amount: stake,
+                    priceLabel,
+                    undoFn: () => {
+                        betService.cancelBet(intentId).catch(() => {})
+                        removeOptimisticCell(slotKey)
+                        placedCellsRef.current.delete(slotKey)
+                        setPendingStake(prev => Math.max(0, prev - stake))
+                    },
+                })
             }
-
-            prevBetResultsRef.current = { ...betResultsRef.current }
-            hasPlacedBetRef.current = true
-            setPendingStake(prev => Math.max(0, prev - stake))
-            refreshUser()
-            window.dispatchEvent(new CustomEvent('position_updated'))
-            setShowBetConfirmation(false)
-            setPendingBetCellId(null)
-            setPendingBetInfo(null)
-            setQuoteCellId(null)
-
-            // Show undo toast (3 second window)
-            setUndoToast({
-                amount: stake,
-                priceLabel,
-                undoFn: () => {
-                    // Optimistically roll back the visual state.
-                    // When relay API is wired: DELETE /api/relay/bet/:intentId goes here.
-                    removeOptimisticCell(position.cell_id || cellId)
-                    placedCellsRef.current.delete(position.cell_id || cellId)
-                    setPendingStake(prev => Math.max(0, prev - stake))
-                    refreshUser()
-                },
-            })
-        } catch {
-            toast.error('Failed to place bet')
-            removeOptimisticCell(cellId)
-            placedCellsRef.current.delete(cellId)
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : ''
+            if (msg !== 'no-pool' && msg !== 'no-wallet') {
+                toast.error('Failed to place bet')
+            }
+            removeOptimisticCell(slotKey)
+            placedCellsRef.current.delete(slotKey)
             setPendingStake(prev => Math.max(0, prev - stake))
         } finally {
             isPlacingBetRef.current = false
@@ -338,13 +574,14 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         }
     }, [
         isPracticeMode, selectedAsset, refreshUser,
-        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell,
+        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid,
     ])
 
-    const handleCellClick = useCallback(async (cellId: string) => {
+    const handleCellClick = useCallback(async (cellId: number, windowId: number) => {
+        const slotKey = `${windowId}_${cellId}`
         if (viewport.dragStart.hasMoved) return
         if (isPlacingBetRef.current) return
-        if (placedCellsRef.current.has(cellId)) {
+        if (placedCellsRef.current.has(slotKey)) {
             toast.error('Bet Already Placed', {
                 description: 'Bets are final and cannot be removed once placed.',
                 duration: 3000,
@@ -352,11 +589,11 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        const cell = cells.find(c => c.cell_id === cellId)
-        if (cell) {
-            const now = Date.now()
-            const tEnd = new Date(cell.t_end).getTime()
-            if (now > tEnd) {
+        // Expiry check from formula
+        if (grid) {
+            const tEnd = new Date(grid.start_time).getTime()
+                       + (windowId + 1) * (grid.timeframe_sec || 60) * 1000
+            if (Date.now() > tEnd) {
                 toast.error('Cell Expired', {
                     description: 'Cannot place bet on a cell whose time window has ended.',
                     duration: 3000,
@@ -378,7 +615,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        if (selectedCells.includes(cellId)) {
+        if (selectedCells.includes(slotKey)) {
             toast.error('Bet Already Placed', {
                 description: 'Bets are final and cannot be removed once placed.',
                 duration: 3000,
@@ -393,28 +630,31 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        setQuoteCellId(cellId)
+        setQuoteCellId(slotKey)
 
-        if (betConfirmationEnabled && cell) {
-            const priceRange = `$${cell.p_low.toFixed(2)} – $${cell.p_high.toFixed(2)}`
-            const startTime = new Date(cell.t_start)
-            const endTime = new Date(cell.t_end)
-            const timeWindow = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-            setPendingBetCellId(cellId)
+        if (betConfirmationEnabled) {
+            const bw = grid?.price_interval || 2
+            const priceRange = `$${(cellId * bw).toFixed(2)} – $${((cellId + 1) * bw).toFixed(2)}`
+            const startMs = grid ? new Date(grid.start_time).getTime() : 0
+            const durMs = (grid?.timeframe_sec || 60) * 1000
+            const tStart = new Date(startMs + windowId * durMs)
+            const tEnd = new Date(startMs + (windowId + 1) * durMs)
+            const timeWindow = `${tStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${tEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            setPendingBetCellId([cellId, windowId])
             setPendingBetInfo({ priceRange, timeWindow })
             setShowBetConfirmation(true)
             return
         }
 
-        await executeBet(cellId, currentStake)
+        await executeBet(cellId, windowId, currentStake)
     }, [
         viewport.dragStart.hasMoved, isPracticeMode, authenticated,
-        selectedCells, currentStake, availableBalance, cells,
+        selectedCells, currentStake, availableBalance, grid,
         betConfirmationEnabled, executeBet,
     ])
 
     const handleBetConfirm = useCallback(() => {
-        if (pendingBetCellId) executeBet(pendingBetCellId, currentStake)
+        if (pendingBetCellId) executeBet(pendingBetCellId[0], pendingBetCellId[1], currentStake)
     }, [pendingBetCellId, currentStake, executeBet])
 
     const handleBetCancel = useCallback(() => {
@@ -468,56 +708,189 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 {claimsOpen && (
                     <>
                         <div
-                            className="absolute inset-0 bg-black/40 z-40"
+                            className="absolute inset-0 bg-black/50 z-40"
                             onClick={() => setClaimsOpen(false)}
                             aria-hidden="true"
                         />
-                        <div className="absolute top-0 right-0 h-full w-72 bg-card border-l border-border z-50 flex flex-col animate-slide-in-right">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-                                <span className="text-sm font-semibold text-foreground">Pending Claims</span>
+                        <div className="absolute top-0 right-0 h-full w-[296px] bg-card border-l border-border z-50 flex flex-col animate-slide-in-right">
+                            {/* Header */}
+                            <div className="flex items-center gap-2 px-4 h-[50px] border-b border-border shrink-0">
+                                <span className="text-[11px] font-bold tracking-[0.06em] uppercase text-muted-foreground flex-1">Pending Claims</span>
+                                {unclaimedCount > 0 && (
+                                    <span className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full bg-trade-up/12 border border-trade-up/22 text-trade-up">
+                                        {unclaimedCount} item{unclaimedCount !== 1 ? 's' : ''}
+                                    </span>
+                                )}
                                 <button
                                     onClick={() => setClaimsOpen(false)}
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    className="w-[26px] h-[26px] flex items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground transition-colors"
                                     aria-label="Close claims panel"
                                 >
-                                    ✕
+                                    <X className="w-3.5 h-3.5" />
                                 </button>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                                {claimItems.length === 0 ? (
-                                    <div className="text-xs text-muted-foreground">
-                                        No pending claims yet.
+
+                            {/* Summary banner */}
+                            {unclaimedCount > 0 && (
+                                <div className={`border-b border-border px-4 py-3.5 flex items-center gap-3 shrink-0 ${unclaimedVoids.length > 0 ? 'bg-gradient-to-br from-trade-up/6 to-primary/3' : 'bg-trade-up/5'}`}>
+                                    <div className="w-[34px] h-[34px] rounded-lg bg-trade-up/12 border border-trade-up/20 flex items-center justify-center text-sm shrink-0">⬡</div>
+                                    <div>
+                                        <div className="font-mono text-[22px] font-bold text-trade-up leading-none">+${unclaimedTotal.toFixed(2)}</div>
+                                        <div className="text-[10px] text-muted-foreground mt-0.5 tracking-wide">
+                                            {unclaimedWins.length > 0 && `${unclaimedWins.length} win${unclaimedWins.length !== 1 ? 's' : ''}`}
+                                            {unclaimedWins.length > 0 && unclaimedVoids.length > 0 && ' · '}
+                                            {unclaimedVoids.length > 0 && `${unclaimedVoids.length} void refund${unclaimedVoids.length !== 1 ? 's' : ''}`}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Scrollable list */}
+                            <div className="flex-1 overflow-y-auto pb-2 min-h-0">
+                                {claimItems.length === 0 && voidItems.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-full gap-2.5 text-center px-6 py-12">
+                                        <div className="w-12 h-12 rounded-full bg-trade-up/8 border border-trade-up/15 flex items-center justify-center text-xl mb-1">✓</div>
+                                        <p className="text-[13px] font-semibold text-muted-foreground">All caught up</p>
+                                        <p className="text-[11px] text-muted-foreground/60 leading-relaxed max-w-[160px]">Winnings and refunds will appear here when your positions settle.</p>
                                     </div>
                                 ) : (
-                                    claimItems.map((claim) => (
-                                        <div key={claim.id} className="bg-secondary/30 border border-border rounded-lg p-3">
-                                            <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-                                                Settled
-                                            </div>
-                                            <div className="text-xs font-mono text-foreground mb-2">
-                                                {claim.range}
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <div className="text-sm font-mono font-semibold text-trade-up">
-                                                    ${claim.payout.toFixed(2)}
+                                    <>
+                                        {/* Wins */}
+                                        {claimItems.length > 0 && (
+                                            <>
+                                                <div className="flex items-center gap-2 px-4 pt-2.5 pb-1.5">
+                                                    <span className="text-[9px] font-bold tracking-[0.12em] uppercase text-muted-foreground/60">Won</span>
+                                                    <div className="flex-1 h-px bg-border" />
                                                 </div>
-                                                <button
-                                                    className="px-3 py-1 text-[11px] font-semibold rounded border border-primary/30 text-primary/70 cursor-not-allowed"
-                                                    disabled
-                                                >
-                                                    Claim
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))
+                                                <div className="px-2.5 space-y-1.5">
+                                                    {claimItems.map((claim) => {
+                                                        const isClaimed = claimedIds.has(claim.id)
+                                                        const isClaiming = claimingIds.has(claim.id)
+                                                        return (
+                                                            <div
+                                                                key={claim.id}
+                                                                className={`rounded-lg bg-background relative transition-opacity duration-300${isClaimed ? ' opacity-40' : isClaiming ? ' bg-trade-up/4' : ''}`}
+                                                                style={{ border: '1px solid hsl(var(--border))', borderLeft: '3px solid hsl(var(--trade-up))' }}
+                                                            >
+                                                                {isClaimed && (
+                                                                    <div className="absolute top-2.5 right-2.5 w-[22px] h-[22px] rounded-full bg-trade-up/15 border border-trade-up/30 flex items-center justify-center">
+                                                                        <Check className="w-3 h-3 text-trade-up" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="px-3 py-[11px]">
+                                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                                        <span className="font-mono text-[10px] text-muted-foreground">{claim.windowLabel}</span>
+                                                                        {claim.timeAgo && <span className="text-[10px] text-muted-foreground/50">· {claim.timeAgo}</span>}
+                                                                    </div>
+                                                                    <p className="font-mono text-[13px] font-semibold text-foreground mb-2">{claim.range}</p>
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                                            <span className="font-mono text-[11px] text-muted-foreground">${claim.stake.toFixed(2)}</span>
+                                                                            <span className="text-[10px] text-muted-foreground/40">→</span>
+                                                                            <span className="font-mono text-[15px] font-bold text-trade-up">+${claim.payout.toFixed(2)}</span>
+                                                                            {claim.multiplier && (
+                                                                                <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded bg-trade-up/10 border border-trade-up/18 text-trade-up/70 shrink-0">
+                                                                                    {claim.multiplier.toFixed(1)}×
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {!isClaimed && (
+                                                                            isClaiming ? (
+                                                                                <button disabled className="h-7 px-3 rounded border border-trade-up/30 bg-trade-up/8 text-[11px] font-bold text-trade-up flex items-center gap-1.5 opacity-65 cursor-not-allowed shrink-0">
+                                                                                    <div className="w-3 h-3 rounded-full border-2 border-trade-up/30 border-t-trade-up animate-spin" />
+                                                                                    <span>···</span>
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleClaim(claim.id)}
+                                                                                    className="h-7 px-3 rounded border border-trade-up/30 bg-trade-up/8 text-[11px] font-bold text-trade-up hover:bg-trade-up/20 transition-colors shrink-0"
+                                                                                >
+                                                                                    Claim
+                                                                                </button>
+                                                                            )
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {/* Void Refunds */}
+                                        {voidItems.length > 0 && (
+                                            <>
+                                                <div className="flex items-center gap-2 px-4 pt-3 pb-1.5">
+                                                    <span className="text-[9px] font-bold tracking-[0.12em] uppercase text-primary/55">Void Refunds</span>
+                                                    <div className="flex-1 h-px bg-border" />
+                                                </div>
+                                                <div className="px-2.5 space-y-1.5">
+                                                    {voidItems.map((item) => {
+                                                        const isClaimed = claimedIds.has(item.id)
+                                                        const isClaiming = claimingIds.has(item.id)
+                                                        return (
+                                                            <div
+                                                                key={item.id}
+                                                                className={`rounded-lg bg-background relative transition-opacity duration-300${isClaimed ? ' opacity-40' : ''}`}
+                                                                style={{ border: '1px solid hsl(var(--border))', borderLeft: '3px solid hsl(var(--primary))' }}
+                                                            >
+                                                                {isClaimed && (
+                                                                    <div className="absolute top-2.5 right-2.5 w-[22px] h-[22px] rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center">
+                                                                        <Check className="w-3 h-3 text-primary" />
+                                                                    </div>
+                                                                )}
+                                                                <div className="px-3 py-[11px]">
+                                                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                                                        <span className="font-mono text-[10px] text-muted-foreground">{item.windowLabel}</span>
+                                                                        {item.timeAgo && <span className="text-[10px] text-primary/55">· Oracle failure</span>}
+                                                                    </div>
+                                                                    <p className="font-mono text-[13px] font-semibold text-muted-foreground mb-2">{item.range}</p>
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                                            <span className="text-[11px] text-muted-foreground/60">Stake refund</span>
+                                                                            <span className="text-[10px] text-muted-foreground/40">→</span>
+                                                                            <span className="font-mono text-[15px] font-bold text-primary">+${item.payout.toFixed(2)}</span>
+                                                                        </div>
+                                                                        {!isClaimed && (
+                                                                            isClaiming ? (
+                                                                                <button disabled className="h-7 px-3 rounded border border-primary/30 bg-primary/8 text-[11px] font-bold text-primary flex items-center gap-1.5 opacity-65 cursor-not-allowed shrink-0">
+                                                                                    <div className="w-3 h-3 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                                                                                    <span>···</span>
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={() => handleClaim(item.id)}
+                                                                                    className="h-7 px-3 rounded border border-primary/30 bg-primary/8 text-[11px] font-bold text-primary hover:bg-primary/20 transition-colors shrink-0"
+                                                                                >
+                                                                                    Refund
+                                                                                </button>
+                                                                            )
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
                                 )}
                             </div>
-                            <div className="p-3 border-t border-border">
+
+                            {/* Footer: Claim All */}
+                            <div className="p-3 border-t border-border shrink-0">
                                 <button
-                                    className="w-full h-10 rounded-lg bg-primary/20 text-primary font-mono font-semibold text-sm border border-primary/30 cursor-not-allowed"
-                                    disabled
+                                    onClick={handleClaimAll}
+                                    disabled={unclaimedCount === 0}
+                                    className="w-full h-11 rounded-lg font-mono font-bold text-[13px] tracking-wide transition-opacity flex items-center justify-center gap-2"
+                                    style={unclaimedCount > 0
+                                        ? { background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)', color: '#fff', boxShadow: '0 4px 20px rgba(22,163,74,0.22)' }
+                                        : { background: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', border: '1px solid hsl(var(--border))', cursor: 'not-allowed' }
+                                    }
                                 >
-                                    Claim All
+                                    {unclaimedCount > 0 ? `⬡ Claim All · +$${unclaimedTotal.toFixed(2)}` : 'Nothing to claim'}
                                 </button>
                             </div>
                         </div>
@@ -589,6 +962,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                             betResults={betResults}
                                             cellStakes={cellStakes}
                                             cellPrices={cellPrices}
+                                            multipliers={multipliers}
                                             recentCellIds={recentCells}
                                         contestEndTime={timeBoundary?.end}
                                     />

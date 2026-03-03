@@ -28,7 +28,7 @@ const getAssetConfig = (assetId: string) => {
 }
 
 const fetchCoingeckoPrice = async (coinId: string) => {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
+    const url = `/coingecko/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
     const res = await fetch(url)
     if (!res.ok) return null
     const data = await res.json()
@@ -120,7 +120,7 @@ export const usePublicPriceFeed = (assetId: string) => {
         }
 
         updateTarget()
-        const pollId = window.setInterval(updateTarget, 12000)
+        const pollId = window.setInterval(updateTarget, 60000)
         const tickId = window.setInterval(tick, 500)
 
         return () => {

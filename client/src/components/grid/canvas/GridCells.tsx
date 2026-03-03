@@ -16,11 +16,14 @@ interface GridCellsProps {
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap
+    /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
+    multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
     frozenWindows?: number
+    activeCellId?: number
     getX: (t: number) => number
     getY: (p: number) => number
-    onCellClick: (cellId: string, isFuture: boolean, cellData?: unknown) => void
+    onCellClick: (cellId: number, windowId: number) => void
     onFrozenCellClick?: (windowIndex: number) => void
     contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
 }
@@ -36,8 +39,10 @@ export const GridCells: React.FC<GridCellsProps> = ({
     betResults,
     cellStakes,
     cellPrices,
+    multipliers,
     recentCellIds,
     frozenWindows = 2,
+    activeCellId,
     getX,
     getY,
     onCellClick,
@@ -52,22 +57,21 @@ export const GridCells: React.FC<GridCellsProps> = ({
         if (!grid) return []
 
         const windowDuration = (grid.timeframe_sec || 60) * 1000
-        const priceInterval = grid.price_interval || 1
-        const anchorPrice = grid.anchor_price
+        const bandWidthUsdc = Math.round((grid.price_interval || 2) * 1_000_000)
 
-        if (windowDuration <= 0 || priceInterval <= 0) return []
+        if (windowDuration <= 0 || bandWidthUsdc <= 0) return []
 
+        // Legacy bridge: map window+band index → DB cell UUID
         const cellLookup = new Map<string, Cell>()
         cells.forEach((cell) => {
-            const wIdx = cell.window_index
-            const bIdx = cell.price_band_index
-            cellLookup.set(`${wIdx}_${bIdx}`, cell)
+            cellLookup.set(`${cell.window_index}_${cell.price_band_index}`, cell)
         })
 
         const slots: {
-            isReal: boolean
             id: string
-            virtualId: string
+            absoluteCellId: number
+            windowId: number
+            legacyId?: string
             x: number
             y: number
             w: number
@@ -76,7 +80,6 @@ export const GridCells: React.FC<GridCellsProps> = ({
             p: number
             p_high: number
             t_end: number
-            cellData?: Cell
         }[] = []
 
         const gridStartTime = new Date(grid.start_time).getTime()
@@ -86,10 +89,8 @@ export const GridCells: React.FC<GridCellsProps> = ({
             windowDuration +
             timeOffset
 
-        const startBand = Math.floor(
-            (visibleMinPrice - anchorPrice) / priceInterval
-        )
-        const startPrice = anchorPrice + startBand * priceInterval
+        const startCellId = Math.floor(visibleMinPrice * 1_000_000 / bandWidthUsdc)
+        const endCellId   = Math.ceil(visibleMaxPrice  * 1_000_000 / bandWidthUsdc)
 
         for (let t = startWindowT; t < viewportEnd; t += windowDuration) {
             const x = getX(t)
@@ -99,50 +100,31 @@ export const GridCells: React.FC<GridCellsProps> = ({
 
             const wi = Math.floor((t - gridStartTime) / windowDuration)
 
-            for (let p = startPrice; p < visibleMaxPrice; p += priceInterval) {
-                const y1 = getY(p + priceInterval)
+            for (let cellId = startCellId; cellId <= endCellId; cellId++) {
+                const p      = cellId       * bandWidthUsdc / 1_000_000
+                const p_high = (cellId + 1) * bandWidthUsdc / 1_000_000
+                const y1 = getY(p_high)
                 const y2 = getY(p)
                 const h = y2 - y1
 
                 if (y1 > height || y2 < 0) continue
 
-                const bi = Math.round((p - anchorPrice) / priceInterval)
+                const legacyCell = cellLookup.get(`${wi}_${cellId}`)
 
-                const lookupKey = `${wi}_${bi}`
-                const realCell = cellLookup.get(lookupKey)
-
-                const virtualId = `future_${wi}_${bi}`
-
-                if (realCell) {
-                    slots.push({
-                        isReal: true,
-                        id: realCell.cell_id,
-                        virtualId: virtualId,
-                        x,
-                        y: y1,
-                        w,
-                        h,
-                        t,
-                        p,
-                        p_high: p + priceInterval,
-                        t_end: t + windowDuration,
-                        cellData: realCell,
-                    })
-                } else {
-                    slots.push({
-                        isReal: false,
-                        id: virtualId,
-                        virtualId: virtualId,
-                        x,
-                        y: y1,
-                        w,
-                        h,
-                        t,
-                        p,
-                        p_high: p + priceInterval,
-                        t_end: t + windowDuration,
-                    })
-                }
+                slots.push({
+                    id: `${wi}_${cellId}`,
+                    absoluteCellId: cellId,
+                    windowId: wi,
+                    legacyId: legacyCell?.cell_id,
+                    x,
+                    y: y1,
+                    w,
+                    h,
+                    t,
+                    p,
+                    p_high,
+                    t_end: t + windowDuration,
+                })
             }
         }
         return slots
@@ -175,9 +157,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
             </defs>
 
             {gridCells.map((slot) => {
-                const isSelected =
-                    selectedCells.includes(slot.id) ||
-                    selectedCells.includes(slot.virtualId)
+                const isSelected = selectedCells.includes(slot.id)
 
                 // Calculate window index and check if frozen
                 const gridStartTime = grid ? new Date(grid.start_time).getTime() : 0
@@ -192,9 +172,11 @@ export const GridCells: React.FC<GridCellsProps> = ({
                 const isAfterContestEnd = contestEndTime !== undefined && slot.t_end > contestEndTime
                 const isPlayable = !isFrozen && !isSelected && !isAfterContestEnd
 
-                const status = betResults[slot.id] || betResults[slot.virtualId]
+                // Use legacyId (UUID) for WebSocket-driven maps; fall back to composite key
+                const stateKey = slot.legacyId || slot.id
+                const status = betResults[stateKey] || betResults[slot.id]
                 const isResolving = status === 'pending' && now > slot.t_end
-                const isRecent = Boolean(recentCellIds?.[slot.id] || recentCellIds?.[slot.virtualId])
+                const isRecent = Boolean(recentCellIds?.[slot.id] || (slot.legacyId && recentCellIds?.[slot.legacyId]))
 
                 let className = "fill-transparent stroke-transparent transition-colors duration-200"
 
@@ -212,9 +194,8 @@ export const GridCells: React.FC<GridCellsProps> = ({
 
                 const style: React.CSSProperties = { cursor }
 
-                const liveStake = cellStakes ? (cellStakes[slot.id] || 0) : 0
-                const staticStake = slot.cellData?.total_stake || 0
-                const currentTotalStake = Math.max(liveStake, staticStake)
+                const liveStake = cellStakes?.[stateKey] || 0
+                const currentTotalStake = liveStake
 
                 // Track if this is a frozen cell without user bet (for special rendering)
                 let isFrozenNoUserBet = false
@@ -368,15 +349,22 @@ export const GridCells: React.FC<GridCellsProps> = ({
                     )
                 }
 
+                // Live price cell: price is in this band, window is open (bettable)
+                const isLiveCell = activeCellId !== undefined
+                    && slot.absoluteCellId === activeCellId
+                    && !isFrozen
+                    && !isAfterContestEnd
+
                 const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
                 const touchPadding = isMobile ? 4 : 0
 
-                // Get cell price info for playable cells
-                const cellPrice = cellPrices?.[slot.id]
+                // On-chain multiplier takes priority; fall back to off-chain probability
+                const onChainMultiplier = multipliers?.[slot.id]
+                const cellPrice = onChainMultiplier == null ? cellPrices?.[stateKey] : undefined
                 const probability = cellPrice?.probability
-                // Add bounds: min probability 0.1% to avoid Infinity, max multiplier 100x
-                const multiplier = probability && probability > 0.001 ? Math.min(1 / probability, 100) : null
-                const showPricing = isPlayable && probability && multiplier && rectW > 30 && rectH > 24
+                const legacyMultiplier = probability && probability > 0.001 ? Math.min(1 / probability, 100) : null
+                const multiplier = onChainMultiplier ?? legacyMultiplier
+                const showPricing = isPlayable && multiplier != null && rectW > 30 && rectH > 24
 
                 return (
                     <g key={slot.id}>
@@ -394,42 +382,64 @@ export const GridCells: React.FC<GridCellsProps> = ({
                                     navigator.vibrate(10)
                                 }
 
-                                if (isFrozen && !isSelected && onFrozenCellClick) {
+                                if (isPlayable) {
+                                    onCellClick(slot.absoluteCellId, slot.windowId)
+                                } else if (isFrozen && !isSelected && onFrozenCellClick) {
                                     onFrozenCellClick(windowIndex)
-                                } else if (isPlayable) {
-                                    if (slot.isReal) {
-                                        onCellClick(slot.id, false, slot.cellData)
-                                    } else {
-                                        onCellClick(slot.id, true, {
-                                            t_start: new Date(slot.t).toISOString(),
-                                            t_end: new Date(slot.t_end).toISOString(),
-                                            p_low: slot.p,
-                                            p_high: slot.p_high,
-                                        })
-                                    }
                                 }
                             }}
                         />
-                        {/* Show probability and multiplier for playable cells */}
+                        {/* Won cell: inner border + outer glow ring (claimable indicator) */}
+                        {status === 'won' && (
+                            <>
+                                <rect
+                                    x={rectX} y={rectY} width={rectW} height={rectH}
+                                    fill="none" stroke="#4ADE80" strokeWidth={1.5} opacity={0.6}
+                                    className="pointer-events-none"
+                                />
+                                <rect
+                                    x={rectX - 3} y={rectY - 3} width={rectW + 6} height={rectH + 6}
+                                    rx={4}
+                                    fill="none" stroke="#4ADE80" strokeWidth={1} opacity={0.22}
+                                    className="pointer-events-none"
+                                />
+                            </>
+                        )}
+                        {/* Live price band pulse — cosmetic only, no pointer events */}
+                        {isLiveCell && (
+                            <rect
+                                x={rectX}
+                                y={rectY}
+                                width={rectW}
+                                height={rectH}
+                                fill="rgba(0, 210, 255, 0.12)"
+                                stroke="rgba(0, 210, 255, 0.55)"
+                                strokeWidth={1.5}
+                                className="animate-live-pulse pointer-events-none"
+                            />
+                        )}
+                        {/* Show multiplier for playable cells; show probability % only for legacy off-chain data */}
                         {showPricing && (
                             <>
+                                {!onChainMultiplier && probability != null && (
+                                    <text
+                                        x={rectX + rectW / 2}
+                                        y={rectY + rectH / 2 - 6}
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        className="text-[9px] font-mono fill-primary/80 pointer-events-none select-none"
+                                    >
+                                        {(probability * 100).toFixed(0)}%
+                                    </text>
+                                )}
                                 <text
                                     x={rectX + rectW / 2}
-                                    y={rectY + rectH / 2 - 6}
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                    className="text-[9px] font-mono fill-primary/80 pointer-events-none select-none"
-                                >
-                                    {(probability * 100).toFixed(0)}%
-                                </text>
-                                <text
-                                    x={rectX + rectW / 2}
-                                    y={rectY + rectH / 2 + 6}
+                                    y={!onChainMultiplier && probability != null ? rectY + rectH / 2 + 6 : rectY + rectH / 2}
                                     textAnchor="middle"
                                     dominantBaseline="middle"
                                     className="text-[10px] font-mono font-bold fill-trade-up pointer-events-none select-none"
                                 >
-                                    {multiplier.toFixed(1)}x
+                                    {multiplier!.toFixed(1)}x
                                 </text>
                             </>
                         )}

@@ -24,10 +24,12 @@ interface GridCanvasProps {
     visiblePriceRange: { min: number; max: number }
     mousePos: { x: number; y: number } | null
     isDragging: boolean
-    onCellClick: (cellId: string, isFuture: boolean, cellData?: unknown) => void
+    onCellClick: (cellId: number, windowId: number) => void
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
     cellPrices?: CellPricesMap
+    /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
+    multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
     contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
 }
@@ -48,6 +50,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     betResults,
     cellStakes,
     cellPrices,
+    multipliers,
     recentCellIds,
     contestEndTime,
 }) => {
@@ -89,7 +92,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     const priceSteps = useMemo(() => {
         if (!grid) return []
         const steps: number[] = []
-        const priceInterval = grid.price_interval || 1
+        const priceInterval = grid.price_interval || 2
         const anchorPrice = grid.anchor_price
 
         const startBand = Math.floor(
@@ -108,6 +111,10 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     if (!grid) return null
 
     const windowDuration = (grid.timeframe_sec || 60) * 1000
+    const bandWidthUsdc = Math.round((grid.price_interval || 2) * 1_000_000)
+    const activeCellId = currentPrice !== null && bandWidthUsdc > 0
+        ? Math.floor(currentPrice * 1_000_000 / bandWidthUsdc)
+        : undefined
     const gridStartTime = new Date(grid.start_time).getTime()
     const currentWindowIndex = Math.floor((now - gridStartTime) / windowDuration)
     const currentWindowStart = gridStartTime + currentWindowIndex * windowDuration
@@ -217,7 +224,9 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 betResults={betResults}
                 cellStakes={cellStakes}
                 cellPrices={cellPrices}
+                multipliers={multipliers}
                 recentCellIds={recentCellIds}
+                activeCellId={activeCellId}
                 getX={getX}
                 getY={getY}
                 onCellClick={onCellClick}
@@ -329,6 +338,7 @@ export const GridCanvas = React.memo(GridCanvasInner, (prevProps, nextProps) => 
         prevProps.betResults !== nextProps.betResults ||
         prevProps.cellStakes !== nextProps.cellStakes ||
         prevProps.cellPrices !== nextProps.cellPrices ||
+        prevProps.multipliers !== nextProps.multipliers ||
         prevProps.contestEndTime !== nextProps.contestEndTime
     ) {
         return false

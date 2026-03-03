@@ -29,6 +29,7 @@ export function TerminalHeader() {
   const [priceDelta, setPriceDelta] = useState<number | null>(null)
   const prevPriceRef = useRef<number | null>(null)
   const [pendingClaims, setPendingClaims] = useState(0)
+  const [claimsTotal, setClaimsTotal] = useState(0)
 
   // Get asset info from contest
   const assetId = selectedContest?.asset_id || 'ETH-USD'
@@ -37,9 +38,10 @@ export function TerminalHeader() {
   const currentPrice = useCurrentPrice(assetId)
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ count?: number }>).detail
-      if (detail && typeof detail.count === 'number') {
-        setPendingClaims(detail.count)
+      const detail = (event as CustomEvent<{ count?: number; totalAmount?: number }>).detail
+      if (detail) {
+        if (typeof detail.count === 'number') setPendingClaims(detail.count)
+        if (typeof detail.totalAmount === 'number') setClaimsTotal(detail.totalAmount)
       }
     }
     window.addEventListener('claims:update', handler)
@@ -147,11 +149,11 @@ export function TerminalHeader() {
           {pendingClaims > 0 && (
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('claims:toggle'))}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[11px] font-mono font-semibold"
-              aria-label={`Pending claims: ${pendingClaims}`}
+              className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded border border-trade-up/22 bg-trade-up/10 text-trade-up text-[11px] font-mono font-semibold hover:bg-trade-up/17 transition-colors"
+              aria-label={`Pending claims: $${claimsTotal.toFixed(2)}`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.6)]" />
-              Claims ({pendingClaims})
+              <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] shadow-[0_0_6px_rgba(22,163,74,0.7)]" />
+              Claims · +${claimsTotal.toFixed(2)}
             </button>
           )}
           {/* Wallet Manager - shows balance, click to open deposit/withdraw */}

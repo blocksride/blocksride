@@ -316,7 +316,7 @@ export function WalletManager() {
                         {/* Terminal Header */}
                         <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
                             <div className="flex items-center justify-between text-xs">
-                                <span className="text-zinc-500">wallet@blip</span>
+                                <span className="text-zinc-500">wallet@blocksride</span>
                                 <span className={cn(
                                     "px-2 py-0.5 text-[10px]",
                                     networkName === 'Sepolia' ? "text-orange-400" : "text-green-400"

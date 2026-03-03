@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ArrowRight, Clock, Zap, Shield, Users, ChevronDown } from 'lucide-react'
 import { useEffect, useState, useRef } from 'react'
@@ -153,6 +153,7 @@ const Step = ({ n, title, body }: { n: string; title: string; body: string }) =>
 // ── Landing ───────────────────────────────────────────────────────────────────
 export const Landing = () => {
     const navigate = useNavigate()
+    const location = useLocation()
     const { authenticated, loading, signOut, walletAddress, signIn } = useAuth()
     const [isMiniApp, setIsMiniApp] = useState(false)
     const miniAppLoginRef = useRef(false)
@@ -181,7 +182,7 @@ export const Landing = () => {
             } catch { /* silent */ }
         }
         load()
-        const i = setInterval(load, 15000)
+        const i = setInterval(load, 60000)
         return () => clearInterval(i)
     }, [])
 
@@ -194,6 +195,14 @@ export const Landing = () => {
     useEffect(() => {
         if (!loading && authenticated) navigate('/terminal')
     }, [loading, authenticated, navigate])
+
+    // Auto-trigger sign-in when arriving from "Connect to trade"
+    useEffect(() => {
+        if (!loading && !authenticated && (location.state as { autoSignIn?: boolean } | null)?.autoSignIn) {
+            window.history.replaceState({}, '', '/')
+            signIn()
+        }
+    }, [loading, authenticated, location.state, signIn])
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -264,7 +273,7 @@ export const Landing = () => {
                     ) : (
                         <Button size="sm" onClick={() => navigate('/terminal')}
                             className="h-8 px-5 text-xs font-mono font-bold bg-primary text-primary-foreground hover:bg-primary/90 uppercase tracking-wide shadow-[0_0_14px_hsl(var(--primary)/0.4)]">
-                            Launch App
+                             Launch App
                         </Button>
                     )}
                 </div>
