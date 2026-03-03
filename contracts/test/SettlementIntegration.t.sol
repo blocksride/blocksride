@@ -83,7 +83,7 @@ contract SettlementIntegrationTest is Test {
 
     function setUp() public {
         // Skip if not on fork (requires --fork-url)
-        try PYTH_ORACLE.getValidTimePeriod() returns (uint) {
+        try PYTH_ORACLE.getValidTimePeriod() returns (uint256) {
             // Fork is active, continue
         } catch {
             vm.skip(true);
