@@ -577,9 +577,8 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint64 maxPublishTime = uint64(windowEnd + 10);
 
         uint256 closingPrice;
-        try this._parsePythPrice{value: msg.value}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime) returns (
-            uint256 price
-        ) {
+        try this._parsePythPrice{value: msg.value}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime)
+        returns (uint256 price) {
             closingPrice = price;
         } catch {
             // Pyth price unavailable — auto-void window
@@ -937,7 +936,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param cellId Cell ID
      * @return Multiplier in 1e18 precision (e.g., 1.5e18 = 1.5x)
      */
-    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
+    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId)
+        external
+        view
+        returns (uint256)
+    {
         // TODO: Calculate (totalPool * (10000 - feeBps) / 10000) * 1e18 / cellStakes[cellId]
         return 0;
     }
@@ -1001,11 +1004,12 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param maxPublishTime Maximum acceptable publish timestamp (windowEnd + 10s grace period)
      * @return price Price in USDC base units (6 decimals)
      */
-    function _parsePythPrice(bytes calldata pythUpdateData, bytes32 priceFeedId, uint64 minPublishTime, uint64 maxPublishTime)
-        public
-        payable
-        returns (uint256 price)
-    {
+    function _parsePythPrice(
+        bytes calldata pythUpdateData,
+        bytes32 priceFeedId,
+        uint64 minPublishTime,
+        uint64 maxPublishTime
+    ) public payable returns (uint256 price) {
         // Wrap updateData in array format required by Pyth
         bytes[] memory updateDataArray = new bytes[](1);
         updateDataArray[0] = pythUpdateData;
@@ -1016,8 +1020,9 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
 
         // Call Pyth oracle to parse and verify price at exact timestamp
         // Reverts if no price available in the [minPublishTime, maxPublishTime] window
-        PythStructs.PriceFeed[] memory priceFeeds =
-            pythOracle.parsePriceFeedUpdates{value: msg.value}(updateDataArray, priceIds, minPublishTime, maxPublishTime);
+        PythStructs.PriceFeed[] memory priceFeeds = pythOracle.parsePriceFeedUpdates{value: msg.value}(
+            updateDataArray, priceIds, minPublishTime, maxPublishTime
+        );
 
         PythStructs.Price memory pythPrice = priceFeeds[0].price;
 
