@@ -1,4 +1,4 @@
-import { type WalletClient } from 'viem'
+import { parseSignature, type WalletClient } from 'viem'
 import axiosInstance from '../utility/axiosInterceptor'
 
 // USDC token address on Base
@@ -34,6 +34,11 @@ export interface PermitInfo {
   nonce: string
   relayerAddress: string
   treasuryAddress: string
+  spenderAddress?: string
+  chainId?: string
+  tokenAddress?: string
+  domainName?: string
+  domainVersion?: string
 }
 
 export interface GaslessDepositResult {
@@ -62,22 +67,30 @@ export interface AutoDepositResult {
 
 // Split a signature into v, r, s components
 function splitSignature(signature: `0x${string}`): PermitSignature {
-  const r = `0x${signature.slice(2, 66)}` as `0x${string}`
-  const s = `0x${signature.slice(66, 130)}` as `0x${string}`
-  let v = parseInt(signature.slice(130, 132), 16)
-
-  // EIP-155 recovery id handling
-  if (v < 27) {
-    v += 27
-  }
-
-  return { v, r, s }
+  const parsed = parseSignature(signature)
+  let v = Number(parsed.v ?? (parsed.yParity === 1 ? 28 : 27))
+  if (v < 27) v += 27
+  return { v, r: parsed.r, s: parsed.s }
 }
 
 export const depositService = {
   // Get permit info from backend (nonce, relayer address)
   getPermitInfo: async (userAddress: string): Promise<PermitInfo> => {
     const response = await axiosInstance.get(`/wallet/permit-info?address=${userAddress}`)
+    return response.data
+  },
+
+  submitPermit: async (params: {
+    address: string
+    permitAmount: string
+    deadline: string
+    v: number
+    r: string
+    s: string
+  }): Promise<{ success: boolean; txHash: string }> => {
+    const response = await axiosInstance.post('/wallet/permit', params, {
+      timeout: 120000,
+    })
     return response.data
   },
 
@@ -89,12 +102,18 @@ export const depositService = {
     amount: bigint,
     deadline: bigint,
     nonce: bigint,
-    chainId: number = 8453
+    chainId: number = 8453,
+    tokenAddress?: `0x${string}`,
+    domainName?: string,
+    domainVersion?: string
   ): Promise<PermitSignature> => {
     // Update domain with correct chain ID
     const domain = {
       ...PERMIT_DOMAIN,
+      name: domainName || PERMIT_DOMAIN.name,
+      version: domainVersion || PERMIT_DOMAIN.version,
       chainId,
+      verifyingContract: tokenAddress || PERMIT_DOMAIN.verifyingContract,
     }
 
     const message = {
@@ -159,7 +178,10 @@ export const depositService = {
       MAX_UINT256, // Sign for unlimited amount
       deadline,
       BigInt(permitInfo.nonce),
-      chainId
+      chainId,
+      permitInfo.tokenAddress as `0x${string}` | undefined,
+      permitInfo.domainName,
+      permitInfo.domainVersion
     )
 
     // 5. Submit to backend - relayer will execute on-chain
@@ -177,8 +199,9 @@ export const depositService = {
   },
 
   // Get user's approval status for one-time approval flow
-  getApprovalStatus: async (): Promise<ApprovalStatus> => {
-    const response = await axiosInstance.get('/wallet/approval-status')
+  getApprovalStatus: async (walletAddress?: string): Promise<ApprovalStatus> => {
+    const suffix = walletAddress ? `?address=${walletAddress}` : ''
+    const response = await axiosInstance.get(`/wallet/approval-status${suffix}`)
     return response.data
   },
 
