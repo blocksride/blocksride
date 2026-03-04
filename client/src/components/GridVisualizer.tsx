@@ -278,7 +278,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return parts.find((part) => part.type === 'timeZoneName')?.value ?? ''
     }, [])
 
-    const { user, refreshUser, authenticated } = useAuth()
+    const { user, refreshUser, authenticated, walletAddress } = useAuth()
     const { formatted: onchainUsdcBalance } = useTokenBalance()
     const { wallets } = useWallets()
     const walletsRef = useRef(wallets)
@@ -396,11 +396,16 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 return
             }
 
-            const activeWallet =
-                walletsRef.current.find(w => w.walletClientType === 'privy') ??
-                walletsRef.current[0]
+            const activeWallet = walletsRef.current.find((w) => {
+                const isPrivyWallet = (w.walletClientType || '').toLowerCase().includes('privy')
+                if (!isPrivyWallet) return false
+                if (!walletAddress) return true
+                return (w.address || '').toLowerCase() === walletAddress.toLowerCase()
+            })
             if (!activeWallet) {
-                toast.error('No wallet connected')
+                toast.error('Embedded wallet not ready', {
+                    description: 'Sign in with Privy to claim wins/refunds.',
+                })
                 return
             }
 
@@ -432,7 +437,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 return s
             })
         }
-    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds])
+    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds, walletAddress])
 
     const handleClaim = useCallback((positionId: string) => {
         executeClaim([positionId])
@@ -522,9 +527,14 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                     throw new Error('no-pool')
                 }
 
-                const activeWallet =
-                    walletsRef.current.find(w => w.walletClientType === 'privy') ??
-                    walletsRef.current[0]
+                // Force embedded Privy wallet for betting flows.
+                // Do not fall back to injected wallets (e.g. MetaMask), which causes extra popups.
+                const activeWallet = walletsRef.current.find((w) => {
+                    const isPrivyWallet = (w.walletClientType || '').toLowerCase().includes('privy')
+                    if (!isPrivyWallet) return false
+                    if (!walletAddress) return true
+                    return (w.address || '').toLowerCase() === walletAddress.toLowerCase()
+                })
                 if (!activeWallet) throw new Error('no-wallet')
 
                 const provider = await activeWallet.getEthereumProvider()
@@ -573,7 +583,11 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                     ? (err as { response?: { data?: string } }).response?.data
                     : null
             const msg = responseMessage || (err instanceof Error ? err.message : '')
-            if (msg !== 'no-pool' && msg !== 'no-wallet') {
+            if (msg === 'no-wallet') {
+                toast.error('Embedded wallet not ready', {
+                    description: 'Sign in with Privy to use the embedded wallet for betting.',
+                })
+            } else if (msg !== 'no-pool') {
                 toast.error('Failed to place bet', {
                     description: msg || 'Unexpected error while scheduling bet.',
                 })

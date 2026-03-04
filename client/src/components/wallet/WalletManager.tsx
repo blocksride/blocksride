@@ -43,7 +43,9 @@ export function WalletManager() {
 
     // Get Privy embedded wallet
     const { wallets } = useWallets()
-    const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+    const embeddedWallet = wallets.find((w) =>
+        (w.walletClientType || '').toLowerCase().includes('privy'),
+    )
     const walletByAuthAddress = walletAddress
         ? wallets.find(w => w.address?.toLowerCase() === walletAddress.toLowerCase())
         : undefined

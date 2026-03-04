@@ -18,6 +18,14 @@ export interface Pool {
     windowDurationSec: number
 }
 
+export interface PoolKey {
+    currency0: string
+    currency1: string
+    fee: number
+    tickSpacing: number
+    hooks: string
+}
+
 export interface ScheduledBet {
     intentId: string
     submitAfter: number  // unix timestamp when relay submits the tx
@@ -142,6 +150,7 @@ export const betService = {
 
         const res = await axiosInstance.post<ScheduledBet>('/relay/bet', {
             poolId:        normalizedPoolId,
+            poolKey:       pool.poolKey,
             cellId:        cellId.toString(),
             windowId:      windowId.toString(),
             amount:        amountUsdc.toString(),
