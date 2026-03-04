@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useContest, formatTimeRemaining } from '@/contexts/ContestContext'
-import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -24,6 +23,7 @@ import {
 import { Contest, api, LeaderboardEntry } from '@/services/apiService'
 import { ContestRequirements } from './ContestRequirements'
 import { TerminalHeader } from '@/components/terminal/TerminalHeader'
+import { useTokenBalance } from '@/hooks/useTokenBalance'
 
 export function ContestHub() {
     const {
@@ -35,7 +35,7 @@ export function ContestHub() {
         refreshContests
     } = useContest()
 
-    const { user, refreshUser } = useAuth()
+    const { refetch: refetchTokenBalance, formatted: onchainUsdcBalance } = useTokenBalance()
 
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
     const [leaderboardLoading, setLeaderboardLoading] = useState(false)
@@ -64,11 +64,8 @@ export function ContestHub() {
     }, [activeContest])
 
     const handleJoinContest = async (contest: Contest) => {
-        // Refresh user data to get latest platform balance
-        await refreshUser()
-        // Check platform balance (deposited funds), not on-chain wallet balance
-        const platformBalance = user?.balance ?? 0
-        const hasBalance = platformBalance > 0
+        await refetchTokenBalance()
+        const hasBalance = Number(onchainUsdcBalance ?? 0) > 0
 
         if (hasBalance) {
             // Skip requirements modal and enter contest directly
