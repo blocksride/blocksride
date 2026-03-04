@@ -31,6 +31,7 @@ import {
 import { useGridSocket } from '../hooks/useGridSocket'
 import { useBetQuote } from '../hooks/useBetQuote'
 import { usePoolMultipliers } from '../hooks/usePoolMultipliers'
+import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
@@ -278,6 +279,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [])
 
     const { user, refreshUser, authenticated } = useAuth()
+    const { formatted: onchainUsdcBalance } = useTokenBalance()
     const { wallets } = useWallets()
     const walletsRef = useRef(wallets)
     walletsRef.current = wallets
@@ -300,7 +302,9 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         viewport.visibleMaxPrice,
     )
     const practiceBalance = user?.practice_balance ?? 1000
-    const platformBalance = user?.balance ?? 0
+    const parsedOnchainBalance = Number(onchainUsdcBalance ?? 0)
+    const onchainBalance = Number.isFinite(parsedOnchainBalance) ? parsedOnchainBalance : 0
+    const platformBalance = onchainBalance
     const userBalance = isPracticeMode ? practiceBalance : platformBalance
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
