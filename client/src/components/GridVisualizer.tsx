@@ -565,9 +565,18 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 })
             }
         } catch (err) {
-            const msg = err instanceof Error ? err.message : ''
+            const responseMessage =
+                typeof err === 'object' &&
+                err !== null &&
+                'response' in err &&
+                typeof (err as { response?: { data?: unknown } }).response?.data === 'string'
+                    ? (err as { response?: { data?: string } }).response?.data
+                    : null
+            const msg = responseMessage || (err instanceof Error ? err.message : '')
             if (msg !== 'no-pool' && msg !== 'no-wallet') {
-                toast.error('Failed to place bet')
+                toast.error('Failed to place bet', {
+                    description: msg || 'Unexpected error while scheduling bet.',
+                })
             }
             removeOptimisticCell(slotKey)
             placedCellsRef.current.delete(slotKey)
