@@ -108,14 +108,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     // Sign in with Privy
     const signIn = useCallback(async () => {
-        setLoading(true)
         try {
             // Open Privy login modal
             login()
             // Auth sync happens automatically via useEffect when privyAuthenticated changes
         } catch (error) {
             console.error('Sign in failed:', error)
-            setLoading(false)
             throw error
         }
     }, [login])
