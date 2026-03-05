@@ -5,7 +5,7 @@ cache/
 out/
 broadcast/
 lib/
-
+lib*
 # Dotenv file
 .env
 
