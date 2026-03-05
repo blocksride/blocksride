@@ -202,7 +202,7 @@ contract SettlementTest is Test {
         emit WindowSettled(poolId, windowId, cellId, closingPrice, expectedRedemptionRate);
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Verify window state
         (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate) =
@@ -237,7 +237,7 @@ contract SettlementTest is Test {
         pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(betPrice, -8), -8, uint64(windowEnd));
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Verify redemption rate: ($50 - $1 fee) / $50 stakes = 0.98x
         (,,,, uint256 redemptionRate) = hook.getWindow(testKey, windowId);
@@ -273,7 +273,7 @@ contract SettlementTest is Test {
         emit WindowRolledOver(poolId, windowId, windowId + 1, 30_000_000);
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Verify source window is settled
         (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
@@ -286,6 +286,8 @@ contract SettlementTest is Test {
 
         // Verify no fees collected on rollover
         assertEq(hook.collectedFees(poolId), 0, "No fees should be collected on rollover");
+        assertEq(hook.rolloverBalances(poolId), 30_000_000, "Rollover balance should track full carry");
+        assertEq(hook.backstopBalances(poolId), 0, "Backstop balance should not include organic carry");
     }
 
     // =============================================================
@@ -307,7 +309,7 @@ contract SettlementTest is Test {
         emit WindowVoided(poolId, windowId, 10_000_000);
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Verify window is voided
         (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
@@ -331,7 +333,7 @@ contract SettlementTest is Test {
         emit WindowVoided(poolId, windowId, 500_000);
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         (,, bool voided,,) = hook.getWindow(testKey, windowId);
         assertTrue(voided, "Window should be auto-voided");
@@ -367,7 +369,7 @@ contract SettlementTest is Test {
         pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Try to void after settlement
         vm.prank(admin);
@@ -396,7 +398,7 @@ contract SettlementTest is Test {
         pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
 
         uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
-            "", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+            hex"01", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
         );
 
         // Expected: 30 * 10^(2+6) = 30 * 10^8 = 3_000_000_000
@@ -412,7 +414,7 @@ contract SettlementTest is Test {
         pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
 
         uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
-            "", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+            hex"01", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
         );
 
         // Expected: 300000000000 * 10^(-8+6) = 300000000000 * 10^-2 = 3_000_000_000
@@ -426,7 +428,7 @@ contract SettlementTest is Test {
         pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
 
         uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
-            "", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+            hex"01", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
         );
 
         // Expected: 3000 * 10^(0+6) = 3000 * 10^6 = 3_000_000_000
@@ -446,7 +448,7 @@ contract SettlementTest is Test {
         // Try to settle before window ends
         vm.expectRevert("Window not ended");
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
     }
 
     function test_Settlement_RevertsIfAlreadySettled() public {
@@ -460,12 +462,12 @@ contract SettlementTest is Test {
         pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
 
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Try to settle again
         vm.expectRevert("Already settled");
         vm.prank(keeper);
-        hook.settle{value: 0.01 ether}(testKey, windowId, "");
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
     }
 
     function test_Settlement_RevertsIfAlreadyVoided() public {
@@ -479,6 +481,50 @@ contract SettlementTest is Test {
 
         vm.expectRevert("Already voided");
         vm.prank(keeper);
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
+    }
+
+    function test_Settlement_RevertsOnInsufficientUpdateFee() public {
+        uint256 windowId = FROZEN_WINDOWS + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, windowId, 10_000_000);
+
+        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
+        vm.warp(windowEnd);
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+
+        vm.expectRevert("Insufficient Pyth update fee");
+        vm.prank(keeper);
+        hook.settle{value: 0.009 ether}(testKey, windowId, hex"01");
+    }
+
+    function test_Settlement_RevertsOnMalformedUpdateData() public {
+        uint256 windowId = FROZEN_WINDOWS + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, windowId, 10_000_000);
+
+        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
+        vm.warp(windowEnd);
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+
+        vm.expectRevert(bytes4(keccak256("InvalidUpdateData()")));
+        vm.prank(keeper);
+        hook.settle{value: 0.01 ether}(testKey, windowId, hex"ff");
+    }
+
+    function test_Settlement_RevertsOnEmptyUpdateData() public {
+        uint256 windowId = FROZEN_WINDOWS + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, windowId, 10_000_000);
+
+        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
+        vm.warp(windowEnd);
+
+        vm.expectRevert("Empty Pyth update data");
+        vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
     }
 }
@@ -488,6 +534,10 @@ contract SettlementTest is Test {
 // =============================================================
 
 contract MockPythOracle is IPyth {
+    error InsufficientFee();
+    error InvalidUpdateData();
+    error PriceFeedNotFoundWithinRange();
+
     struct MockPrice {
         int64 price;
         int32 expo;
@@ -501,19 +551,25 @@ contract MockPythOracle is IPyth {
     }
 
     function parsePriceFeedUpdates(
-        bytes[] calldata, /* updateData */
+        bytes[] calldata updateData,
         bytes32[] calldata priceIds,
         uint64 minPublishTime,
         uint64 maxPublishTime
     ) external payable override returns (PythStructs.PriceFeed[] memory priceFeeds) {
+        if (msg.value < 0.01 ether) revert InsufficientFee();
+        if (updateData.length == 0 || updateData[0].length == 0 || updateData[0][0] == bytes1(0xff)) {
+            revert InvalidUpdateData();
+        }
+
         priceFeeds = new PythStructs.PriceFeed[](priceIds.length);
 
         for (uint256 i = 0; i < priceIds.length; i++) {
             MockPrice storage p = prices[priceIds[i]];
 
-            // Revert if no price set (simulates oracle unavailable)
-            require(p.publishTime > 0, "Price not available");
-            require(p.publishTime >= minPublishTime && p.publishTime <= maxPublishTime, "Price outside time window");
+            // Simulate Pyth no-price-in-range behavior.
+            if (p.publishTime == 0 || p.publishTime < minPublishTime || p.publishTime > maxPublishTime) {
+                revert PriceFeedNotFoundWithinRange();
+            }
 
             priceFeeds[i] = PythStructs.PriceFeed({
                 id: priceIds[i],
