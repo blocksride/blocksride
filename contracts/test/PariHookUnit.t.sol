@@ -272,6 +272,25 @@ contract PariHookUnitTest is Test {
         );
     }
 
+    function test_ConfigureGrid_RevertWhen_GridEpochNotMinuteAligned() public {
+        PoolKey memory poolKey = _createTestPoolKey();
+
+        vm.prank(admin);
+        vm.expectRevert("gridEpoch must align to minute start");
+        hook.configureGrid(
+            poolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH + 1, // Invalid: not aligned to minute boundary
+            usdcToken
+        );
+    }
+
     function test_ConfigureGrid_RevertWhen_InvalidPriceFeedId() public {
         PoolKey memory poolKey = _createTestPoolKey();
 
