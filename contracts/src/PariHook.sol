@@ -594,8 +594,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
 
         uint256 closingPrice;
         try this._parsePythPrice{value: updateFee}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime)
-            returns (uint256 price)
-        {
+        returns (uint256 price) {
             closingPrice = price;
         } catch (bytes memory reason) {
             // Only auto-void when Pyth explicitly reports no price in this publish-time range.
