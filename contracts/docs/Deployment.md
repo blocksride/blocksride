@@ -6,8 +6,8 @@
 
 ## Deployed Contract
 
-- **PariHook:** `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
-- **BaseScan:** https://sepolia.basescan.org/address/0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7
+- **PariHook:** `0xdbB492353B57698a5443bF1846F00c71EFA41824`
+- **BaseScan:** https://sepolia.basescan.org/address/0xdbB492353B57698a5443bF1846F00c71EFA41824
 
 ## Infrastructure
 
@@ -87,7 +87,7 @@ poolManager.initialize(poolKey, sqrtPriceX96)
 Backend and keeper env should include:
 
 ```bash
-PARIHOOK_CONTRACT_ADDRESS=0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7
+PARIHOOK_CONTRACT_ADDRESS=0xdbB492353B57698a5443bF1846F00c71EFA41824
 RELAYER_PRIVATE_KEY=...
 ADMIN_PRIVATE_KEY=...
 ```
@@ -105,10 +105,10 @@ The keeper must:
 
 ```bash
 # paused state
-cast call 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 "paused()(bool)" --rpc-url $BASE_SEPOLIA_RPC_URL
+cast call 0xdbB492353B57698a5443bF1846F00c71EFA41824 "paused()(bool)" --rpc-url $BASE_SEPOLIA_RPC_URL
 
 # role check
-cast call 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 \
+cast call 0xdbB492353B57698a5443bF1846F00c71EFA41824 \
   "hasRole(bytes32,address)(bool)" \
   0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775 \
   0x536975e9E6af75045c1a03cCf1CD8B9590E2cB7f \
