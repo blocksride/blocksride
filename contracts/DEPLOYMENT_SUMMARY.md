@@ -1,6 +1,6 @@
 # BlocksRide Deployment Summary & User Flow Explanation
 
-**Date:** March 2, 2026
+**Date:** March 6, 2026
 **Network:** Base Sepolia
 **Status:** Phase 1 Complete ✅
 
@@ -8,7 +8,11 @@
 
 ## What We Just Deployed
 
-### PariHook Contract: `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
+### PariHook Contract: `0xdbB492353B57698a5443bF1846F00c71EFA41824`
+
+- **Deployment Tx:** `0xa8079b1455964cb032a3f2a4f83719227dcd53bb23f931fcf85397e369ab8b04`
+- **Integration Grid Config Tx:** `0xd071e6cf0121cdaffc744ff60291f15d7ba3fc76ac7cc12f67e4eaf1cf368a71`
+- **Latest Bet Tx:** `0xd4a9b9db4c8a58c9d92f00607ad8f030d0c5dff21ef5ad76a8a7a088553bbd64`
 
 This is your **prediction market engine**. It's NOT a traditional Uniswap swap pool.
 
@@ -16,7 +20,7 @@ This is your **prediction market engine**. It's NOT a traditional Uniswap swap p
 - Accepts USDC bets from users
 - Tracks which price band (cell) each user bet on
 - Settles windows using Pyth oracle prices
-- Pays winners in USDC (parimutuel split)
+- Supports winner/refund accounting paths (payout execution is keeper/ops dependent)
 
 **What it does NOT do (yet):**
 - Does not involve RIDE token (that's Phase 2)
@@ -167,7 +171,7 @@ If user bet on losing cell:
 
 | Component | Status | Address |
 |-----------|--------|---------|
-| PariHook | ✅ Deployed | `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7` |
+| PariHook | ✅ Deployed | `0xdbB492353B57698a5443bF1846F00c71EFA41824` |
 | Grid Configured | ✅ Done | ETH/USD, $2 bands, 60s windows |
 | Pyth Oracle | ✅ Integrated | Live prices working |
 | Roles Setup | ✅ Done | Admin/Treasury/Relayer assigned |
@@ -312,11 +316,11 @@ User stakes RIDE → Lower fees on next bet
 
 ```bash
 # Check contract state
-cast call 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 "paused()(bool)" \
+cast call 0xdbB492353B57698a5443bF1846F00c71EFA41824 "paused()(bool)" \
   --rpc-url $BASE_SEPOLIA_RPC_URL
 
 # Check current window
-cast call 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 \
+cast call 0xdbB492353B57698a5443bF1846F00c71EFA41824 \
   "getCurrentWindow((address,address,uint24,int24,address))(uint256)" \
   [YOUR_POOL_KEY] \
   --rpc-url $BASE_SEPOLIA_RPC_URL
@@ -367,7 +371,7 @@ A: After core betting is tested and working smoothly.
 
 ## Resources
 
-- **Deployed Contract:** https://sepolia.basescan.org/address/0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7
+- **Deployed Contract:** https://sepolia.basescan.org/address/0xdbB492353B57698a5443bF1846F00c71EFA41824
 - **Test Results:** `TEST_RESULTS.md`
 - **Environment Config:** `.env`
 - **Architecture Docs:** `blocksride-docs/architecture.md`
