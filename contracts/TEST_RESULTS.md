@@ -1,8 +1,8 @@
 # PariHook Integration Test Results
 
-**Test Date:** March 2, 2026
+**Test Date:** March 6, 2026
 **Network:** Base Sepolia (Chain ID: 84532)
-**Contract:** `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
+**Contract:** `0xdbB492353B57698a5443bF1846F00c71EFA41824`
 
 ---
 
@@ -29,7 +29,7 @@
 - PoolManager: `0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408` ✅
 - Pyth Oracle: `0xA2aa501b19aff244D90cc15a4Cf739D2725B5729` ✅
 - Contract Paused: `false` ✅
-- DOMAIN_SEPARATOR: `0xa29a4fc8723aa822b9ed6678a61d3b12af2c91e21e276ce6fd9d687887ef6ffd` ✅
+- DOMAIN_SEPARATOR: `0xb7d37e0507fb6aefc4ab709677d9ebfee116c8f0d0763a40e8a8e28f37f61ab9` ✅
 
 **Conclusion:** Contract deployment state is correct and ready for use.
 
@@ -60,7 +60,7 @@
 - **Max Stake Per Cell:** $100,000
 - **Fee:** 2% (200 basis points)
 - **Min Pool Threshold:** $1.00
-- **Grid Epoch:** 1772471340 (Unix timestamp)
+- **Grid Epoch:** 1772789520 (Unix timestamp)
 - **USDC Token:** `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
 
 **Conclusion:** Grid configured successfully on-chain.
@@ -92,25 +92,25 @@
 #### ETH/USD Price Feed ✅
 
 **Raw Data:**
-- Price: 205966817754
+- Price: 205749151350
 - Exponent: -8 (4294967288 as uint32)
-- Confidence: 127036777
-- Publish Time: 1772470984
+- Confidence: 95855231
+- Publish Time: 1772789167
 
 **Converted Price:**
 - Human-Readable: **$2,059**
-- USDC 6-Decimal: 2,059,668,177 (= $2,059.67)
+- USDC 6-Decimal: 2,057,491,513 (= $2,057.49)
 
 **Grid Cell Mapping:**
-- Cell ID: `1029`
-- Price Range: **$2,058 - $2,060**
+- Cell ID: `1028`
+- Price Range: **$2,056 - $2,058**
 
 **Status:** ✅ Working correctly
 
 #### BTC/USD Price Feed ✅
 
 **Converted Price:**
-- Human-Readable: **$69,398**
+- Human-Readable: **$70,428**
 
 **Status:** ✅ Working correctly
 
@@ -121,7 +121,7 @@
 ### TEST 6: Hook Permissions ✅
 
 **Hook Configuration:**
-- Hook Address: `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
+- Hook Address: `0xdbB492353B57698a5443bF1846F00c71EFA41824`
 
 **Registered Callbacks:**
 - beforeInitialize: ✅ **TRUE** (Required for grid initialization)
@@ -145,8 +145,8 @@
 
 | Operation | Gas Used |
 |-----------|----------|
-| Grid Configuration | 333,603 |
-| Cost (at 0.011 gwei) | 0.000003669633 ETH |
+| Grid Configuration | 315,143 |
+| Cost (at 0.011 gwei) | 0.000003466573 ETH |
 
 ---
 
@@ -229,10 +229,12 @@ The current deployment does **NOT** use a mined hook address. For production (ma
 **Script:** `script/TestPariHookIntegration.s.sol`
 **Executor:** `0x536975e9E6af75045c1a03cCf1CD8B9590E2cB7f`
 **Gas Price:** 0.011 gwei
-**Total Cost:** 0.000003669633 ETH
+**Total Cost:** 0.000003466573 ETH
 
 **Transaction Logs:**
 - Saved to: `broadcast/TestPariHookIntegration.s.sol/84532/run-latest.json`
+- Grid configuration tx: `0xd071e6cf0121cdaffc744ff60291f15d7ba3fc76ac7cc12f67e4eaf1cf368a71`
+- Latest betting flow tx: `0xd4a9b9db4c8a58c9d92f00607ad8f030d0c5dff21ef5ad76a8a7a088553bbd64`
 
 ---
 
@@ -273,8 +275,8 @@ The PariHook contract is:
 
 ## Support & Resources
 
-- **Contract Address:** `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
-- **BaseScan:** https://sepolia.basescan.org/address/0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7
+- **Contract Address:** `0xdbB492353B57698a5443bF1846F00c71EFA41824`
+- **BaseScan:** https://sepolia.basescan.org/address/0xdbB492353B57698a5443bF1846F00c71EFA41824
 - **Uniswap V4 Docs:** https://docs.uniswap.org/contracts/v4/overview
 - **Pyth Network:** https://docs.pyth.network/
 - **Base Docs:** https://docs.base.org/
