@@ -601,7 +601,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         }
     }, [
         isPracticeMode, selectedAsset, refreshUser,
-        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid,
+        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid, walletAddress,
     ])
 
     const handleCellClick = useCallback(async (cellId: number, windowId: number) => {
