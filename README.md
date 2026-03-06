@@ -1,6 +1,6 @@
 # BlocksRide: Parimutuel Prediction Markets on Uniswap V4
 
-## Executive Summary
+## Summary
 
 BlocksRide is a fully on-chain parimutuel prediction market protocol built as a Uniswap V4 hook on Base L2. It enables users to speculate on cryptocurrency price movements within discrete time windows and price bands, settling via decentralized oracle infrastructure. By leveraging Uniswap V4's hook architecture, BlocksRide eliminates traditional prediction market inefficiencies while inheriting the security and liquidity management capabilities of the battle-tested PoolManager contract.
 
