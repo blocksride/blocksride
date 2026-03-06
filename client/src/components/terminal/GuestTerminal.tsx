@@ -153,6 +153,7 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
                                         width={viewport.dimensions.width}
                                         height={viewport.dimensions.height}
                                         grid={grid}
+                                        pool={null}
                                         cells={guestCells}
                                         prices={prices}
                                         currentPrice={currentPrice}

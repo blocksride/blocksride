@@ -8,6 +8,7 @@ import { GridCanvas } from '@/components/grid/GridCanvas'
 import { useGridViewport } from '@/hooks/useGridViewport'
 import { Grid, Cell, PricePoint } from '@/types/grid'
 import { BlocksrideLogo } from '@/components/BlocksrideLogo'
+import { getSlotKeyFromCell } from '@/lib/gridSlots'
 import { sdk } from '@farcaster/miniapp-sdk'
 
 // ── Deterministic seeded RNG ──────────────────────────────────────────────────
@@ -123,6 +124,7 @@ const BackgroundGrid = ({ ethPrice }: { ethPrice: string }) => {
                 width={viewport.dimensions.width}
                 height={viewport.dimensions.height}
                 grid={grid}
+                pool={null}
                 cells={cells}
                 prices={prices}
                 currentPrice={currentPrice}
@@ -133,7 +135,7 @@ const BackgroundGrid = ({ ethPrice }: { ethPrice: string }) => {
                 isDragging={false}
                 onCellClick={() => {}}
                 betResults={betResults}
-                cellStakes={cells.reduce((a, c) => ({ ...a, [c.cell_id]: c.total_stake || 0 }), {})}
+                cellStakes={cells.reduce((a, c) => ({ ...a, [getSlotKeyFromCell(c)]: c.total_stake || 0 }), {})}
             />
         </div>
     )
@@ -175,10 +177,9 @@ export const Landing = () => {
     useEffect(() => {
         const load = async () => {
             try {
-                const res = await fetch('/coingecko/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true')
-                const d = await res.json()
-                setEthPrice(new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(d.ethereum.usd))
-                setEthChange(d.ethereum.usd_24h_change.toFixed(2))
+                const { data } = await api.getPublicPrice('ETH-USD')
+                setEthPrice(new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.price))
+                setEthChange('---')
             } catch { /* silent */ }
         }
         load()
@@ -381,7 +382,7 @@ export const Landing = () => {
                     {upcomingContests.length > 0 && (
                         <div className="mt-14">
                             <h3 className="text-center text-sm font-mono text-muted-foreground uppercase tracking-widest mb-6">
-                                Upcoming Contests
+                                Upcoming Rides
                             </h3>
                             <div className="max-w-lg mx-auto space-y-3">
                                 {upcomingContests.slice(0, 3).map(c => (
