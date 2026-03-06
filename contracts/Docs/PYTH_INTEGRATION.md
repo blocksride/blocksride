@@ -1,4 +1,4 @@
-# Pyth Oracle Integration Architecture
+\# Pyth Oracle Integration Architecture
 
 ## Overview
 
@@ -211,14 +211,96 @@ Full list: https://pyth.network/developers/price-feed-ids
 
 ## Implementation Checklist
 
-- [x] Research Pyth Network (completed in previous session)
-- [ ] Add Pyth SDK dependency to foundry.toml
-- [ ] Import Pyth contracts in PariHook.sol
-- [ ] Implement `_parsePythPrice()` helper function
-- [ ] Implement `settle()` function
-- [ ] Create settlement test suite with mock Pyth VAAs
+- [x] Research Pyth Network (completed)
+- [x] Add Pyth SDK dependency to foundry.toml
+- [x] Import Pyth contracts in PariHook.sol
+- [x] Implement `_parsePythPrice()` helper function
+- [x] Implement `settle()` function
+- [x] Create settlement test suite with mock Pyth VAAs (Settlement.t.sol - 15 tests passing)
+- [x] Create real Pyth integration tests (SettlementIntegration.t.sol)
 - [ ] Build TypeScript keeper script (~100 lines)
 - [ ] Test end-to-end settlement on testnet
+- [ ] Deploy to Base Sepolia testnet
+
+## Testing with Real Pyth Network Prices
+
+### Quick Test Script
+
+Run the Pyth integration test script to fetch real ETH/USD prices:
+
+```bash
+# Copy .env.example to .env and add your RPC URL
+cp .env.example .env
+
+# Edit .env and add:
+# BASE_SEPOLIA_RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+
+# Load environment
+source .env
+
+# Run integration script
+forge script script/TestPythIntegration.s.sol:TestPythIntegration \
+  --fork-url $BASE_SEPOLIA_RPC_URL \
+  -vvvv
+```
+
+This will display:
+- Current ETH/USD and BTC/USD prices from Pyth
+- Raw Pyth format (price, expo, conf, publishTime)
+- Converted human-readable price
+- USDC 6-decimal format (used by PariHook)
+- Grid cell mapping (cellId, price range)
+- Pyth update fee in wei/ETH/USD
+
+### Integration Tests
+
+Run full integration tests with real Pyth oracle:
+
+```bash
+# Run all integration tests
+forge test --match-contract SettlementIntegrationTest --fork-url $BASE_SEPOLIA_RPC_URL -vvv
+
+# Run specific test
+forge test --match-test test_FetchRealPythPrice_CurrentETHPrice --fork-url $BASE_SEPOLIA_RPC_URL -vvv
+```
+
+Integration test coverage:
+- `test_FetchRealPythPrice_CurrentETHPrice()` - Fetch and verify current ETH price
+- `test_FetchRealPythPrice_WithUpdateFee()` - Query and validate update fees
+- `test_PriceConversion_RealPythData()` - Test price conversion with real data
+- `test_SettlementWithRealPythPrice()` - Simulate settlement with real prices
+
+### Mock vs Real Testing
+
+**Mock Tests (Settlement.t.sol)**
+- Use `MockPythOracle` for isolated unit testing
+- No network dependency
+- Fast execution
+- Controlled price scenarios
+- Run without fork: `forge test --match-contract SettlementTest`
+
+**Integration Tests (SettlementIntegration.t.sol)**
+- Use real Pyth oracle on Base Sepolia
+- Requires network connection via fork
+- Tests actual network integration
+- Validates real-world price handling
+- Run with fork: `forge test --match-contract SettlementIntegrationTest --fork-url $BASE_SEPOLIA_RPC_URL`
+
+### Environment Variables
+
+Create a `.env` file (never commit this):
+
+```bash
+# Base Sepolia RPC
+BASE_SEPOLIA_RPC_URL=https://base-sepolia.g.alchemy.com/v2/YOUR_API_KEY
+
+# Pyth Oracle (DO NOT CHANGE)
+PYTH_ORACLE_SEPOLIA=0xA2aa501b19aff244D90cc15a4Cf739D2725B5729
+
+# Price Feed IDs (official Pyth feeds)
+ETH_USD_FEED_ID=0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace
+BTC_USD_FEED_ID=0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43
+```
 
 ## References
 

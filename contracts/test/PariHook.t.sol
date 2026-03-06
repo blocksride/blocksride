@@ -12,9 +12,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-// TODO: Re-add Pyth SDK and uncomment
-// import {IPyth} from "@pyth/IPyth.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 /**
  * @title PariHookTest
@@ -74,7 +72,9 @@ contract PariHookTest is Test {
         poolManager = IPoolManager(makeAddr("poolManager"));
 
         // Deploy PariHook — constructor sets all roles; deployer gets DEFAULT_ADMIN_ROLE
-        hook = new PariHook(poolManager, admin, treasury, relayer);
+        // Mock Pyth oracle address (not used in basic tests)
+        IPyth mockPyth = IPyth(makeAddr("pythOracle"));
+        hook = new PariHook(poolManager, mockPyth, admin, treasury, relayer);
 
         // Create test pool key
         // Note: In production, hooks address must have specific bit pattern

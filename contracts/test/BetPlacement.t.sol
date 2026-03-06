@@ -9,6 +9,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 /**
  * @title BetPlacementTest
@@ -39,8 +40,8 @@ contract BetPlacementTest is Test {
     uint256 constant MAX_STAKE_PER_CELL = 100_000_000_000; // $100,000
     uint256 constant FEE_BPS = 200; // 2%
     uint256 constant MIN_POOL_THRESHOLD = 1_000_000; // $1.00
-    // Forge default timestamp is 1; GRID_EPOCH=100 is in the future at setUp, then we warp past it
-    uint256 constant GRID_EPOCH = 100;
+    // Forge default timestamp is 1; GRID_EPOCH=120 is in the future and minute-aligned.
+    uint256 constant GRID_EPOCH = 120;
 
     // Test amounts
     uint256 constant INITIAL_USER_BALANCE = 1000_000_000; // $1000 USDC
@@ -58,7 +59,9 @@ contract BetPlacementTest is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
 
         // Deploy PariHook — address(this) is admin so pause/unpause work without vm.prank
-        hook = new PariHook(IPoolManager(address(poolManager)), address(this), treasury, relayer);
+        // Mock Pyth oracle address (not used in bet placement tests)
+        IPyth mockPyth = IPyth(address(1));
+        hook = new PariHook(IPoolManager(address(poolManager)), mockPyth, address(this), treasury, relayer);
 
         // Setup test pool key
         testKey = PoolKey({
@@ -526,6 +529,5 @@ contract MockERC20 is IERC20 {
  * @notice Mock PoolManager for testing
  */
 contract MockPoolManager {
-    // Minimal implementation for testing
-
-    }
+// Minimal implementation for testing
+}

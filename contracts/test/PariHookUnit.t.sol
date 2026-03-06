@@ -10,6 +10,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 /**
  * @title PariHookUnitTest
@@ -44,7 +45,9 @@ contract PariHookUnitTest is Test {
         poolManager = IPoolManager(makeAddr("poolManager"));
 
         // Deploy PariHook — constructor sets all roles; deployer gets DEFAULT_ADMIN_ROLE
-        hook = new PariHook(poolManager, admin, treasury, relayer);
+        // Mock Pyth oracle address (not used in unit tests)
+        IPyth mockPyth = IPyth(makeAddr("pythOracle"));
+        hook = new PariHook(poolManager, mockPyth, admin, treasury, relayer);
     }
 
     function _createTestPoolKey() internal view returns (PoolKey memory) {
@@ -266,6 +269,25 @@ contract PariHookUnitTest is Test {
             MIN_POOL_THRESHOLD,
             GRID_EPOCH,
             address(0) // Invalid
+        );
+    }
+
+    function test_ConfigureGrid_RevertWhen_GridEpochNotMinuteAligned() public {
+        PoolKey memory poolKey = _createTestPoolKey();
+
+        vm.prank(admin);
+        vm.expectRevert("gridEpoch must align to minute start");
+        hook.configureGrid(
+            poolKey,
+            ETH_USD_FEED_ID,
+            BAND_WIDTH,
+            WINDOW_DURATION,
+            FROZEN_WINDOWS,
+            MAX_STAKE_PER_CELL,
+            FEE_BPS,
+            MIN_POOL_THRESHOLD,
+            GRID_EPOCH + 1, // Invalid: not aligned to minute boundary
+            usdcToken
         );
     }
 

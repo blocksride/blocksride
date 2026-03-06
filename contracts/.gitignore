@@ -5,9 +5,14 @@ cache/
 out/
 broadcast/
 lib/
-
+lib*
 # Dotenv file
 .env
 
 # Foundry dependencies
 lib/
+
+# NPM
+package.json
+package-lock.json
+node_modules/

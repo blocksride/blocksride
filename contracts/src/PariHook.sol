@@ -17,6 +17,9 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+
 /**
  * @title PariHook
  * @notice Uniswap V4 Hook implementing parimutuel prediction markets on price movements
@@ -37,6 +40,8 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
 
     uint256 private constant BPS_DENOMINATOR = 10000;
     uint256 private constant REDEMPTION_PRECISION = 1e18;
+    bytes4 private constant PYTH_ERR_PRICE_FEED_NOT_FOUND_WITHIN_RANGE =
+        bytes4(keccak256("PriceFeedNotFoundWithinRange()"));
 
     // =============================================================
     //                      DATA STRUCTURES
@@ -131,6 +136,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     // =============================================================
 
     IPoolManager public immutable poolManager;
+    IPyth public immutable pythOracle;
 
     /// @notice Grid configurations: poolId => GridConfig
     mapping(PoolId => GridConfig) public gridConfigs;
@@ -141,8 +147,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     /// @notice Total fees collected per pool: poolId => amount
     mapping(PoolId => uint256) public collectedFees;
 
-    /// @notice Per-pool backstop balance: poolId => amount (global, for fee accounting)
+    /// @notice Current platform-seeded funds committed across windows: poolId => amount
     mapping(PoolId => uint256) public backstopBalances;
+
+    /// @notice Total amount carried forward from windows without winners (organic + backstop): poolId => amount
+    mapping(PoolId => uint256) public rolloverBalances;
 
     /// @notice Backstop depositor per window — used to refund on void: poolId => windowId => depositor
     mapping(PoolId => mapping(uint256 => address)) public backstopDepositor;
@@ -198,6 +207,9 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     event WindowRolledOver(
         PoolId indexed poolId, uint256 indexed fromWindowId, uint256 indexed toWindowId, uint256 carryAmount
     );
+    event BackstopRolledOver(
+        PoolId indexed poolId, uint256 indexed fromWindowId, uint256 indexed toWindowId, uint256 carryBackstopOnly
+    );
 
     event PayoutPushed(PoolId indexed poolId, uint256 indexed windowId, address indexed winner, uint256 amount);
 
@@ -218,14 +230,16 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     /**
      * @notice Initialize PariHook with PoolManager and role addresses
      * @param _poolManager Uniswap V4 PoolManager address
+     * @param _pythOracle Pyth Network oracle address (Base: 0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a)
      * @param _admin      Address granted ADMIN_ROLE (protocol parameters; cannot move funds)
      * @param _treasury   Address granted TREASURY_ROLE (fund movement; cannot change params)
      * @param _relayer    Address granted RELAYER_ROLE (gasless bet/claim submission)
      * @dev DEFAULT_ADMIN_ROLE is granted to msg.sender (deployer) — should be a cold hardware wallet
      *      used only to grant/revoke roles. Transfer it after deploy if needed.
      */
-    constructor(IPoolManager _poolManager, address _admin, address _treasury, address _relayer) {
+    constructor(IPoolManager _poolManager, IPyth _pythOracle, address _admin, address _treasury, address _relayer) {
         poolManager = _poolManager;
+        pythOracle = _pythOracle;
 
         // TODO: Re-enable hook address validation for production deployment
         // Hook address must be mined to have correct bit pattern
@@ -340,6 +354,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         require(feeBps <= 1000, "Fee cannot exceed 10%");
         require(minPoolThreshold > 0, "Min pool threshold must be > 0");
         require(gridEpoch > block.timestamp, "gridEpoch must be in the future");
+        require(gridEpoch % 60 == 0, "gridEpoch must align to minute start");
         require(usdcToken != address(0), "Invalid USDC address");
 
         // bandWidth == 0 is the sentinel for "not yet configured"
@@ -542,7 +557,8 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
 
     /**
      * @notice Settle a window using Pyth oracle price. Permissionless — anyone can call after windowEnd.
-     * @dev Auto-voids if Pyth price is unavailable within the 10s grace window.
+     * @dev Requires the Pyth update fee up front. Reverts on malformed/underfunded/wrong-feed updates.
+     *      Auto-void is only allowed when Pyth reports no price in the target time window.
      *      Rolls over if no bets on the winning cell. Only takes a fee when winStakes > 0.
      * @param key Pool key
      * @param windowId Window to settle
@@ -553,25 +569,84 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         payable
         nonReentrant
     {
-        // TODO: Verify window has ended: windowEnd = gridEpoch + (windowId+1)*windowDuration <= block.timestamp
-        // TODO: Verify !windows[poolId][windowId].settled && !windows[poolId][windowId].voided
-        // TODO: Parse Pyth price — parsePriceFeedUpdatesUnique(updateData, feedIds,
-        //       minPublishTime=windowEnd, maxPublishTime=windowEnd+10)
-        //       If Pyth call reverts (no price in window) → auto-void:
-        //         windows[poolId][windowId].voided = true
-        //         emit WindowVoided(poolId, windowId, windows[poolId][windowId].totalPool)
-        //         return
-        // TODO: Calculate winningCell = closingPrice / bandWidth (floor division)
-        // TODO: If organicPool < minPoolThreshold → auto-void (same path as above)
-        // TODO: If cellStakes[winningCell] == 0 → rollover:
-        //         carry totalPool to next window, no fee taken
-        //         emit WindowRolledOver(poolId, windowId, windowId+1, totalPool)
-        //         return
-        // TODO: fee = totalPool * feeBps / 10000
-        // TODO: netPool = totalPool - fee
-        // TODO: redemptionRate = netPool * 1e18 / cellStakes[winningCell]
-        // TODO: Store winningCell, redemptionRate, settled=true
-        // TODO: emit FeeCollected, emit WindowSettled
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        Window storage window = windows[poolId][windowId];
+
+        require(cfg.bandWidth != 0, "Grid not configured");
+        require(!window.settled, "Already settled");
+        require(!window.voided, "Already voided");
+        require(pythUpdateData.length > 0, "Empty Pyth update data");
+
+        // Calculate window end time
+        uint256 windowEnd = cfg.gridEpoch + ((windowId + 1) * cfg.windowDuration);
+        require(block.timestamp >= windowEnd, "Window not ended");
+
+        // Try to fetch Pyth price at windowEnd timestamp
+        // Grace period: accept prices within [windowEnd, windowEnd+10s]
+        uint64 minPublishTime = uint64(windowEnd);
+        uint64 maxPublishTime = uint64(windowEnd + 10);
+
+        bytes[] memory updateDataArray = new bytes[](1);
+        updateDataArray[0] = pythUpdateData;
+        uint256 updateFee = pythOracle.getUpdateFee(updateDataArray);
+        require(msg.value >= updateFee, "Insufficient Pyth update fee");
+        uint256 excessEth = msg.value - updateFee;
+
+        uint256 closingPrice;
+        try this._parsePythPrice{value: updateFee}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime)
+        returns (uint256 price) {
+            closingPrice = price;
+        } catch (bytes memory reason) {
+            // Only auto-void when Pyth explicitly reports no price in this publish-time range.
+            if (!_isNoPriceInRangeError(reason)) {
+                _bubbleRevert(reason);
+            }
+            window.voided = true;
+            emit WindowVoided(poolId, windowId, window.totalPool);
+            _refundExcessEth(excessEth);
+            return;
+        }
+
+        // Auto-void if organic pool below minimum threshold (prevents dust settlements)
+        if (window.organicPool < cfg.minPoolThreshold) {
+            window.voided = true;
+            emit WindowVoided(poolId, windowId, window.totalPool);
+            _refundExcessEth(excessEth);
+            return;
+        }
+
+        // Calculate winning cell from closing price
+        uint256 winningCell = closingPrice / cfg.bandWidth;
+        uint256 winStakes = window.cellStakes[winningCell];
+
+        // Rollover if no bets on winning cell — carry pool to next window
+        if (winStakes == 0) {
+            _rollover(poolId, windowId, windowId + 1);
+            _refundExcessEth(excessEth);
+            return;
+        }
+
+        // Calculate fee (only taken when there are winners)
+        uint256 fee = (window.totalPool * cfg.feeBps) / BPS_DENOMINATOR;
+        uint256 netPool = window.totalPool - fee;
+
+        // Calculate redemption rate: how much each staked USDC returns
+        uint256 redemptionRate = (netPool * REDEMPTION_PRECISION) / winStakes;
+
+        // Store settlement results
+        window.winningCell = winningCell;
+        window.redemptionRate = redemptionRate;
+        window.settled = true;
+
+        // Update fee accounting
+        collectedFees[poolId] += fee;
+
+        emit FeeCollected(poolId, windowId, fee);
+        emit WindowSettled(poolId, windowId, winningCell, closingPrice, redemptionRate);
+
+        // Refund any excess ETH the caller sent above Pyth's required update fee.
+        _refundExcessEth(excessEth);
     }
 
     // =============================================================
@@ -665,6 +740,24 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         // TODO: backstopBalances[poolId] += amount
         // TODO: backstopDepositor[poolId][windowId] = msg.sender
         // TODO: emit BackstopDeposited(poolId, windowId, amount)
+    }
+
+    /**
+     * @notice Manually void a window when settlement fails or oracle data is unavailable
+     * @dev Only ADMIN_ROLE can void windows. Users can claim full refunds from voided windows.
+     * @param key Pool key
+     * @param windowId Window to void
+     */
+    function voidWindow(PoolKey calldata key, uint256 windowId) external onlyRole(ADMIN_ROLE) {
+        PoolId poolId = key.toId();
+        Window storage window = windows[poolId][windowId];
+
+        require(!window.settled, "Window already settled");
+        require(!window.voided, "Window already voided");
+
+        window.voided = true;
+
+        emit WindowVoided(poolId, windowId, window.totalPool);
     }
 
     /**
@@ -869,7 +962,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param cellId Cell ID
      * @return Multiplier in 1e18 precision (e.g., 1.5e18 = 1.5x)
      */
-    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
+    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId)
+        external
+        view
+        returns (uint256)
+    {
         // TODO: Calculate (totalPool * (10000 - feeBps) / 10000) * 1e18 / cellStakes[cellId]
         return 0;
     }
@@ -926,22 +1023,57 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
 
     /**
      * @notice Parse Pyth price at specific timestamp
-     * @param pythUpdateData Pyth VAA bytes
+     * @dev Made public payable (not internal) to enable try-catch in settle() and forward msg.value to Pyth
+     * @param pythUpdateData Pyth VAA bytes from Hermes API
      * @param priceFeedId Pyth price feed ID
-     * @param timestamp Expected price timestamp
+     * @param minPublishTime Minimum acceptable publish timestamp (windowEnd)
+     * @param maxPublishTime Maximum acceptable publish timestamp (windowEnd + 10s grace period)
      * @return price Price in USDC base units (6 decimals)
      */
-    // TODO: Re-add Pyth imports and implement this function
-    // function _parsePythPrice(
-    //     bytes calldata pythUpdateData,
-    //     bytes32 priceFeedId,
-    //     uint256 timestamp
-    // ) internal returns (uint256 price) {
-    //     // TODO: Call pythOracle.parsePriceFeedUpdates()
-    //     // TODO: Verify price timestamp matches windowEnd (±2s buffer)
-    //     // TODO: Convert Pyth price to USDC 6-decimal format
-    //     return 0;
-    // }
+    function _parsePythPrice(
+        bytes calldata pythUpdateData,
+        bytes32 priceFeedId,
+        uint64 minPublishTime,
+        uint64 maxPublishTime
+    ) public payable returns (uint256 price) {
+        // Wrap updateData in array format required by Pyth
+        bytes[] memory updateDataArray = new bytes[](1);
+        updateDataArray[0] = pythUpdateData;
+
+        // Wrap priceFeedId in array
+        bytes32[] memory priceIds = new bytes32[](1);
+        priceIds[0] = priceFeedId;
+
+        // Call Pyth oracle to parse and verify price at exact timestamp
+        // Reverts if no price available in the [minPublishTime, maxPublishTime] window
+        PythStructs.PriceFeed[] memory priceFeeds = pythOracle.parsePriceFeedUpdates{value: msg.value}(
+            updateDataArray, priceIds, minPublishTime, maxPublishTime
+        );
+
+        PythStructs.Price memory pythPrice = priceFeeds[0].price;
+
+        // Convert Pyth price format to USDC 6-decimal format
+        // Pyth price = pythPrice.price * 10^(pythPrice.expo)
+        // Target format = price * 10^6 (USDC has 6 decimals)
+        // Formula: targetPrice = pythPrice.price * 10^(pythPrice.expo + 6)
+        require(pythPrice.price > 0, "Invalid Pyth price");
+
+        int32 expo = pythPrice.expo;
+        int64 rawPrice = pythPrice.price;
+
+        // Calculate exponent adjustment: expo + 6
+        int32 expoAdjustment = expo + 6;
+
+        if (expoAdjustment >= 0) {
+            // Multiply: price * 10^expoAdjustment
+            price = uint256(uint64(rawPrice)) * (10 ** uint32(expoAdjustment));
+        } else {
+            // Divide: price / 10^(-expoAdjustment)
+            price = uint256(uint64(rawPrice)) / (10 ** uint32(-expoAdjustment));
+        }
+
+        require(price > 0, "Price conversion failed");
+    }
 
     /**
      * @notice Roll over pool to next window (no winners)
@@ -950,9 +1082,53 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param toWindowId Destination window
      */
     function _rollover(PoolId poolId, uint256 fromWindowId, uint256 toWindowId) internal {
-        // TODO: Move totalPool to next window's backstopPool
-        // TODO: Mark source window as settled (no redemptionRate)
-        // TODO: Emit WindowRolledOver event
+        Window storage fromWindow = windows[poolId][fromWindowId];
+        Window storage toWindow = windows[poolId][toWindowId];
+
+        uint256 carryAmount = fromWindow.totalPool;
+        uint256 carryBackstopOnly = fromWindow.backstopPool;
+
+        // Carry total pool forward for the next window's payout accounting and
+        // preserve how much of that carried value came from platform backstop.
+        toWindow.totalPool += carryAmount;
+        toWindow.backstopPool += carryBackstopOnly;
+
+        // Distinct global totals for auditability:
+        // - rolloverBalances tracks all carried value (organic + backstop)
+        // - backstopBalances tracks active platform-seeded capital and should
+        //   not change when the same funds are merely moved between windows
+        rolloverBalances[poolId] += carryAmount;
+
+        // Mark source window as settled (no winning cell, no redemption rate)
+        fromWindow.settled = true;
+
+        emit WindowRolledOver(poolId, fromWindowId, toWindowId, carryAmount);
+        emit BackstopRolledOver(poolId, fromWindowId, toWindowId, carryBackstopOnly);
+    }
+
+    function _isNoPriceInRangeError(bytes memory reason) internal pure returns (bool) {
+        if (reason.length < 4) return false;
+
+        bytes4 selector;
+        assembly {
+            selector := mload(add(reason, 0x20))
+        }
+
+        return selector == PYTH_ERR_PRICE_FEED_NOT_FOUND_WITHIN_RANGE;
+    }
+
+    function _bubbleRevert(bytes memory reason) internal pure {
+        if (reason.length == 0) revert("Pyth parse failed");
+        assembly {
+            revert(add(reason, 0x20), mload(reason))
+        }
+    }
+
+    function _refundExcessEth(uint256 amount) internal {
+        if (amount == 0) return;
+
+        (bool refunded,) = msg.sender.call{value: amount}("");
+        require(refunded, "Excess fee refund failed");
     }
 
     /**

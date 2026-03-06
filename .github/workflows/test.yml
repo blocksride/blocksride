@@ -24,7 +24,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: stable
+          version: 1.2.3
 
       - name: Install Forge dependencies
         run: |
@@ -36,6 +36,13 @@ jobs:
       - name: Show Forge version
         run: |
           forge --version
+        working-directory: contracts
+
+      - name: Patch deprecated Pyth NatSpec annotations
+        run: |
+          sed -i '/@pythnetwork\/pyth-sdk-solidity/d' lib/pyth-sdk-solidity/PythStructs.sol
+          sed -i '/@pythnetwork\/pyth-sdk-solidity/d' lib/pyth-sdk-solidity/IPythEvents.sol
+          sed -i '/@pythnetwork\/pyth-sdk-solidity/d' lib/pyth-sdk-solidity/IPyth.sol
         working-directory: contracts
 
       - name: Run Forge fmt
