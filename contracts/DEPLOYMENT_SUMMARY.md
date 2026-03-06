@@ -1,8 +1,8 @@
 # BlocksRide Deployment Summary & User Flow Explanation
 
 - **Date:** March 6, 2026
-**Network:** Base Sepolia
-**Status:** Phase 1 Complete ✅
+- **Network:** Base Sepolia
+- **Status:** Phase 1 Complete ✅
 
 ---
 
