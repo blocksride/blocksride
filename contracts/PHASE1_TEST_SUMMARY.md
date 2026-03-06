@@ -158,7 +158,7 @@ Since window 891 was voided, you can claim your 0.1 USDC back:
 # Create a claim refund script or call directly:
 cast send 0xdbB492353B57698a5443bF1846F00c71EFA41824 \
   "claimRefund((address,address,uint24,int24,address),uint256)" \
-  "(<currency0>,<currency1>,3000,60,<PariHook>)" \
+  "(0x036CbD53842c5426634e7929541eC2318f3dCF7e,0x0000000000000000000000000000000000000000,0,60,0xdbB492353B57698a5443bF1846F00c71EFA41824)" \
   891 \
   --private-key $PRIVATE_KEY \
   --rpc-url $BASE_SEPOLIA_RPC_URL

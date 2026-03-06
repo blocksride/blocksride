@@ -40,8 +40,6 @@ contract TestSettlement is Script {
 
     // Constants
     bytes32 public constant ETH_USD_FEED_ID = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace;
-    uint256 public constant GRID_EPOCH = 1772471340;
-    uint256 public constant WINDOW_DURATION = 60;
 
     function run() public view {
         address user = vm.addr(vm.envUint("PRIVATE_KEY"));
@@ -52,16 +50,17 @@ contract TestSettlement is Script {
         console.log("============================================\n");
 
         // Create pool key
-        Currency currency0 = Currency.wrap(address(0x0000000000000000000000000000000000000001));
-        Currency currency1 = Currency.wrap(address(0x036CbD53842c5426634e7929541eC2318f3dCF7e));
+        Currency currency0 = Currency.wrap(address(0x036CbD53842c5426634e7929541eC2318f3dCF7e));
+        Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: 3000,
+            fee: 0,
             tickSpacing: 60,
             hooks: IHooks(address(PARI_HOOK))
         });
+        PoolId poolId = poolKey.toId();
 
         // Our bet was on window 891
         uint256 targetWindow = 891;
@@ -92,7 +91,9 @@ contract TestSettlement is Script {
         console.log("STEP 2: Check Timing");
         console.log("--------------------------------------------\n");
 
-        uint256 windowEnd = GRID_EPOCH + ((targetWindow + 1) * WINDOW_DURATION);
+        (,, uint256 windowDuration,,,, uint256 gridEpoch,,) = PARI_HOOK.gridConfigs(poolId);
+
+        uint256 windowEnd = gridEpoch + ((targetWindow + 1) * windowDuration);
         uint256 currentTime = block.timestamp;
 
         console.log("  Window End Time:", windowEnd);

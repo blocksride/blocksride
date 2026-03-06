@@ -8,6 +8,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
@@ -30,6 +31,8 @@ import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
  * 5. Display next steps for pool initialization
  */
 contract TestPariHookIntegration is Script {
+    using PoolIdLibrary for PoolKey;
+
     // Deployed contract addresses
     PariHook public constant PARI_HOOK = PariHook(0xdbB492353B57698a5443bF1846F00c71EFA41824);
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408);
@@ -131,18 +134,18 @@ contract TestPariHookIntegration is Script {
     }
 
     function testConfigureGrid(uint256 adminPrivateKey) internal {
-        // Create a dummy pool key for testing
-        // Note: This is just for configureGrid testing. Actual pool initialization happens later.
-        Currency currency0 = Currency.wrap(address(0x0000000000000000000000000000000000000001)); // Dummy
-        Currency currency1 = Currency.wrap(USDC);
+        // Use the same pool key expected by keeper/frontend.
+        Currency currency0 = Currency.wrap(USDC);
+        Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: 3000, // 0.3%
+            fee: 0,
             tickSpacing: 60,
             hooks: IHooks(address(PARI_HOOK))
         });
+        PoolId poolId = poolKey.toId();
 
         // Calculate gridEpoch: 5 minutes from now, aligned to minute boundary
         uint256 currentTime = block.timestamp;
@@ -156,6 +159,7 @@ contract TestPariHookIntegration is Script {
         console.log("  maxStakePerCell: 100000000000 ($100,000)");
         console.log("  feeBps: 200 (2%)");
         console.log("  minPoolThreshold: 1000000 ($1.00)");
+        console.log("  poolId:", vm.toString(PoolId.unwrap(poolId)));
         console.log("  gridEpoch:", gridEpoch);
         console.log("  usdcToken:", USDC);
         console.log("");
@@ -185,14 +189,14 @@ contract TestPariHookIntegration is Script {
     }
 
     function testViewFunctions() internal view {
-        // Create same dummy pool key for querying
-        Currency currency0 = Currency.wrap(address(0x0000000000000000000000000000000000000001));
-        Currency currency1 = Currency.wrap(USDC);
+        // Query the same configured pool key.
+        Currency currency0 = Currency.wrap(USDC);
+        Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: 3000,
+            fee: 0,
             tickSpacing: 60,
             hooks: IHooks(address(PARI_HOOK))
         });

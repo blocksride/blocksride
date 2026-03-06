@@ -50,6 +50,15 @@
 
 Before users can place bets, you need to configure a grid using the `configureGrid()` function.
 
+Use this exact pool key (matches keeper/frontend):
+
+- `currency0`: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (USDC)
+- `currency1`: `0x0000000000000000000000000000000000000000` (native ETH sentinel)
+- `fee`: `0`
+- `tickSpacing`: `60`
+- `hooks`: `0xdbB492353B57698a5443bF1846F00c71EFA41824`
+- `poolId`: `0x83e7f0a67dd9517dc10cb7f40c338e542acc1d132e931483605b05dcc4402463`
+
 **Example Configuration:**
 
 ```solidity

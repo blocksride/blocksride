@@ -67,18 +67,18 @@ contract TestBettingFlow is Script {
         require(usdcBalance >= 1_000_000, "Need at least 1 USDC for testing");
         require(ethBalance > 0, "Need some ETH for gas");
 
-        // Step 2: Create pool key (same as in grid config test)
+        // Step 2: Create pool key (same as keeper/frontend config)
         console.log("--------------------------------------------");
         console.log("STEP 2: Setup Pool Key");
         console.log("--------------------------------------------\n");
 
-        Currency currency0 = Currency.wrap(address(0x0000000000000000000000000000000000000001));
-        Currency currency1 = Currency.wrap(address(USDC));
+        Currency currency0 = Currency.wrap(address(USDC));
+        Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: 3000,
+            fee: 0,
             tickSpacing: 60,
             hooks: IHooks(address(PARI_HOOK))
         });
@@ -203,14 +203,14 @@ contract TestBettingFlow is Script {
         console.log("");
 
         console.log("Grid Epoch Info:");
-        // Note: We can't easily read gridEpoch from the mapping, but we know it from config
-        console.log("  Grid starts at epoch: 1772471340");
-        console.log("  Window duration: 60 seconds");
+        (,, uint256 windowDuration,,,, uint256 gridEpoch,,) = PARI_HOOK.gridConfigs(poolId);
+        console.log("  Grid starts at epoch:", gridEpoch);
+        console.log("  Window duration:", windowDuration, "seconds");
         console.log("  Current block.timestamp:", block.timestamp);
 
-        if (block.timestamp < 1772471340) {
+        if (block.timestamp < gridEpoch) {
             console.log("  [WARN] Grid hasn't started yet!");
-            console.log("  Grid starts in:", 1772471340 - block.timestamp, "seconds");
+            console.log("  Grid starts in:", gridEpoch - block.timestamp, "seconds");
         }
         console.log("");
     }

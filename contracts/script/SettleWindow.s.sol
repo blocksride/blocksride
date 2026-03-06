@@ -37,13 +37,13 @@ contract SettleWindow is Script {
         console.log("============================================\n");
 
         // Create pool key
-        Currency currency0 = Currency.wrap(address(0x0000000000000000000000000000000000000001));
-        Currency currency1 = Currency.wrap(address(0x036CbD53842c5426634e7929541eC2318f3dCF7e));
+        Currency currency0 = Currency.wrap(address(0x036CbD53842c5426634e7929541eC2318f3dCF7e));
+        Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
-            fee: 3000,
+            fee: 0,
             tickSpacing: 60,
             hooks: IHooks(address(PARI_HOOK))
         });
