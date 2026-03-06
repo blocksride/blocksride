@@ -35,7 +35,7 @@ contract TestBettingFlow is Script {
     using CurrencyLibrary for Currency;
 
     // Deployed contracts
-    PariHook public constant PARI_HOOK = PariHook(0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7);
+    PariHook public constant PARI_HOOK = PariHook(0xdbB492353B57698a5443bF1846F00c71EFA41824);
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408);
     IERC20 public constant USDC = IERC20(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
 

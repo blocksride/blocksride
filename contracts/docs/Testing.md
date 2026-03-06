@@ -84,7 +84,7 @@ The skipped suite was `SettlementIntegrationTest`, which only runs on an active 
 ### Base Sepolia Validation
 
 **Validation date:** March 2, 2026  
-**Contract:** `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
+**Contract:** `0xdbB492353B57698a5443bF1846F00c71EFA41824`
 
 Verified successfully:
 

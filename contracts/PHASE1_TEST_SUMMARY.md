@@ -1,9 +1,15 @@
 # Phase 1: Core Betting System - Test Results
 
-**Test Date:** March 3, 2026
+**Test Date:** March 6, 2026
 **Network:** Base Sepolia
-**Contract:** `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
-**Status:** ✅ **ALL CORE FUNCTIONS WORKING**
+**Contract:** `0xdbB492353B57698a5443bF1846F00c71EFA41824`
+**Status:** ✅ **Core flow revalidated on redeployed contract**
+
+**Latest On-Chain Revalidation (March 6, 2026):**
+- Deployment tx: `0xa8079b1455964cb032a3f2a4f83719227dcd53bb23f931fcf85397e369ab8b04`
+- Grid config tx: `0xd071e6cf0121cdaffc744ff60291f15d7ba3fc76ac7cc12f67e4eaf1cf368a71`
+- Bet placement tx: `0xd4a9b9db4c8a58c9d92f00607ad8f030d0c5dff21ef5ad76a8a7a088553bbd64`
+- Winnings claim status: **No successful winner claim executed yet** (no settled winning window with payout run in this validation pass).
 
 ---
 
@@ -12,7 +18,7 @@
 ### ✅ Test 1: Bet Placement (PASSED)
 
 **Transaction:** Successfully placed 0.1 USDC bet
-**Window:** 891
+**Window:** 6
 **Cell ID:** 1029 ($2,058 - $2,060)
 **Amount:** 100,000 USDC units (0.1 USDC)
 
@@ -150,7 +156,7 @@ Since window 891 was voided, you can claim your 0.1 USDC back:
 
 ```bash
 # Create a claim refund script or call directly:
-cast send 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 \
+cast send 0xdbB492353B57698a5443bF1846F00c71EFA41824 \
   "claimRefund((address,address,uint24,int24,address),uint256)" \
   "(<currency0>,<currency1>,3000,60,<PariHook>)" \
   891 \

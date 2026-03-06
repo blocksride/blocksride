@@ -26,7 +26,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
  */
 contract SettleWindow is Script {
     // Deployed contracts
-    PariHook public constant PARI_HOOK = PariHook(0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7);
+    PariHook public constant PARI_HOOK = PariHook(0xdbB492353B57698a5443bF1846F00c71EFA41824);
 
     function run() public {
         uint256 userPrivateKey = vm.envUint("PRIVATE_KEY");
