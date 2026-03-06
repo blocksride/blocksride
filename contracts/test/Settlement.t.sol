@@ -36,7 +36,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * - Production uses real IPyth contract deployed on Base:
  *   - Base Mainnet: 0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a
  *   - Base Sepolia: 0xA2aa501b19aff244D90cc15a4Cf739D2725B5729
- * - Keeper script implementation: See Docs/PYTH_INTEGRATION.md
+ * - Keeper script implementation: See docs/PythIntegration.md
  */
 contract SettlementTest is Test {
     using PoolIdLibrary for PoolKey;
