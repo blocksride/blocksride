@@ -133,12 +133,40 @@ export const ContestProvider = ({ children }: ContestProviderProps) => {
         fetchContests()
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Periodically refresh contest status
+    // Periodically refresh contest status while tab is visible.
+    // Reduces noisy background polling and transient upstream timeouts.
     useEffect(() => {
-        const interval = setInterval(() => {
-            fetchContestsRef.current?.()
-        }, 30000) // every 30 seconds
-        return () => clearInterval(interval)
+        let interval: ReturnType<typeof setInterval> | null = null
+
+        const startPolling = () => {
+            if (interval) return
+            interval = setInterval(() => {
+                fetchContestsRef.current?.()
+            }, 300000) // every 5 minutes
+        }
+
+        const stopPolling = () => {
+            if (!interval) return
+            clearInterval(interval)
+            interval = null
+        }
+
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                fetchContestsRef.current?.()
+                startPolling()
+                return
+            }
+            stopPolling()
+        }
+
+        handleVisibility()
+        document.addEventListener('visibilitychange', handleVisibility)
+
+        return () => {
+            stopPolling()
+            document.removeEventListener('visibilitychange', handleVisibility)
+        }
     }, [])
 
     const refreshContests = async () => {

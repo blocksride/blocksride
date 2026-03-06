@@ -1,7 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPublicClient, http, parseAbiItem } from 'viem'
 import { api } from '../services/apiService'
 import type { Grid, Cell, Position } from '../types/grid'
 import { useAuth } from '../contexts/AuthContext'
+import { betService } from '../services/betService'
+import { activeChain } from '@/providers/Web3Provider'
+
+const BET_PLACED_EVENT = parseAbiItem(
+    'event BetPlaced(bytes32 indexed poolId, uint256 indexed windowId, uint256 indexed cellId, address user, uint256 amount)',
+)
+
+const estimateFromBlock = (latestBlock: bigint, grid: Grid | null) => {
+    if (!grid) {
+        return latestBlock > 120_000n ? latestBlock - 120_000n : 0n
+    }
+
+    const gridStartSec = Math.floor(new Date(grid.start_time).getTime() / 1000)
+    const nowSec = Math.floor(Date.now() / 1000)
+    const ageSec = Math.max(0, nowSec - gridStartSec)
+    const approxBlocks = BigInt(Math.ceil(ageSec / 2) + 5_000) // Base blocks ~2s + safety
+    return latestBlock > approxBlocks ? latestBlock - approxBlocks : 0n
+}
 
 export function useGridPositions(
     selectedAsset: string,
@@ -16,7 +35,7 @@ export function useGridPositions(
     >({})
     const [selectedCells, setSelectedCells] = useState<string[]>([])
     const [totalActiveStake, setTotalActiveStake] = useState(0)
-    const { authenticated } = useAuth()
+    const { authenticated, walletAddress } = useAuth()
 
     // Use ref to always have latest cells without triggering dependency
     const cellsRef = useRef<Cell[]>(cells)
@@ -40,9 +59,56 @@ export function useGridPositions(
 
                 const currentCells = cellsRef.current
 
-                // Fetch user's positions (for tracking their own bets)
-                // Filter by practice mode to show only relevant positions
-                const { data } = await api.getPositions(isPracticeMode)
+                let data: Position[] = []
+                if (isPracticeMode) {
+                    // Practice mode remains API-backed.
+                    const response = await api.getPositions(true)
+                    data = response.data
+                } else {
+                    // Real mode: read user bets directly from on-chain logs in browser.
+                    if (!walletAddress) return
+
+                    const pools = await betService.getPools()
+                    const pool = pools.find(p => p.assetId === selectedAsset)
+                    if (!pool) return
+
+                    const publicClient = createPublicClient({
+                        chain: activeChain,
+                        transport: http(),
+                    })
+
+                    const latestBlock = await publicClient.getBlockNumber()
+                    const fromBlock = estimateFromBlock(latestBlock, grid)
+
+                    const logs = await publicClient.getLogs({
+                        address: pool.poolKey.hooks as `0x${string}`,
+                        event: BET_PLACED_EVENT,
+                        args: {
+                            poolId: pool.poolId as `0x${string}`,
+                        },
+                        fromBlock,
+                        toBlock: latestBlock,
+                    })
+
+                    data = logs
+                        .filter((log) => (log.args.user || '').toLowerCase() === walletAddress.toLowerCase())
+                        .map((log) => {
+                            const windowId = Number(log.args.windowId ?? 0n)
+                            const cellId = Number(log.args.cellId ?? 0n)
+                            const amount = Number(log.args.amount ?? 0n) / 1_000_000
+                            const slotId = `${windowId}_${cellId}`
+
+                            return {
+                                position_id: `${log.transactionHash}-${log.logIndex}`,
+                                user_id: walletAddress,
+                                asset_id: selectedAsset,
+                                cell_id: slotId,
+                                stake: amount,
+                                state: 'ACTIVE',
+                                is_practice: false,
+                            } as Position
+                        })
+                }
 
                 // Check if still mounted before updating state
                 if (!isMounted) return
@@ -149,7 +215,7 @@ export function useGridPositions(
             window.removeEventListener('cell_resolved', debouncedLoadPositions)
             window.removeEventListener('position_updated', debouncedLoadPositions)
         }
-    }, [selectedAsset, grid, authenticated, isPracticeMode])  // Removed cells.length - we listen to cells_refreshed instead
+    }, [selectedAsset, grid, authenticated, isPracticeMode, walletAddress])  // Removed cells.length - we listen to cells_refreshed instead
 
     useEffect(() => {
         if (!grid || selectedCells.length === 0) return

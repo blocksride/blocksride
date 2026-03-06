@@ -2,22 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import type { PricePoint } from '../types/grid'
 
 type AssetConfig = {
-    coinId: string
-    symbol: string
     defaultPrice: number
     volatility: number
 }
 
 const ASSET_CONFIG: Record<string, AssetConfig> = {
     'ETH-USD': {
-        coinId: 'ethereum',
-        symbol: 'ETH',
         defaultPrice: 3000,
         volatility: 2.5,
     },
     'BTC-USD': {
-        coinId: 'bitcoin',
-        symbol: 'BTC',
         defaultPrice: 50000,
         volatility: 18,
     },
@@ -27,22 +21,14 @@ const getAssetConfig = (assetId: string) => {
     return ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
 }
 
-const fetchCoingeckoPrice = async (coinId: string) => {
-    const url = `/coingecko/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
+const fetchPublicPrice = async (assetId: string) => {
+    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080'
+    const baseURL = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`
+    const url = `${baseURL}/public-price?asset_id=${encodeURIComponent(assetId)}`
     const res = await fetch(url)
     if (!res.ok) return null
     const data = await res.json()
-    const price = data?.[coinId]?.usd
-    return typeof price === 'number' ? price : null
-}
-
-const fetchCoinbasePrice = async (symbol: string) => {
-    const url = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const data = await res.json()
-    const price = data?.data?.amount
-    const parsed = price ? Number(price) : NaN
+    const parsed = Number(data?.price)
     return Number.isFinite(parsed) ? parsed : null
 }
 
@@ -64,19 +50,11 @@ export const usePublicPriceFeed = (assetId: string) => {
         seededRef.current = false
 
         const updateTarget = async () => {
-            const coingeckoPrice = await fetchCoingeckoPrice(config.coinId)
+            const publicPrice = await fetchPublicPrice(assetId)
             if (!mountedRef.current) return
 
-            if (coingeckoPrice !== null) {
-                targetPriceRef.current = coingeckoPrice
-                return
-            }
-
-            const coinbasePrice = await fetchCoinbasePrice(config.symbol)
-            if (!mountedRef.current) return
-
-            if (coinbasePrice !== null) {
-                targetPriceRef.current = coinbasePrice
+            if (publicPrice !== null) {
+                targetPriceRef.current = publicPrice
                 return
             }
 
@@ -128,7 +106,7 @@ export const usePublicPriceFeed = (assetId: string) => {
             window.clearInterval(pollId)
             window.clearInterval(tickId)
         }
-    }, [assetId, config.coinId, config.defaultPrice, config.symbol, config.volatility])
+    }, [assetId, config.defaultPrice, config.volatility])
 
     return { prices, currentPrice }
 }

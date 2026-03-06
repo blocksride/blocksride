@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import type { Grid, Cell, Position } from '@/types/grid'
 import { usePublicPriceFeed } from '@/hooks/usePublicPriceFeed'
 import { useGridViewport } from '@/hooks/useGridViewport'
@@ -9,6 +8,7 @@ import { TradeControls } from '@/components/grid/TradeControls'
 import { PositionSummary } from '@/components/grid/PositionSummary'
 import { BetHistory } from '@/components/grid/BetHistory'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface GuestTerminalProps {
     assetId: string
@@ -20,7 +20,7 @@ const ASSET_META: Record<string, { defaultPrice: number; priceInterval: number }
 }
 
 export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
-    const navigate = useNavigate()
+    const { authenticated, signIn } = useAuth()
     const assetMeta = ASSET_META[assetId] || ASSET_META['ETH-USD']
     const { prices, currentPrice } = usePublicPriceFeed(assetId)
 
@@ -118,8 +118,8 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
     }, [])
 
     const promptConnect = useCallback(() => {
-        navigate('/', { state: { autoSignIn: true } })
-    }, [navigate])
+        signIn()
+    }, [signIn])
 
     const handleCellClick = useCallback(() => {
         promptConnect()
@@ -248,10 +248,10 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
 
                 <div
                     className="absolute inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center text-center p-6"
-                    role="button"
-                    tabIndex={0}
-                    onClick={promptConnect}
-                    onKeyDown={(event) => {
+                    role={authenticated ? undefined : 'button'}
+                    tabIndex={authenticated ? -1 : 0}
+                    onClick={authenticated ? undefined : promptConnect}
+                    onKeyDown={authenticated ? undefined : (event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                             promptConnect()
                         }
@@ -259,24 +259,28 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
                 >
                     <div className="border border-border bg-card/90 p-4 rounded-lg shadow-lg">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                            Guest Mode
+                            {authenticated ? 'Read-only mode' : 'Guest mode'}
                         </div>
                         <div className="text-sm font-semibold text-foreground mt-2">
-                            Connect to trade
+                            {authenticated ? 'Trading disabled in REST-only mode' : 'Connect to trade'}
                         </div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            Sign in with Privy to place bets and view balances.
+                            {authenticated
+                                ? 'Live prices are available. Run full API mode to enable betting and balances.'
+                                : 'Sign in with Privy to place bets and view balances.'}
                         </div>
-                        <Button
-                            size="sm"
-                            className="mt-3"
-                            onClick={(event) => {
-                                event.stopPropagation()
-                                navigate('/', { state: { autoSignIn: true } })
-                            }}
-                        >
-                            Connect to trade
-                        </Button>
+                        {!authenticated && (
+                            <Button
+                                size="sm"
+                                className="mt-3"
+                                onClick={(event) => {
+                                    event.stopPropagation()
+                                    signIn()
+                                }}
+                            >
+                                Connect to trade
+                            </Button>
+                        )}
                     </div>
                 </div>
             </aside>

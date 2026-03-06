@@ -1,4 +1,4 @@
-import { type WalletClient } from 'viem'
+import { encodeAbiParameters, isAddress, keccak256, type WalletClient } from 'viem'
 import axiosInstance from '../utility/axiosInterceptor'
 
 // Pool shape returned by GET /api/pools
@@ -16,6 +16,14 @@ export interface Pool {
     priceFeedId?: string
     gridEpoch: number
     windowDurationSec: number
+}
+
+export interface PoolKey {
+    currency0: string
+    currency1: string
+    fee: number
+    tickSpacing: number
+    hooks: string
 }
 
 export interface ScheduledBet {
@@ -52,10 +60,48 @@ const CLAIM_INTENT_TYPES = {
 } as const
 
 export const betService = {
+    normalizePoolId: (pool: Pool): `0x${string}` => {
+        const candidate = pool.poolId as `0x${string}` | undefined
+        if (candidate && /^0x[0-9a-fA-F]{64}$/.test(candidate)) {
+            return candidate
+        }
+
+        const key = pool.poolKey
+        if (
+            !isAddress(key.currency0) ||
+            !isAddress(key.currency1) ||
+            !isAddress(key.hooks)
+        ) {
+            throw new Error('Invalid pool key addresses from /api/pools')
+        }
+
+        const encoded = encodeAbiParameters(
+            [
+                { name: 'currency0', type: 'address' },
+                { name: 'currency1', type: 'address' },
+                { name: 'fee', type: 'uint24' },
+                { name: 'tickSpacing', type: 'int24' },
+                { name: 'hooks', type: 'address' },
+            ],
+            [
+                key.currency0 as `0x${string}`,
+                key.currency1 as `0x${string}`,
+                key.fee,
+                key.tickSpacing,
+                key.hooks as `0x${string}`,
+            ],
+        )
+
+        return keccak256(encoded)
+    },
+
     // GET /api/pools — returns all keeper-configured pools
     getPools: async (): Promise<Pool[]> => {
         const res = await axiosInstance.get<Pool[]>('/pools')
-        return res.data
+        return res.data.map((pool) => ({
+            ...pool,
+            poolId: betService.normalizePoolId(pool),
+        }))
     },
 
     // GET /api/relay/bet-nonce — on-chain nonce from PariHook.betNonces(user)
@@ -79,6 +125,8 @@ export const betService = {
         const nonce    = await betService.getBetNonce(userAddress)
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 300) // 5 min
 
+        const normalizedPoolId = betService.normalizePoolId(pool)
+
         const signature = await walletClient.signTypedData({
             account: userAddress,
             domain: {
@@ -91,7 +139,7 @@ export const betService = {
             primaryType: 'BetIntent',
             message: {
                 user:     userAddress,
-                poolId:   pool.poolId as `0x${string}`,
+                poolId:   normalizedPoolId,
                 cellId:   BigInt(cellId),
                 windowId: BigInt(windowId),
                 amount:   amountUsdc,
@@ -101,7 +149,8 @@ export const betService = {
         })
 
         const res = await axiosInstance.post<ScheduledBet>('/relay/bet', {
-            poolId:        pool.poolId,
+            poolId:        normalizedPoolId,
+            poolKey:       pool.poolKey,
             cellId:        cellId.toString(),
             windowId:      windowId.toString(),
             amount:        amountUsdc.toString(),
@@ -138,6 +187,8 @@ export const betService = {
         const nonce    = await betService.getClaimNonce(userAddress)
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 300) // 5 min
 
+        const normalizedPoolId = betService.normalizePoolId(pool)
+
         const signature = await walletClient.signTypedData({
             account: userAddress,
             domain: {
@@ -150,7 +201,7 @@ export const betService = {
             primaryType: 'ClaimIntent',
             message: {
                 user:      userAddress,
-                poolId:    pool.poolId as `0x${string}`,
+                poolId:    normalizedPoolId,
                 windowIds: windowIds.map(BigInt),
                 nonce,
                 deadline,
@@ -158,7 +209,7 @@ export const betService = {
         })
 
         const res = await axiosInstance.post<SubmittedClaim>('/relay/claim', {
-            poolId:    pool.poolId,
+            poolId:    normalizedPoolId,
             windowIds: windowIds.map(String),
             nonce:     nonce.toString(),
             deadline:  deadline.toString(),
