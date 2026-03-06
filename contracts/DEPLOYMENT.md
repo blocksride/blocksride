@@ -1,6 +1,6 @@
 # PariHook Deployment - Base Sepolia
 
-**Deployment Date:** March 2, 2026
+**Deployment Date:** March 6, 2026
 **Network:** Base Sepolia (Chain ID: 84532)
 **Status:** ✅ Successfully Deployed
 
@@ -8,9 +8,9 @@
 
 ## Deployed Contract Address
 
-**PariHook:** `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
+**PariHook:** `0xdbB492353B57698a5443bF1846F00c71EFA41824`
 
-🔗 **View on BaseScan:** https://sepolia.basescan.org/address/0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7
+🔗 **View on BaseScan:** https://sepolia.basescan.org/address/0xdbB492353B57698a5443bF1846F00c71EFA41824
 
 ---
 
@@ -37,10 +37,10 @@
 
 | Parameter | Value |
 |-----------|-------|
-| DOMAIN_SEPARATOR | `0xa29a4fc8723aa822b9ed6678a61d3b12af2c91e21e276ce6fd9d687887ef6ffd` |
+| DOMAIN_SEPARATOR | `0xb7d37e0507fb6aefc4ab709677d9ebfee116c8f0d0763a40e8a8e28f37f61ab9` |
 | Paused | `false` |
-| Gas Used | 5,378,617 |
-| Deployment Cost | 0.000032271702 ETH |
+| Gas Used | 4,394,564 |
+| Deployment Cost | 0.000026373199325979 ETH |
 
 ---
 
@@ -85,7 +85,7 @@ Update your backend configuration with the deployed contract address:
 
 **Backend `.env` updates:**
 ```bash
-PARIHOOK_CONTRACT_ADDRESS=0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7
+PARIHOOK_CONTRACT_ADDRESS=0xdbB492353B57698a5443bF1846F00c71EFA41824
 RELAYER_PRIVATE_KEY=[private key for 0xF41886af501e2a0958dBD31D9a28AcD6c2f5db06]
 ADMIN_PRIVATE_KEY=[private key for 0x536975e9E6af75045c1a03cCf1CD8B9590E2cB7f]
 ```
@@ -104,7 +104,7 @@ Update frontend contract address:
 
 ```typescript
 // client/src/config/contracts.ts
-export const PARIHOOK_ADDRESS = '0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7'
+export const PARIHOOK_ADDRESS = '0xdbB492353B57698a5443bF1846F00c71EFA41824'
 ```
 
 ---
@@ -115,7 +115,7 @@ export const PARIHOOK_ADDRESS = '0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7'
 
 ```bash
 forge verify-contract \
-  0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 \
+  0xdbB492353B57698a5443bF1846F00c71EFA41824 \
   src/PariHook.sol:PariHook \
   --chain-id 84532 \
   --constructor-args $(cast abi-encode "constructor(address,address,address,address,address)" \
@@ -131,10 +131,10 @@ forge verify-contract \
 
 ```bash
 # Check if paused
-cast call 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 "paused()(bool)" --rpc-url $BASE_SEPOLIA_RPC_URL
+cast call 0xdbB492353B57698a5443bF1846F00c71EFA41824 "paused()(bool)" --rpc-url $BASE_SEPOLIA_RPC_URL
 
 # Check role assignments
-cast call 0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7 \
+cast call 0xdbB492353B57698a5443bF1846F00c71EFA41824 \
   "hasRole(bytes32,address)(bool)" \
   0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775 \
   0x536975e9E6af75045c1a03cCf1CD8B9590E2cB7f \
@@ -158,9 +158,10 @@ For additional prediction markets:
 
 **Deployment Transaction:** Check broadcast folder for full details
 - **Location:** `broadcast/DeployPariHook.s.sol/84532/run-latest.json`
-- **Gas Used:** 5,378,617
+- **Transaction Hash:** `0xa8079b1455964cb032a3f2a4f83719227dcd53bb23f931fcf85397e369ab8b04`
+- **Gas Used:** 4,394,564
 - **Gas Price:** 0.006 gwei
-- **Total Cost:** 0.000032271702 ETH
+- **Total Cost:** 0.000026373199325979 ETH
 
 ---
 
@@ -192,7 +193,7 @@ For additional prediction markets:
 
 ## Changelog
 
-- **2026-03-02:** Initial deployment to Base Sepolia
-  - Contract: `0xA1b7Aad793601d9C6bcE03a2a2CD0B80eEE229b7`
+- **2026-03-06:** Redeployed to Base Sepolia after settlement hardening updates
+  - Contract: `0xdbB492353B57698a5443bF1846F00c71EFA41824`
   - Roles configured
   - Ready for grid configuration
