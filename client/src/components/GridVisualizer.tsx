@@ -36,6 +36,7 @@ import { useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
 import { betService, type Pool } from '../services/betService'
+import { getCellPriceRange, getSlotKey, getWindowEndMs, getWindowStartMs, normalizeSlotKey } from '../lib/gridSlots'
 
 const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
 const SIDEBAR_COLLAPSED_KEY = 'blocksride_sidebar_collapsed'
@@ -138,15 +139,10 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         addOptimisticCell, removeOptimisticCell, updateCellId,
     } = useGridPositions(selectedAsset, grid, cells, currentPrice, isPracticeMode)
 
-    const { cellStakes: socketCellStakes, cellPrices } = useGridSocket()
+    const { cellStakes: socketCellStakes } = useGridSocket()
     const { showConfetti, trigger: triggerConfetti, reset: resetConfetti } = useConfetti()
 
     const [quoteCellId, setQuoteCellId] = useState<string | null>(null)
-    const { quote: betQuote, loading: quoteLoading } = useBetQuote(
-        quoteCellId,
-        selectedAsset,
-        currentStake
-    )
 
     const prevBetResultsRef = useRef<Record<string, string>>({})
     const hasPlacedBetRef = useRef(false)
@@ -200,7 +196,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         if (newWins.length > 0) {
             triggerConfetti()
             const payout = newWins.reduce((sum, [cellId]) => {
-                const position = positions.find(p => p.cell_id === cellId)
+                const position = positions.find(p => normalizeSlotKey(p.cell_id, cells) === cellId || p.cell_id === cellId)
                 return position?.payout ? sum + position.payout : sum
             }, 0)
             if (payout > 0) {
@@ -210,7 +206,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             }
         }
         prevBetResultsRef.current = { ...betResults }
-    }, [betResults, positions, triggerConfetti])
+    }, [betResults, positions, cells, triggerConfetti])
 
     useEffect(() => {
         if (!isPracticeMode && timeRemaining === 0 && selectedContest) {
@@ -226,10 +222,11 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const cellStakes = React.useMemo(() => {
         const combined: Record<string, number> = { ...socketCellStakes }
         positions.forEach(p => {
-            combined[p.cell_id] = (combined[p.cell_id] || 0) + p.stake
+            const slotKey = normalizeSlotKey(p.cell_id, cells)
+            combined[slotKey] = (combined[slotKey] || 0) + p.stake
         })
         return combined
-    }, [socketCellStakes, positions])
+    }, [socketCellStakes, positions, cells])
 
     const containerRef = useRef<HTMLDivElement>(null)
     const viewport = useGridViewport(
@@ -295,16 +292,21 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         () => pools.find(p => p.assetId === selectedAsset) ?? null,
         [pools, selectedAsset],
     )
-    const multipliers = usePoolMultipliers(
+    const { multipliers, windowTotals, cellStakes: onChainCellStakes } = usePoolMultipliers(
         activePool,
         grid,
         viewport.visibleMinPrice,
         viewport.visibleMaxPrice,
     )
+    const { formatted: onChainWalletBalance } = useTokenBalance()
+    const { quote: betQuote, loading: quoteLoading } = useBetQuote({
+        cellKey: quoteCellId,
+        stake: currentStake,
+        windowTotals,
+        cellStakes: onChainCellStakes,
+    })
     const practiceBalance = user?.practice_balance ?? 1000
-    const parsedOnchainBalance = Number(onchainUsdcBalance ?? 0)
-    const onchainBalance = Number.isFinite(parsedOnchainBalance) ? parsedOnchainBalance : 0
-    const platformBalance = onchainBalance
+    const platformBalance = user?.balance ?? 0
     const userBalance = isPracticeMode ? practiceBalance : platformBalance
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
@@ -313,7 +315,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return positions
             .filter((p) =>
                 (p.payout ?? 0) > 0 &&
-                (betResults[p.cell_id] === 'won' || p.state === 'RESOLVED')
+                (betResults[normalizeSlotKey(p.cell_id, cells)] === 'won' || p.state === 'RESOLVED')
             )
             .map((p) => {
                 const cell = cells.find((c) => c.cell_id === p.cell_id)
@@ -359,12 +361,12 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         for (const positionId of positionIds) {
             const position = positions.find(p => p.position_id === positionId)
             if (!position) continue
-            const parts = position.cell_id.split('_')
+            const parts = normalizeSlotKey(position.cell_id, cells).split('_')
             if (parts.length >= 2) {
                 const wid = parseInt(parts[0], 10)
                 if (!isNaN(wid)) { windowIds.add(wid); continue }
             }
-            const cell = cells.find(c => c.cell_id === position.cell_id)
+            const cell = cells.find(c => normalizeSlotKey(c.cell_id, cells) === normalizeSlotKey(position.cell_id, cells) || c.cell_id === position.cell_id)
             if (cell?.window_index !== undefined) windowIds.add(cell.window_index)
         }
         return [...windowIds]
@@ -473,7 +475,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [])
 
     const executeBet = useCallback(async (cellId: number, windowId: number, stake: number) => {
-        const slotKey = `${windowId}_${cellId}`
+        const slotKey = getSlotKey(windowId, cellId)
         isPlacingBetRef.current = true
         placedCellsRef.current.add(slotKey)
         addOptimisticCell(slotKey)
@@ -482,7 +484,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         setIsBetLoading(true)
 
         const bw = grid?.price_interval || 2
-        const priceLabel = `$${(cellId * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })} – $${((cellId + 1) * bw).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+        const { low, high } = getCellPriceRange(cellId, bw)
+        const priceLabel = `$${low.toLocaleString(undefined, { minimumFractionDigits: 2 })} – $${high.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 
         try {
             if (isPracticeMode) {
@@ -605,7 +608,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     ])
 
     const handleCellClick = useCallback(async (cellId: number, windowId: number) => {
-        const slotKey = `${windowId}_${cellId}`
+        const slotKey = getSlotKey(windowId, cellId)
         if (viewport.dragStart.hasMoved) return
         if (isPlacingBetRef.current) return
         if (placedCellsRef.current.has(slotKey)) {
@@ -618,8 +621,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
         // Expiry check from formula
         if (grid) {
-            const tEnd = new Date(grid.start_time).getTime()
-                       + (windowId + 1) * (grid.timeframe_sec || 60) * 1000
+            const tEnd = getWindowEndMs(windowId, activePool, grid)
             if (Date.now() > tEnd) {
                 toast.error('Cell Expired', {
                     description: 'Cannot place bet on a cell whose time window has ended.',
@@ -661,11 +663,10 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
         if (betConfirmationEnabled) {
             const bw = grid?.price_interval || 2
-            const priceRange = `$${(cellId * bw).toFixed(2)} – $${((cellId + 1) * bw).toFixed(2)}`
-            const startMs = grid ? new Date(grid.start_time).getTime() : 0
-            const durMs = (grid?.timeframe_sec || 60) * 1000
-            const tStart = new Date(startMs + windowId * durMs)
-            const tEnd = new Date(startMs + (windowId + 1) * durMs)
+            const { low, high } = getCellPriceRange(cellId, bw)
+            const priceRange = `$${low.toFixed(2)} – $${high.toFixed(2)}`
+            const tStart = new Date(getWindowStartMs(windowId, activePool, grid))
+            const tEnd = new Date(getWindowEndMs(windowId, activePool, grid))
             const timeWindow = `${tStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${tEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
             setPendingBetCellId([cellId, windowId])
             setPendingBetInfo({ priceRange, timeWindow })
@@ -676,7 +677,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         await executeBet(cellId, windowId, currentStake)
     }, [
         viewport.dragStart.hasMoved, isPracticeMode, authenticated,
-        selectedCells, currentStake, availableBalance, grid,
+        selectedCells, currentStake, availableBalance, activePool, grid,
         betConfirmationEnabled, executeBet,
     ])
 
@@ -696,20 +697,20 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         <div className="flex flex-col h-full bg-background text-foreground font-sans overflow-hidden">
             <Confetti show={showConfetti} onComplete={resetConfetti} />
 
-            {/* Contest ended overlay */}
+            {/* Ride ended overlay */}
             {showContestEnded && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
                     <div className="bg-card border border-border rounded-lg p-8 max-w-md mx-4 text-center shadow-2xl">
                         <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-trade-up" />
-                        <h2 className="text-2xl font-bold text-foreground mb-2">Contest Ended</h2>
+                        <h2 className="text-2xl font-bold text-foreground mb-2">Ride Ended</h2>
                         <p className="text-muted-foreground mb-6">
-                            {selectedContest?.name || 'The contest'} has ended. Your positions have been settled.
+                            {selectedContest?.name || 'The ride'} has ended. Your positions have been settled.
                         </p>
                         <button
                             onClick={handleContestEndedExit}
                             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground px-6 py-3 rounded-lg font-semibold transition-colors"
                         >
-                            Return to Contest Hub
+                            Return to Ride Hub
                         </button>
                     </div>
                 </div>
@@ -977,6 +978,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                         width={viewport.dimensions.width}
                                         height={viewport.dimensions.height}
                                             grid={grid}
+                                            pool={activePool}
                                             cells={cells}
                                             prices={prices}
                                             currentPrice={currentPrice}
@@ -988,7 +990,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                             onCellClick={handleCellClick}
                                             betResults={betResults}
                                             cellStakes={cellStakes}
-                                            cellPrices={cellPrices}
                                             multipliers={multipliers}
                                             recentCellIds={recentCells}
                                         contestEndTime={timeBoundary?.end}
@@ -1097,6 +1098,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                 selectedCells={selectedCells}
                                 betResults={betResults}
                                 positions={positions}
+                                cells={cells}
                             />
 
                             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">

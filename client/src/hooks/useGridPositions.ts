@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPublicClient, http, parseAbiItem } from 'viem'
 import { api } from '../services/apiService'
 import type { Grid, Cell, Position } from '../types/grid'
+import { normalizeSlotKey } from '../lib/gridSlots'
 import { useAuth } from '../contexts/AuthContext'
 import { betService } from '../services/betService'
 import { activeChain } from '@/providers/Web3Provider'
@@ -125,27 +126,28 @@ export function useGridPositions(
                 const placedCellIds: string[] = []
 
                 data.forEach((p) => {
-                    placedCellIds.push(p.cell_id)
+                    const slotKey = normalizeSlotKey(p.cell_id, currentCells)
+                    placedCellIds.push(slotKey)
 
                     const cell = currentCells.find(c => c.cell_id === p.cell_id)
 
                     if (cell && cell.result) {
 
-                        results[p.cell_id] = cell.result === 'WIN' ? 'won' : 'lost'
+                        results[slotKey] = cell.result === 'WIN' ? 'won' : 'lost'
                     } else if (p.result) {
 
-                        results[p.cell_id] = p.result === 'WIN' ? 'won' : 'lost'
+                        results[slotKey] = p.result === 'WIN' ? 'won' : 'lost'
                     } else if (p.state === 'RESOLVED') {
 
 
 
                         if (p.payout && p.payout > 0) {
-                            results[p.cell_id] = 'won'
+                            results[slotKey] = 'won'
                         } else {
-                            results[p.cell_id] = 'lost'
+                            results[slotKey] = 'lost'
                         }
                     } else {
-                        results[p.cell_id] = 'pending'
+                        results[slotKey] = 'pending'
                     }
                 })
 
@@ -229,7 +231,8 @@ export function useGridPositions(
                 if (currentStatus === 'won' || currentStatus === 'lost')
                     return
 
-                const cell = cells.find((c) => c.cell_id === cellId)
+                const canonicalCellId = normalizeSlotKey(cellId, cells)
+                const cell = cells.find((c) => normalizeSlotKey(c.cell_id, cells) === canonicalCellId || c.cell_id === cellId)
                 if (!cell) return
 
                 const tStart = new Date(cell.t_start).getTime()
@@ -248,9 +251,9 @@ export function useGridPositions(
                         currentPrice <= cell.p_high
                     ) {
                         // Price touched the cell - mark as touched and winning
-                        touchedCellsRef.current.add(cellId)
+                        touchedCellsRef.current.add(canonicalCellId)
                         newStatus = 'winning'
-                    } else if (touchedCellsRef.current.has(cellId)) {
+                    } else if (touchedCellsRef.current.has(canonicalCellId)) {
                         // Price exited but cell was touched - STAY winning (sticky)
                         newStatus = 'winning'
                     } else {
@@ -261,7 +264,7 @@ export function useGridPositions(
 
                 // After window ends - resolve instantly based on whether cell was touched
                 if (now > tEnd) {
-                    if (touchedCellsRef.current.has(cellId)) {
+                    if (touchedCellsRef.current.has(canonicalCellId)) {
                         newStatus = 'won'
                     } else {
                         newStatus = 'lost'
@@ -270,7 +273,7 @@ export function useGridPositions(
 
                 // Only add to updates if status actually changed
                 if (newStatus !== null && newStatus !== currentStatus) {
-                    updates[cellId] = newStatus
+                    updates[canonicalCellId] = newStatus
                 }
             })
 

@@ -1,21 +1,14 @@
 import { useState, useEffect } from 'react'
 import { api } from '../services/apiService'
 import type { Grid, Cell } from '../types/grid'
-import { useAuth } from '../contexts/AuthContext'
 
 export function useGridState(selectedAsset: string, selectedTimeframe: number) {
     const [grid, setGrid] = useState<Grid | null>(null)
     const [cells, setCells] = useState<Cell[]>([])
-    const { authenticated } = useAuth()
-
-
-
     useEffect(() => {
         let isMounted = true
 
         const fetchActiveGrid = async () => {
-            if (!authenticated) return
-
             try {
                 const { data: grids } = await api.getActiveGrids(
                     selectedAsset,
@@ -56,11 +49,6 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
             }
         }
 
-        if (!authenticated) {
-            setGrid(null)
-            setCells([])
-            return
-        }
         setGrid(null)
         setCells([])
         fetchActiveGrid()
@@ -68,10 +56,10 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
         return () => {
             isMounted = false
         }
-    }, [selectedAsset, selectedTimeframe, authenticated])
+    }, [selectedAsset, selectedTimeframe])
 
     useEffect(() => {
-        if (!grid || !authenticated) return
+        if (!grid) return
 
         let isMounted = true
 
@@ -103,7 +91,7 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
             window.removeEventListener('cell_resolved', handleCellResolved)
             window.removeEventListener('position_updated', handlePositionUpdated)
         }
-    }, [grid, authenticated])
+    }, [grid])
 
     return { grid, cells }
 }

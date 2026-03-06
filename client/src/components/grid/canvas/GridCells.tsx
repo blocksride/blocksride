@@ -1,21 +1,19 @@
 import React, { useMemo } from 'react'
-import { Grid, Cell, CellPrice } from '../../../types/grid'
-
-interface CellPricesMap {
-    [cellId: string]: CellPrice
-}
+import { Grid, Cell } from '../../../types/grid'
+import type { Pool } from '../../../services/betService'
+import { getAbsoluteCellId, getCellPriceRange, getGridEpochMs, getSlotKey, getWindowDurationMs, getWindowIdAtTime } from '../../../lib/gridSlots'
 
 interface GridCellsProps {
     width: number
     height: number
     grid: Grid | null
+    pool: Pool | null
     cells: Cell[]
     visibleTimeRange: { start: number; end: number }
     visiblePriceRange: { min: number; max: number }
     selectedCells: string[]
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
-    cellPrices?: CellPricesMap
     /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
     multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
@@ -32,13 +30,13 @@ export const GridCells: React.FC<GridCellsProps> = ({
     width,
     height,
     grid,
+    pool,
     cells,
     visibleTimeRange,
     visiblePriceRange,
     selectedCells,
     betResults,
     cellStakes,
-    cellPrices,
     multipliers,
     recentCellIds,
     frozenWindows = 2,
@@ -56,10 +54,10 @@ export const GridCells: React.FC<GridCellsProps> = ({
     const gridCells = useMemo(() => {
         if (!grid) return []
 
-        const windowDuration = (grid.timeframe_sec || 60) * 1000
-        const bandWidthUsdc = Math.round((grid.price_interval || 2) * 1_000_000)
+        const windowDuration = getWindowDurationMs(pool, grid)
+        const priceInterval = grid.price_interval || 2
 
-        if (windowDuration <= 0 || bandWidthUsdc <= 0) return []
+        if (windowDuration <= 0 || priceInterval <= 0) return []
 
         // Legacy bridge: map window+band index → DB cell UUID
         const cellLookup = new Map<string, Cell>()
@@ -82,15 +80,15 @@ export const GridCells: React.FC<GridCellsProps> = ({
             t_end: number
         }[] = []
 
-        const gridStartTime = new Date(grid.start_time).getTime()
+        const gridStartTime = getGridEpochMs(pool, grid)
         const timeOffset = gridStartTime % windowDuration
         const startWindowT =
             Math.floor((viewportStart - timeOffset) / windowDuration) *
             windowDuration +
             timeOffset
 
-        const startCellId = Math.floor(visibleMinPrice * 1_000_000 / bandWidthUsdc)
-        const endCellId   = Math.ceil(visibleMaxPrice  * 1_000_000 / bandWidthUsdc)
+        const startCellId = getAbsoluteCellId(visibleMinPrice, priceInterval)
+        const endCellId = getAbsoluteCellId(visibleMaxPrice, priceInterval) + 1
 
         for (let t = startWindowT; t < viewportEnd; t += windowDuration) {
             const x = getX(t)
@@ -98,23 +96,22 @@ export const GridCells: React.FC<GridCellsProps> = ({
 
             if (x + w < 0 || x > width) continue
 
-            const wi = Math.floor((t - gridStartTime) / windowDuration)
+            const windowId = getWindowIdAtTime(t, pool, grid)
 
             for (let cellId = startCellId; cellId <= endCellId; cellId++) {
-                const p      = cellId       * bandWidthUsdc / 1_000_000
-                const p_high = (cellId + 1) * bandWidthUsdc / 1_000_000
+                const { low: p, high: p_high } = getCellPriceRange(cellId, priceInterval)
                 const y1 = getY(p_high)
                 const y2 = getY(p)
                 const h = y2 - y1
 
                 if (y1 > height || y2 < 0) continue
 
-                const legacyCell = cellLookup.get(`${wi}_${cellId}`)
+                const legacyCell = cellLookup.get(`${windowId}_${cellId}`)
 
                 slots.push({
-                    id: `${wi}_${cellId}`,
+                    id: getSlotKey(windowId, cellId),
                     absoluteCellId: cellId,
-                    windowId: wi,
+                    windowId,
                     legacyId: legacyCell?.cell_id,
                     x,
                     y: y1,
@@ -137,12 +134,13 @@ export const GridCells: React.FC<GridCellsProps> = ({
         visibleMaxPrice,
         width,
         height,
+        pool,
         getX,
         getY,
     ])
 
     // Check if we need to show the past indicator (cells before current time)
-    const isPastCell = (slotTime: number) => slotTime + ((grid?.timeframe_sec || 60) * 1000) < now
+    const isPastCell = (slotTime: number) => slotTime + getWindowDurationMs(pool, grid) < now
 
     return (
         <>
@@ -160,10 +158,8 @@ export const GridCells: React.FC<GridCellsProps> = ({
                 const isSelected = selectedCells.includes(slot.id)
 
                 // Calculate window index and check if frozen
-                const gridStartTime = grid ? new Date(grid.start_time).getTime() : 0
-                const windowDuration = (grid?.timeframe_sec || 60) * 1000
-                const currentWindowIndex = Math.floor((now - gridStartTime) / windowDuration)
-                const windowIndex = Math.floor((slot.t - gridStartTime) / windowDuration)
+                const currentWindowIndex = getWindowIdAtTime(now, pool, grid)
+                const windowIndex = slot.windowId
 
                 // Window is frozen if it's within frozenWindows count from current
                 const isFrozen = windowIndex <= currentWindowIndex + frozenWindows
@@ -173,8 +169,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
                 const isPlayable = !isFrozen && !isSelected && !isAfterContestEnd
 
                 // Use legacyId (UUID) for WebSocket-driven maps; fall back to composite key
-                const stateKey = slot.legacyId || slot.id
-                const status = betResults[stateKey] || betResults[slot.id]
+                const status = betResults[slot.id] || (slot.legacyId ? betResults[slot.legacyId] : undefined)
                 const isResolving = status === 'pending' && now > slot.t_end
                 const isRecent = Boolean(recentCellIds?.[slot.id] || (slot.legacyId && recentCellIds?.[slot.legacyId]))
 
@@ -194,7 +189,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
 
                 const style: React.CSSProperties = { cursor }
 
-                const liveStake = cellStakes?.[stateKey] || 0
+                const liveStake = cellStakes?.[slot.id] || (slot.legacyId ? cellStakes?.[slot.legacyId] : 0) || 0
                 const currentTotalStake = liveStake
 
                 // Track if this is a frozen cell without user bet (for special rendering)
@@ -358,12 +353,9 @@ export const GridCells: React.FC<GridCellsProps> = ({
                 const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
                 const touchPadding = isMobile ? 4 : 0
 
-                // On-chain multiplier takes priority; fall back to off-chain probability
+                // Display only on-chain parimutuel multiplier for playable cells.
                 const onChainMultiplier = multipliers?.[slot.id]
-                const cellPrice = onChainMultiplier == null ? cellPrices?.[stateKey] : undefined
-                const probability = cellPrice?.probability
-                const legacyMultiplier = probability && probability > 0.001 ? Math.min(1 / probability, 100) : null
-                const multiplier = onChainMultiplier ?? legacyMultiplier
+                const multiplier = onChainMultiplier
                 const showPricing = isPlayable && multiplier != null && rectW > 30 && rectH > 24
 
                 return (
@@ -418,30 +410,17 @@ export const GridCells: React.FC<GridCellsProps> = ({
                                 className="animate-live-pulse pointer-events-none"
                             />
                         )}
-                        {/* Show multiplier for playable cells; show probability % only for legacy off-chain data */}
+                        {/* Show live on-chain multiplier for playable cells */}
                         {showPricing && (
-                            <>
-                                {!onChainMultiplier && probability != null && (
-                                    <text
-                                        x={rectX + rectW / 2}
-                                        y={rectY + rectH / 2 - 6}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        className="text-[9px] font-mono fill-primary/80 pointer-events-none select-none"
-                                    >
-                                        {(probability * 100).toFixed(0)}%
-                                    </text>
-                                )}
-                                <text
-                                    x={rectX + rectW / 2}
-                                    y={!onChainMultiplier && probability != null ? rectY + rectH / 2 + 6 : rectY + rectH / 2}
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                    className="text-[10px] font-mono font-bold fill-trade-up pointer-events-none select-none"
-                                >
-                                    {multiplier!.toFixed(1)}x
-                                </text>
-                            </>
+                            <text
+                                x={rectX + rectW / 2}
+                                y={rectY + rectH / 2}
+                                textAnchor="middle"
+                                dominantBaseline="middle"
+                                className="text-[10px] font-mono font-bold fill-trade-up pointer-events-none select-none"
+                            >
+                                {multiplier!.toFixed(1)}x
+                            </text>
                         )}
                         {/* Show stake if any (takes priority over pricing display) */}
                         {currentTotalStake > 0 && !showPricing && (
