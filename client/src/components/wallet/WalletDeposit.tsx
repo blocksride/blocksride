@@ -36,7 +36,9 @@ export function WalletDeposit() {
 
     // Use Privy's wallet instead of wagmi's useAccount
     const { wallets } = useWallets()
-    const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+    const embeddedWallet = wallets.find((w) =>
+        (w.walletClientType || '').toLowerCase().includes('privy'),
+    )
     const activeWallet = embeddedWallet || wallets[0]
     const address = activeWallet?.address as `0x${string}` | undefined
 

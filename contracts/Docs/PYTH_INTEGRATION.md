@@ -188,6 +188,28 @@ uint256 updateFee = pythOracle.getUpdateFee(updateData);
 pariHook.settle{value: updateFee}(poolKey, windowId, pythVAA);
 ```
 
+## Permissionless Settlement Plan (Option A)
+
+We keep `settle()` permissionless so external keepers and AI agents can call it,
+but enforce strict validation to prevent griefing (bad update data forcing a void).
+
+### Plan
+
+1. **Require update fee up front**
+   - Call `pythOracle.getUpdateFee(updateDataArray)` and `require(msg.value >= fee)`.
+2. **Validate update data and feed ID**
+   - Reject malformed VAAs or wrong feed IDs via revert (do not auto-void).
+3. **Void only when Pyth has no price in the time window**
+   - Do not void on generic parse errors or insufficient fee.
+4. **Keep manual `voidWindow()` for rare edge cases**
+   - Admin-only escape hatch if oracle is down for an extended period.
+
+### Why this matters
+
+`settle()` is permissionless. Without strict validation, a bad actor can submit
+invalid or underfunded updates and force a voided window (refund), even when a
+valid price exists.
+
 ## Pyth Contract Addresses
 
 | Network | Pyth Contract Address |
