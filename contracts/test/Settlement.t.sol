@@ -290,6 +290,103 @@ contract SettlementTest is Test {
         assertEq(hook.backstopBalances(poolId), 0, "Backstop balance should not include organic carry");
     }
 
+    function test_Settlement_RefundsExcessEth_OnWinnerSettlement() public {
+        uint256 windowId = FROZEN_WINDOWS + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, windowId, 10_000_000);
+
+        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
+        vm.warp(windowEnd);
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+
+        uint256 keeperBalanceBefore = keeper.balance;
+
+        vm.prank(keeper);
+        hook.settle{value: 0.02 ether}(testKey, windowId, hex"01");
+
+        assertEq(keeper.balance, keeperBalanceBefore - 0.01 ether, "Only Pyth fee should be retained");
+    }
+
+    function test_Settlement_RefundsExcessEth_OnAutoVoid() public {
+        uint256 windowId = FROZEN_WINDOWS + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, windowId, 10_000_000);
+
+        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
+        vm.warp(windowEnd);
+
+        uint256 keeperBalanceBefore = keeper.balance;
+
+        vm.prank(keeper);
+        hook.settle{value: 0.02 ether}(testKey, windowId, hex"01");
+
+        assertEq(keeper.balance, keeperBalanceBefore - 0.01 ether, "Excess ETH should be refunded on void");
+    }
+
+    function test_Settlement_RefundsExcessEth_OnRollover() public {
+        uint256 windowId = FROZEN_WINDOWS + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, windowId, 10_000_000);
+
+        vm.prank(user2);
+        hook.placeBet(testKey, 1501, windowId, 20_000_000);
+
+        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
+        vm.warp(windowEnd);
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, uint64(windowEnd));
+
+        uint256 keeperBalanceBefore = keeper.balance;
+
+        vm.prank(keeper);
+        hook.settle{value: 0.02 ether}(testKey, windowId, hex"01");
+
+        assertEq(keeper.balance, keeperBalanceBefore - 0.01 ether, "Excess ETH should be refunded on rollover");
+    }
+
+    function test_Settlement_Rollover_CarryCountsInNextWindowSettlement() public {
+        uint256 firstWindowId = FROZEN_WINDOWS + 1;
+        uint256 secondWindowId = firstWindowId + 1;
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1500, firstWindowId, 10_000_000);
+
+        vm.prank(user2);
+        hook.placeBet(testKey, 1501, firstWindowId, 20_000_000);
+
+        vm.prank(user1);
+        hook.placeBet(testKey, 1502, secondWindowId, 10_000_000);
+
+        uint256 firstWindowEnd = GRID_EPOCH + ((firstWindowId + 1) * WINDOW_DURATION);
+        vm.warp(firstWindowEnd);
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, uint64(firstWindowEnd));
+
+        vm.prank(keeper);
+        hook.settle{value: 0.01 ether}(testKey, firstWindowId, hex"01");
+
+        uint256 secondWindowEnd = GRID_EPOCH + ((secondWindowId + 1) * WINDOW_DURATION);
+        vm.warp(secondWindowEnd);
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, uint64(secondWindowEnd));
+
+        vm.prank(keeper);
+        hook.settle{value: 0.01 ether}(testKey, secondWindowId, hex"01");
+
+        (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate) =
+            hook.getWindow(testKey, secondWindowId);
+
+        uint256 expectedTotalPool = 40_000_000;
+        uint256 expectedFee = (expectedTotalPool * FEE_BPS) / 10_000;
+        uint256 expectedRate = (expectedTotalPool - expectedFee) * 1e18 / 10_000_000;
+
+        assertEq(totalPool, expectedTotalPool, "Rollover carry should increase next window pool");
+        assertTrue(settled, "Second window should be settled");
+        assertFalse(voided, "Second window should not be voided");
+        assertEq(winningCell, 1502, "Winning cell should match the carried-into window bet");
+        assertEq(redemptionRate, expectedRate, "Next window payout should include carried rollover funds");
+    }
+
     // =============================================================
     //                      VOID TESTS
     // =============================================================
@@ -497,6 +594,10 @@ contract SettlementTest is Test {
         vm.expectRevert("Insufficient Pyth update fee");
         vm.prank(keeper);
         hook.settle{value: 0.009 ether}(testKey, windowId, hex"01");
+
+        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        assertFalse(settled, "Insufficient fee should not settle the window");
+        assertFalse(voided, "Insufficient fee should not void the window");
     }
 
     function test_Settlement_RevertsOnMalformedUpdateData() public {
@@ -512,6 +613,10 @@ contract SettlementTest is Test {
         vm.expectRevert(bytes4(keccak256("InvalidUpdateData()")));
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"ff");
+
+        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        assertFalse(settled, "Malformed update data should not settle the window");
+        assertFalse(voided, "Malformed update data should not void the window");
     }
 
     function test_Settlement_RevertsOnEmptyUpdateData() public {
@@ -526,6 +631,10 @@ contract SettlementTest is Test {
         vm.expectRevert("Empty Pyth update data");
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
+
+        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        assertFalse(settled, "Empty update data should not settle the window");
+        assertFalse(voided, "Empty update data should not void the window");
     }
 }
 

@@ -147,7 +147,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     /// @notice Total fees collected per pool: poolId => amount
     mapping(PoolId => uint256) public collectedFees;
 
-    /// @notice Total platform-seeded funds only (no user funds): poolId => amount
+    /// @notice Current platform-seeded funds committed across windows: poolId => amount
     mapping(PoolId => uint256) public backstopBalances;
 
     /// @notice Total amount carried forward from windows without winners (organic + backstop): poolId => amount
@@ -591,6 +591,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         updateDataArray[0] = pythUpdateData;
         uint256 updateFee = pythOracle.getUpdateFee(updateDataArray);
         require(msg.value >= updateFee, "Insufficient Pyth update fee");
+        uint256 excessEth = msg.value - updateFee;
 
         uint256 closingPrice;
         try this._parsePythPrice{value: updateFee}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime)
@@ -603,6 +604,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
             }
             window.voided = true;
             emit WindowVoided(poolId, windowId, window.totalPool);
+            _refundExcessEth(excessEth);
             return;
         }
 
@@ -610,6 +612,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         if (window.organicPool < cfg.minPoolThreshold) {
             window.voided = true;
             emit WindowVoided(poolId, windowId, window.totalPool);
+            _refundExcessEth(excessEth);
             return;
         }
 
@@ -620,6 +623,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         // Rollover if no bets on winning cell — carry pool to next window
         if (winStakes == 0) {
             _rollover(poolId, windowId, windowId + 1);
+            _refundExcessEth(excessEth);
             return;
         }
 
@@ -642,10 +646,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         emit WindowSettled(poolId, windowId, winningCell, closingPrice, redemptionRate);
 
         // Refund any excess ETH the caller sent above Pyth's required update fee.
-        if (msg.value > updateFee) {
-            (bool refunded,) = msg.sender.call{value: msg.value - updateFee}("");
-            require(refunded, "Excess fee refund failed");
-        }
+        _refundExcessEth(excessEth);
     }
 
     // =============================================================
@@ -1087,14 +1088,16 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         uint256 carryAmount = fromWindow.totalPool;
         uint256 carryBackstopOnly = fromWindow.backstopPool;
 
-        // Carry total pool forward for the next window's payout accounting.
+        // Carry total pool forward for the next window's payout accounting and
+        // preserve how much of that carried value came from platform backstop.
         toWindow.totalPool += carryAmount;
+        toWindow.backstopPool += carryBackstopOnly;
 
         // Distinct global totals for auditability:
         // - rolloverBalances tracks all carried value (organic + backstop)
-        // - backstopBalances tracks platform-seeded-only carry
+        // - backstopBalances tracks active platform-seeded capital and should
+        //   not change when the same funds are merely moved between windows
         rolloverBalances[poolId] += carryAmount;
-        backstopBalances[poolId] += carryBackstopOnly;
 
         // Mark source window as settled (no winning cell, no redemption rate)
         fromWindow.settled = true;
@@ -1119,6 +1122,13 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         assembly {
             revert(add(reason, 0x20), mload(reason))
         }
+    }
+
+    function _refundExcessEth(uint256 amount) internal {
+        if (amount == 0) return;
+
+        (bool refunded,) = msg.sender.call{value: amount}("");
+        require(refunded, "Excess fee refund failed");
     }
 
     /**

@@ -40,8 +40,8 @@ contract BetPlacementTest is Test {
     uint256 constant MAX_STAKE_PER_CELL = 100_000_000_000; // $100,000
     uint256 constant FEE_BPS = 200; // 2%
     uint256 constant MIN_POOL_THRESHOLD = 1_000_000; // $1.00
-    // Forge default timestamp is 1; GRID_EPOCH=100 is in the future at setUp, then we warp past it
-    uint256 constant GRID_EPOCH = 100;
+    // Forge default timestamp is 1; GRID_EPOCH=120 is in the future and minute-aligned.
+    uint256 constant GRID_EPOCH = 120;
 
     // Test amounts
     uint256 constant INITIAL_USER_BALANCE = 1000_000_000; // $1000 USDC
