@@ -3,24 +3,29 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 import {RIDE} from "../src/RIDE.sol";
+import {RideDistributor} from "../src/RideDistributor.sol";
 import {RideStaking} from "../src/RideStaking.sol";
 
 contract RideStakingTest is Test {
     RIDE internal ride;
+    RideDistributor internal distributorContract;
     RideStaking internal staking;
 
-    address internal owner = makeAddr("owner");
-    address internal distributor = makeAddr("distributor");
+    address internal coldAdmin = makeAddr("coldAdmin");
+    address internal admin = makeAddr("admin");
+    address internal treasury = makeAddr("treasury");
+    address internal relayer = makeAddr("relayer");
     address internal alice = makeAddr("alice");
 
     function setUp() public {
-        ride = new RIDE(owner, distributor);
-        staking = new RideStaking(address(ride), owner);
+        distributorContract = new RideDistributor(coldAdmin, admin, treasury, relayer);
+        ride = new RIDE(coldAdmin, admin, treasury, relayer, address(distributorContract));
+        staking = new RideStaking(address(ride), coldAdmin, admin, treasury, relayer);
 
-        vm.prank(owner);
-        ride.setTransferWhitelist(address(staking), true);
+        vm.prank(admin);
+        ride.wireSystemContracts(address(distributorContract), address(staking));
 
-        vm.prank(distributor);
+        vm.prank(address(distributorContract));
         ride.transfer(alice, 20_000e18);
 
         vm.prank(alice);
@@ -73,5 +78,12 @@ contract RideStakingTest is Test {
         vm.prank(alice);
         staking.completeUnstake();
         assertEq(ride.balanceOf(alice), balanceBefore + 500e18);
+    }
+
+    function test_RoleAssignments() public view {
+        assertTrue(staking.hasRole(staking.DEFAULT_ADMIN_ROLE(), coldAdmin));
+        assertTrue(staking.hasRole(staking.ADMIN_ROLE(), admin));
+        assertTrue(staking.hasRole(staking.TREASURY_ROLE(), treasury));
+        assertTrue(staking.hasRole(staking.RELAYER_ROLE(), relayer));
     }
 }

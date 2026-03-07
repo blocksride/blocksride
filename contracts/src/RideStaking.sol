@@ -2,17 +2,22 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title RideStaking
 /// @notice Stake RIDE to get fee discounts and support cooldown-based unstaking.
-contract RideStaking is Ownable, ReentrancyGuard {
+contract RideStaking is AccessControl, ReentrancyGuard {
     error AmountZero();
     error InsufficientStake();
     error UnstakeAlreadyPending();
     error NoPendingUnstake();
     error CooldownNotMet();
+    error ZeroAddress();
+
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant TREASURY_ROLE = keccak256("TREASURY_ROLE");
+    bytes32 public constant RELAYER_ROLE = keccak256("RELAYER_ROLE");
 
     uint256 public constant UNSTAKE_COOLDOWN = 7 days;
 
@@ -31,8 +36,18 @@ contract RideStaking is Ownable, ReentrancyGuard {
     event UnstakeInitiated(address indexed user, uint256 amount, uint256 unlockTime);
     event UnstakeCompleted(address indexed user, uint256 amount);
 
-    constructor(address _rideToken, address initialOwner) Ownable(initialOwner) {
+    constructor(address _rideToken, address coldAdmin, address admin, address treasury, address relayer) {
+        if (
+            _rideToken == address(0) || coldAdmin == address(0) || admin == address(0) || treasury == address(0)
+                || relayer == address(0)
+        ) {
+            revert ZeroAddress();
+        }
         rideToken = IERC20(_rideToken);
+        _grantRole(DEFAULT_ADMIN_ROLE, coldAdmin);
+        _grantRole(ADMIN_ROLE, admin);
+        _grantRole(TREASURY_ROLE, treasury);
+        _grantRole(RELAYER_ROLE, relayer);
     }
 
     function stake(uint256 amount) external nonReentrant {
