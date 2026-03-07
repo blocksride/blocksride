@@ -16,30 +16,37 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
                 )
                 if (!isMounted) return
 
+                const loadCells = async (gridId: string) => {
+                    try {
+                        const { data: cellsData } = await api.getCells(gridId)
+                        return cellsData
+                    } catch {
+                        return []
+                    }
+                }
+
                 if (grids && grids.length > 0) {
                     setGrid(grids[0])
-                    const { data: cellsData } = await api.getCells(grids[0].grid_id)
+                    const cellsData = await loadCells(grids[0].grid_id)
                     if (isMounted) {
                         setCells(cellsData)
-                        // Dispatch event to signal cells are ready for position loading
                         window.dispatchEvent(new CustomEvent('cells_refreshed'))
                     }
                 } else {
-                    await api.generateGrid(selectedAsset, selectedTimeframe)
+                    try { await api.generateGrid(selectedAsset, selectedTimeframe) } catch { /* no-op */ }
                     if (!isMounted) return
 
-                    const { data: grids } = await api.getActiveGrids(
+                    const { data: grids2 } = await api.getActiveGrids(
                         selectedAsset,
                         selectedTimeframe
                     )
                     if (!isMounted) return
 
-                    if (grids && grids.length > 0) {
-                        setGrid(grids[0])
-                        const { data: cellsData } = await api.getCells(grids[0].grid_id)
+                    if (grids2 && grids2.length > 0) {
+                        setGrid(grids2[0])
+                        const cellsData = await loadCells(grids2[0].grid_id)
                         if (isMounted) {
                             setCells(cellsData)
-                            // Dispatch event to signal cells are ready for position loading
                             window.dispatchEvent(new CustomEvent('cells_refreshed'))
                         }
                     }
