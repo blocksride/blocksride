@@ -42,6 +42,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     uint256 private constant REDEMPTION_PRECISION = 1e18;
     bytes4 private constant PYTH_ERR_PRICE_FEED_NOT_FOUND_WITHIN_RANGE =
         bytes4(keccak256("PriceFeedNotFoundWithinRange()"));
+    error HookNotImplemented();
 
     // =============================================================
     //                      DATA STRUCTURES
@@ -379,7 +380,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     }
 
     function afterInitialize(address, PoolKey calldata, uint160, int24) external pure override returns (bytes4) {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
@@ -388,7 +389,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function afterAddLiquidity(
@@ -399,7 +400,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         BalanceDelta,
         bytes calldata
     ) external pure override returns (bytes4, BalanceDelta) {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
@@ -408,7 +409,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function afterRemoveLiquidity(
@@ -419,7 +420,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         BalanceDelta,
         bytes calldata
     ) external pure override returns (bytes4, BalanceDelta) {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
@@ -428,7 +429,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
@@ -437,7 +438,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4, int128)
     {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
@@ -446,7 +447,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
@@ -455,7 +456,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert("Hook not implemented");
+        revert HookNotImplemented();
     }
 
     // =============================================================
