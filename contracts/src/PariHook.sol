@@ -42,6 +42,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     uint256 private constant REDEMPTION_PRECISION = 1e18;
     bytes4 private constant PYTH_ERR_PRICE_FEED_NOT_FOUND_WITHIN_RANGE =
         bytes4(keccak256("PriceFeedNotFoundWithinRange()"));
+
     error HookNotImplemented();
 
     // =============================================================
