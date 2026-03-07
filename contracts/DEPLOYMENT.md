@@ -206,3 +206,37 @@ For additional prediction markets:
   - Contract: `0xdbB492353B57698a5443bF1846F00c71EFA41824`
   - Roles configured
   - Ready for grid configuration
+
+---
+
+## Phase 2 Deployment (RIDE System)
+
+**Deployment Date:** March 6, 2026  
+**Network:** Base Sepolia (Chain ID: 84532)
+
+### Contract Addresses
+
+| Contract | Address |
+|----------|---------|
+| RIDE | `0x0448E60F52021015D98BcD10252508Ce118AdCB6` |
+| RideStaking | `0x2cE4ACcD168aa7eb8B2B5b13Fa69e6CeBecA3b46` |
+| RideDistributor | `0x8aa1B67C99dBE706D1b9111f8429c25359a4A4F4` |
+
+### Deployment Transactions
+
+| Action | Transaction Hash |
+|--------|------------------|
+| Deploy RIDE | `0x0c1dbc9b79f225805ccddc6dacbb44bbdf32216311bef2d9b3f060a9ecf7e04a` |
+| Deploy RideStaking | `0xe9df27558df96e8425f246399b2ff8e72499be6d8e53205d3000551457550277` |
+| Deploy RideDistributor | `0xa600dd533bc817c71fc8d7ef54d1205eb050c2bc8d489a5cca5561d8f7cec449` |
+| Whitelist RideStaking in RIDE | `0xe14313ac7718d6b9e659a2b454cff98b6a6289d955a4b6fcf26e8ac3f7a74e09` |
+| Whitelist RideDistributor in RIDE | `0x4056573d99efacd6394b59ab06e2c9ad1c014c5edb3dc4710b16a3f82144bce0` |
+| Transfer full RIDE supply to distributor | `0x50503d2c3a178277644d2a1b33b42d985d32b173290f4e0233292e34356fda91` |
+
+### Post-Deployment Checks
+
+- `totalSupply`: `100000000000000000000000000` (100M RIDE)
+- Deployer `RIDE` balance: `0`
+- Distributor `RIDE` balance: `100000000000000000000000000` (100M RIDE)
+- `isTransferWhitelisted(RideStaking)`: `true`
+- `isTransferWhitelisted(RideDistributor)`: `true`

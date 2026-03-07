@@ -1,8 +1,8 @@
 # BlocksRide Deployment Summary & User Flow Explanation
 
-**Date:** March 6, 2026
-**Network:** Base Sepolia
-**Status:** Phase 1 Complete ✅
+- **Date:** March 6, 2026
+- **Network:** Base Sepolia
+- **Status:** Phase 1 Complete ✅
 
 ---
 
@@ -198,6 +198,18 @@ If user bet on losing cell:
 | RideDistributor.sol | ❌ Not deployed | High |
 | RideStaking.sol | ❌ Not deployed | High |
 | Hook integration | ❌ Needs update | Medium |
+
+### ✅ Phase 2 Initial Deployments (March 6, 2026)
+
+| Component | Status | Address |
+|-----------|--------|---------|
+| RIDE | ✅ Deployed | `0x0448E60F52021015D98BcD10252508Ce118AdCB6` |
+| RideStaking | ✅ Deployed | `0x2cE4ACcD168aa7eb8B2B5b13Fa69e6CeBecA3b46` |
+| RideDistributor | ✅ Deployed | `0x8aa1B67C99dBE706D1b9111f8429c25359a4A4F4` |
+
+Key setup completed:
+- RideStaking + RideDistributor whitelisted in RIDE token.
+- Full RIDE supply moved to RideDistributor for emissions/claims.
 
 ---
 
