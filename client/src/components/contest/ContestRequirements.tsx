@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
@@ -10,7 +9,6 @@ import {
     RefreshCw
 } from 'lucide-react'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
-import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { Contest } from '@/services/apiService'
 
@@ -27,19 +25,9 @@ export function ContestRequirements({
     contest,
     onRequirementsMet
 }: ContestRequirementsProps) {
-    const { address } = useTokenBalance()
-    const { user, refreshUser } = useAuth()
-
-    // Use PLATFORM balance (deposited funds), not on-chain wallet balance
-    const platformBalance = user?.balance ?? 0
-    const hasBalance = platformBalance > 0
-
-    // Refresh user data when modal opens to get latest platform balance
-    useEffect(() => {
-        if (isOpen) {
-            refreshUser()
-        }
-    }, [isOpen, refreshUser])
+    const { address, formatted, refetch } = useTokenBalance()
+    const walletBalance = Number(formatted || '0')
+    const hasBalance = walletBalance > 0
 
     const handleContinue = () => {
         if (hasBalance) {
@@ -69,9 +57,9 @@ export function ContestRequirements({
                         <DialogTitle className="text-lg font-bold text-foreground">Setup Required</DialogTitle>
                         <DialogDescription className="text-sm text-muted-foreground mt-1 break-words">
                             {hasBalance ? (
-                                <>You're ready to join <span className="text-foreground font-medium break-all">{contest.name}</span></>
+                                <>You are ready to join <span className="text-foreground font-medium break-all">{contest.name}</span></>
                             ) : (
-                                <>Fund your wallet to join <span className="text-foreground font-medium break-all">{contest.name}</span></>
+                                <>Fund your wallet to ride <span className="text-foreground font-medium break-all">{contest.name}</span></>
                             )}
                         </DialogDescription>
                     </div>
@@ -93,12 +81,12 @@ export function ContestRequirements({
                     >
                         {hasBalance ? (
                             <span className="text-sm text-muted-foreground">
-                                ${platformBalance.toFixed(2)} USDC available
+                                ${walletBalance.toFixed(2)} USDC in wallet
                             </span>
                         ) : (
                             <div className="space-y-2">
                                 <p className="text-xs text-muted-foreground">
-                                    Deposit USDC (Base) to your wallet
+                                    Deposit Base Sepolia USDC into your embedded wallet
                                 </p>
                                 <button
                                     onClick={copyAddress}
@@ -110,7 +98,7 @@ export function ContestRequirements({
                                     <Copy className="w-3 h-3 text-muted-foreground ml-auto" />
                                 </button>
                                 <button
-                                    onClick={() => refreshUser()}
+                                    onClick={() => refetch()}
                                     className="flex items-center justify-center gap-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 rounded-lg transition-colors w-full"
                                 >
                                     <RefreshCw className="w-3 h-3" />
@@ -130,7 +118,7 @@ export function ContestRequirements({
                     >
                         {hasBalance ? (
                             <>
-                                Enter Contest
+                                Enter Ride
                                 <ArrowRight className="w-4 h-4 ml-2" />
                             </>
                         ) : (

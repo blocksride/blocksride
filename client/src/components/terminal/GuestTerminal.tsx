@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import type { Grid, Cell, Position } from '@/types/grid'
+import { useAuth } from '@/contexts/AuthContext'
 import { usePublicPriceFeed } from '@/hooks/usePublicPriceFeed'
 import { useGridViewport } from '@/hooks/useGridViewport'
 import { GridCanvas } from '@/components/grid/GridCanvas'
@@ -20,7 +20,7 @@ const ASSET_META: Record<string, { defaultPrice: number; priceInterval: number }
 }
 
 export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
-    const navigate = useNavigate()
+    const { signIn } = useAuth()
     const assetMeta = ASSET_META[assetId] || ASSET_META['ETH-USD']
     const { prices, currentPrice } = usePublicPriceFeed(assetId)
 
@@ -118,8 +118,8 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
     }, [])
 
     const promptConnect = useCallback(() => {
-        navigate('/', { state: { autoSignIn: true } })
-    }, [navigate])
+        signIn()
+    }, [signIn])
 
     const handleCellClick = useCallback(() => {
         promptConnect()
@@ -273,7 +273,7 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
                             className="mt-3"
                             onClick={(event) => {
                                 event.stopPropagation()
-                                navigate('/', { state: { autoSignIn: true } })
+                                signIn()
                             }}
                         >
                             Connect to trade

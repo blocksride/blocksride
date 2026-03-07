@@ -159,6 +159,7 @@ export const Landing = () => {
     const { authenticated, loading, signOut, walletAddress, signIn } = useAuth()
     const [isMiniApp, setIsMiniApp] = useState(false)
     const miniAppLoginRef = useRef(false)
+    const autoSignInFiredRef = useRef(false)
     const [upcomingContests, setUpcomingContests] = useState<Contest[]>([])
     const [ethPrice, setEthPrice] = useState('---')
     const [ethChange, setEthChange] = useState('---')
@@ -197,9 +198,14 @@ export const Landing = () => {
         if (!loading && authenticated) navigate('/terminal')
     }, [loading, authenticated, navigate])
 
-    // Auto-trigger sign-in when arriving from "Connect to trade"
+    // Auto-trigger sign-in when arriving from "Connect to trade".
+    // autoSignInFiredRef prevents this from re-firing (and re-opening the modal)
+    // if the user dismisses the Privy modal — which would previously cause an
+    // infinite loop since loading stays false after the modal is dismissed.
     useEffect(() => {
+        if (autoSignInFiredRef.current) return
         if (!loading && !authenticated && (location.state as { autoSignIn?: boolean } | null)?.autoSignIn) {
+            autoSignInFiredRef.current = true
             window.history.replaceState({}, '', '/')
             signIn()
         }

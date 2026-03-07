@@ -1,50 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PricePoint } from '../types/grid'
+import { api } from '@/services/apiService'
+import type { PricePoint } from '@/types/grid'
 
 type AssetConfig = {
-    coinId: string
-    symbol: string
     defaultPrice: number
     volatility: number
 }
 
 const ASSET_CONFIG: Record<string, AssetConfig> = {
-    'ETH-USD': {
-        coinId: 'ethereum',
-        symbol: 'ETH',
-        defaultPrice: 3000,
-        volatility: 2.5,
-    },
-    'BTC-USD': {
-        coinId: 'bitcoin',
-        symbol: 'BTC',
-        defaultPrice: 50000,
-        volatility: 18,
-    },
+    'ETH-USD': { defaultPrice: 3000, volatility: 2.5 },
+    'BTC-USD': { defaultPrice: 50000, volatility: 18 },
 }
 
-const getAssetConfig = (assetId: string) => {
-    return ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
-}
-
-const fetchCoingeckoPrice = async (coinId: string) => {
-    const url = `/coingecko/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const data = await res.json()
-    const price = data?.[coinId]?.usd
-    return typeof price === 'number' ? price : null
-}
-
-const fetchCoinbasePrice = async (symbol: string) => {
-    const url = `https://api.coinbase.com/v2/prices/${symbol}-USD/spot`
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const data = await res.json()
-    const price = data?.data?.amount
-    const parsed = price ? Number(price) : NaN
-    return Number.isFinite(parsed) ? parsed : null
-}
+const getAssetConfig = (assetId: string) => ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
 
 export const usePublicPriceFeed = (assetId: string) => {
     const config = getAssetConfig(assetId)
@@ -64,20 +32,15 @@ export const usePublicPriceFeed = (assetId: string) => {
         seededRef.current = false
 
         const updateTarget = async () => {
-            const coingeckoPrice = await fetchCoingeckoPrice(config.coinId)
-            if (!mountedRef.current) return
-
-            if (coingeckoPrice !== null) {
-                targetPriceRef.current = coingeckoPrice
-                return
-            }
-
-            const coinbasePrice = await fetchCoinbasePrice(config.symbol)
-            if (!mountedRef.current) return
-
-            if (coinbasePrice !== null) {
-                targetPriceRef.current = coinbasePrice
-                return
+            try {
+                const { data } = await api.getPublicPrice(assetId)
+                if (!mountedRef.current) return
+                if (typeof data.price === 'number' && Number.isFinite(data.price)) {
+                    targetPriceRef.current = data.price
+                    return
+                }
+            } catch {
+                // keep last cached target
             }
 
             if (targetPriceRef.current === null) {
@@ -91,7 +54,7 @@ export const usePublicPriceFeed = (assetId: string) => {
 
             setCurrentPrice((prev) => {
                 const base = prev ?? target
-                const drift = (target - base) * 0.2
+                const drift = (target - base) * 0.25
                 const noise = (Math.random() - 0.5) * config.volatility
                 const next = Math.max(0, base + drift + noise)
                 const now = Date.now()
@@ -107,7 +70,7 @@ export const usePublicPriceFeed = (assetId: string) => {
                     }
                     setPrices(initialPoints)
                     lastPointRef.current = now
-                } else if (now - lastPointRef.current > 1000) {
+                } else if (now - lastPointRef.current >= 1000) {
                     setPrices((prevPrices) => {
                         const updated = [...prevPrices, { time: now, price: next }]
                         return updated.length > 5000 ? updated.slice(-5000) : updated
@@ -119,8 +82,8 @@ export const usePublicPriceFeed = (assetId: string) => {
             })
         }
 
-        updateTarget()
-        const pollId = window.setInterval(updateTarget, 60000)
+        void updateTarget()
+        const pollId = window.setInterval(updateTarget, 5000)
         const tickId = window.setInterval(tick, 500)
 
         return () => {
@@ -128,7 +91,7 @@ export const usePublicPriceFeed = (assetId: string) => {
             window.clearInterval(pollId)
             window.clearInterval(tickId)
         }
-    }, [assetId, config.coinId, config.defaultPrice, config.symbol, config.volatility])
+    }, [assetId, config.defaultPrice, config.volatility])
 
     return { prices, currentPrice }
 }

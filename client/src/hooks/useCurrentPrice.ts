@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
 
 export function useCurrentPrice(assetId: string) {
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
-  const { authenticated } = useAuth()
 
   useEffect(() => {
     setCurrentPrice(null)
-  }, [assetId, authenticated])
+  }, [assetId])
 
   useEffect(() => {
-    if (!authenticated || !assetId) return
+    if (!assetId) return
 
     let ws: WebSocket | null = null
     let timeoutId: ReturnType<typeof setTimeout> | null = null
@@ -47,7 +45,7 @@ export function useCurrentPrice(assetId: string) {
       }
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [assetId, authenticated])
+  }, [assetId])
 
   return currentPrice
 }

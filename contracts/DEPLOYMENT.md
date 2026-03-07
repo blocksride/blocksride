@@ -187,7 +187,7 @@ For additional prediction markets:
 - **Uniswap V4 Docs:** https://docs.uniswap.org/contracts/v4/overview
 - **Pyth Network Docs:** https://docs.pyth.network/
 - **Base Docs:** https://docs.base.org/
-- **Contract Source:** `/home/robinsoncodes/Downloads/eth-ride(1)/eth-ride/blocksride/contracts/src/PariHook.sol`
+- **Contract Source:** `/home/robinsoncodes/Downloads/blocksride(1)/blocksride/blocksride/contracts/src/PariHook.sol`
 
 ---
 
