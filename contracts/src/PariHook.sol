@@ -159,8 +159,14 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     /// @notice Double-claim prevention: poolId => windowId => user => pushed
     mapping(PoolId => mapping(uint256 => mapping(address => bool))) public payoutPushed;
 
-    /// @notice User nonces for EIP-712 signatures: user => nonce
+    /// @notice User nonces for EIP-712 bet signatures: user => nonce
     mapping(address => uint256) public betNonces;
+
+    /// @notice User nonces for EIP-712 claim signatures: user => nonce
+    mapping(address => uint256) public claimNonces;
+
+    /// @notice Total amount staked by a user in a window across all cells — used for void refunds
+    mapping(PoolId => mapping(uint256 => mapping(address => uint256))) public userWindowStake;
 
     /// @notice EIP-712 domain separator
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -664,12 +670,29 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         external
         onlyRole(TREASURY_ROLE)
     {
-        // TODO: Verify window is settled
-        // TODO: Loop through winners
-        // TODO: Calculate payout = userStakes[winningCell][user] * redemptionRate / 1e18
-        // TODO: Transfer USDC from poolManager to user
-        // TODO: Zero out userStakes[winningCell][user]
-        // TODO: Emit PayoutClaimed events
+        PoolId poolId = key.toId();
+        Window storage window = windows[poolId][windowId];
+        GridConfig storage cfg = gridConfigs[poolId];
+
+        require(window.settled, "Window not settled");
+
+        uint256 winningCell = window.winningCell;
+        uint256 rate = window.redemptionRate;
+
+        for (uint256 i = 0; i < winners.length; i++) {
+            address winner = winners[i];
+            if (payoutPushed[poolId][windowId][winner]) continue;
+
+            uint256 stake = window.userStakes[winningCell][winner];
+            if (stake == 0) continue;
+
+            uint256 payout = (stake * rate) / REDEMPTION_PRECISION;
+            payoutPushed[poolId][windowId][winner] = true;
+            window.userStakes[winningCell][winner] = 0;
+
+            require(IERC20(cfg.usdcToken).transfer(winner, payout), "Transfer failed");
+            emit PayoutPushed(poolId, windowId, winner, payout);
+        }
     }
 
     /**
@@ -678,12 +701,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowIds Array of window IDs to claim from
      */
     function claimAll(PoolKey calldata key, uint256[] calldata windowIds) external nonReentrant {
-        // TODO: Loop through windowIds
-        // TODO: Verify window is settled
-        // TODO: Calculate payout from userStakes[winningCell][msg.sender]
-        // TODO: Transfer USDC from poolManager
-        // TODO: Zero out stakes
-        // TODO: Emit PayoutClaimed events
+        _claimAll(key, windowIds, msg.sender);
     }
 
     /**
@@ -705,8 +723,51 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         bytes32 r,
         bytes32 s
     ) external nonReentrant onlyRole(RELAYER_ROLE) {
-        // TODO: Verify EIP-712 ClaimIntent signature
-        // TODO: Call internal _claimAll() for user
+        require(block.timestamp <= deadline, "Signature expired");
+
+        uint256 nonce = claimNonces[user];
+        bytes32 poolIdBytes = bytes32(PoolId.unwrap(key.toId()));
+        bytes32 windowIdsHash = keccak256(abi.encodePacked(windowIds));
+
+        bytes32 structHash = keccak256(
+            abi.encode(CLAIM_INTENT_TYPEHASH, user, poolIdBytes, windowIdsHash, nonce, deadline)
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+
+        address recovered = ecrecover(digest, v, r, s);
+        require(recovered != address(0) && recovered == user, "Invalid signature");
+
+        claimNonces[user]++;
+        _claimAll(key, windowIds, user);
+    }
+
+    /// @dev Internal payout logic shared by claimAll and claimAllFor.
+    function _claimAll(PoolKey calldata key, uint256[] calldata windowIds, address user) internal {
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        uint256 totalPayout = 0;
+
+        for (uint256 i = 0; i < windowIds.length; i++) {
+            uint256 wid = windowIds[i];
+            Window storage w = windows[poolId][wid];
+
+            if (!w.settled || w.voided) continue;
+            if (payoutPushed[poolId][wid][user]) continue;
+
+            uint256 stake = w.userStakes[w.winningCell][user];
+            if (stake == 0) continue;
+
+            uint256 payout = (stake * w.redemptionRate) / REDEMPTION_PRECISION;
+            payoutPushed[poolId][wid][user] = true;
+            w.userStakes[w.winningCell][user] = 0;
+
+            totalPayout += payout;
+            emit PayoutClaimed(poolId, wid, user, payout);
+        }
+
+        if (totalPayout > 0) {
+            require(IERC20(cfg.usdcToken).transfer(user, totalPayout), "Transfer failed");
+        }
     }
 
     /**
@@ -715,11 +776,18 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowId Voided window ID
      */
     function claimRefund(PoolKey calldata key, uint256 windowId) external nonReentrant {
-        // TODO: Verify window is voided
-        // TODO: Refund all cellStakes for msg.sender (sum across all cells)
-        // TODO: Transfer USDC from poolManager
-        // TODO: Zero out stakes
-        // TODO: Emit RefundClaimed event
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+
+        require(windows[poolId][windowId].voided, "Window not voided");
+
+        uint256 refund = userWindowStake[poolId][windowId][msg.sender];
+        require(refund > 0, "No stake to refund");
+
+        userWindowStake[poolId][windowId][msg.sender] = 0;
+
+        require(IERC20(cfg.usdcToken).transfer(msg.sender, refund), "Transfer failed");
+        emit RefundClaimed(poolId, windowId, msg.sender, refund);
     }
 
     // =============================================================
@@ -734,12 +802,17 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param amount   USDC amount (6 decimals)
      */
     function depositBackstop(PoolKey calldata key, uint256 windowId, uint256 amount) external onlyRole(TREASURY_ROLE) {
-        // TODO: Transfer USDC from treasury to poolManager via unlock()
-        // TODO: windows[poolId][windowId].backstopPool += amount
-        // TODO: windows[poolId][windowId].totalPool += amount
-        // TODO: backstopBalances[poolId] += amount
-        // TODO: backstopDepositor[poolId][windowId] = msg.sender
-        // TODO: emit BackstopDeposited(poolId, windowId, amount)
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+
+        require(IERC20(cfg.usdcToken).transferFrom(msg.sender, address(this), amount), "Transfer failed");
+
+        windows[poolId][windowId].backstopPool += amount;
+        windows[poolId][windowId].totalPool += amount;
+        backstopBalances[poolId] += amount;
+        backstopDepositor[poolId][windowId] = msg.sender;
+
+        emit BackstopDeposited(poolId, windowId, amount);
     }
 
     /**
@@ -766,32 +839,36 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param amount USDC amount to withdraw
      */
     function withdrawFees(PoolKey calldata key, uint256 amount) external onlyRole(TREASURY_ROLE) {
-        // TODO: Verify amount <= collectedFees[poolId]
-        // TODO: Transfer USDC from poolManager to treasury
-        // TODO: Decrement collectedFees[poolId]
-        // TODO: Emit FeesWithdrawn event
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+
+        require(amount <= collectedFees[poolId], "Insufficient collected fees");
+        collectedFees[poolId] -= amount;
+
+        require(IERC20(cfg.usdcToken).transfer(msg.sender, amount), "Transfer failed");
+        emit FeesWithdrawn(poolId, msg.sender, amount);
     }
 
     /// @notice Update protocol fee. Max 10% (1000 bps).
     function setFeeBps(PoolKey calldata key, uint256 feeBps) external onlyRole(ADMIN_ROLE) {
-        // TODO: require(feeBps <= 1000, "Max 10%")
-        // TODO: gridConfigs[key.toId()].feeBps = feeBps
+        require(feeBps <= 1000, "Max 10%");
+        gridConfigs[key.toId()].feeBps = feeBps;
     }
 
     /// @notice Update frozen window count (anti-sniping buffer).
     function setFrozenWindows(PoolKey calldata key, uint256 count) external onlyRole(ADMIN_ROLE) {
-        // TODO: require(count >= 1, "Min 1 frozen window")
-        // TODO: gridConfigs[key.toId()].frozenWindows = count
+        require(count >= 1, "Min 1 frozen window");
+        gridConfigs[key.toId()].frozenWindows = count;
     }
 
     /// @notice Update minimum organic pool threshold for void trigger. 0 = disabled.
     function setMinPoolThreshold(PoolKey calldata key, uint256 threshold) external onlyRole(ADMIN_ROLE) {
-        // TODO: gridConfigs[key.toId()].minPoolThreshold = threshold
+        gridConfigs[key.toId()].minPoolThreshold = threshold;
     }
 
     /// @notice Update maximum stake per cell (whale cap).
     function setMaxStakePerCell(PoolKey calldata key, uint256 max) external onlyRole(ADMIN_ROLE) {
-        // TODO: gridConfigs[key.toId()].maxStakePerCell = max
+        gridConfigs[key.toId()].maxStakePerCell = max;
     }
 
     /**
@@ -950,9 +1027,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         view
         returns (uint256)
     {
-        // TODO: Check if window settled and cellId == winningCell
-        // TODO: Return userStakes[cellId][user] * redemptionRate / 1e18
-        return 0;
+        Window storage w = windows[key.toId()][windowId];
+        if (!w.settled || w.voided) return 0;
+        if (cellId != w.winningCell) return 0;
+        uint256 stake = w.userStakes[cellId][user];
+        return (stake * w.redemptionRate) / REDEMPTION_PRECISION;
     }
 
     /**
@@ -967,8 +1046,13 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         view
         returns (uint256)
     {
-        // TODO: Calculate (totalPool * (10000 - feeBps) / 10000) * 1e18 / cellStakes[cellId]
-        return 0;
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        Window storage w = windows[poolId][windowId];
+        uint256 stake = w.cellStakes[cellId];
+        if (stake == 0) return 0;
+        uint256 netPool = (w.totalPool * (BPS_DENOMINATOR - cfg.feeBps)) / BPS_DENOMINATOR;
+        return (netPool * REDEMPTION_PRECISION) / stake;
     }
 
     // =============================================================
@@ -1017,6 +1101,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         window.organicPool += amount;
         window.cellStakes[cellId] += amount;
         window.userStakes[cellId][user] += amount;
+        userWindowStake[poolId][windowId][user] += amount;
 
         emit BetPlaced(poolId, windowId, cellId, user, amount);
     }
