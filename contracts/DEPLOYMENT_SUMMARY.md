@@ -56,9 +56,12 @@ You're not creating a USDC/ETH swap pool. Instead:
 ### The Pool Key Explained
 
 When you initialize a pool, you create a `PoolKey`:
-- **currency0:** Dummy placeholder (not used for betting)
-- **currency1:** USDC (what users bet with)
+- **currency0:** USDC (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`)
+- **currency1:** Native ETH sentinel (`0x0000000000000000000000000000000000000000`)
+- **fee:** `0`
+- **tickSpacing:** `60`
 - **hooks:** PariHook address
+- **poolId:** `0x83e7f0a67dd9517dc10cb7f40c338e542acc1d132e931483605b05dcc4402463`
 
 The pool exists only to leverage Uniswap V4's:
 1. Secure custody (PoolManager holds funds)
