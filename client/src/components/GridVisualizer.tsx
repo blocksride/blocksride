@@ -28,7 +28,6 @@ import {
     X,
 } from 'lucide-react'
 
-import { useGridSocket } from '../hooks/useGridSocket'
 import { useBetQuote } from '../hooks/useBetQuote'
 import { usePoolMultipliers } from '../hooks/usePoolMultipliers'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
@@ -139,7 +138,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         addOptimisticCell, removeOptimisticCell, updateCellId,
     } = useGridPositions(selectedAsset, grid, cells, currentPrice, isPracticeMode)
 
-    const { cellStakes: socketCellStakes } = useGridSocket()
     const { showConfetti, trigger: triggerConfetti, reset: resetConfetti } = useConfetti()
 
     const [quoteCellId, setQuoteCellId] = useState<string | null>(null)
@@ -219,15 +217,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         exitToSelection()
     }, [exitToSelection])
 
-    const cellStakes = React.useMemo(() => {
-        const combined: Record<string, number> = { ...socketCellStakes }
-        positions.forEach(p => {
-            const slotKey = normalizeSlotKey(p.cell_id, cells)
-            combined[slotKey] = (combined[slotKey] || 0) + p.stake
-        })
-        return combined
-    }, [socketCellStakes, positions, cells])
-
     const containerRef = useRef<HTMLDivElement>(null)
     const viewport = useGridViewport(
         currentPrice,
@@ -298,7 +287,15 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         viewport.visibleMinPrice,
         viewport.visibleMaxPrice,
     )
-    const { formatted: onChainWalletBalance } = useTokenBalance()
+    const cellStakes = React.useMemo(() => {
+        const combined: Record<string, number> = { ...onChainCellStakes }
+        positions.forEach(p => {
+            const slotKey = normalizeSlotKey(p.cell_id, cells)
+            combined[slotKey] = (combined[slotKey] || 0) + p.stake
+        })
+        return combined
+    }, [onChainCellStakes, positions, cells])
+
     const { quote: betQuote, loading: quoteLoading } = useBetQuote({
         cellKey: quoteCellId,
         stake: currentStake,
