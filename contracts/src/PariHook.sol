@@ -43,8 +43,6 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     bytes4 private constant PYTH_ERR_PRICE_FEED_NOT_FOUND_WITHIN_RANGE =
         bytes4(keccak256("PriceFeedNotFoundWithinRange()"));
 
-    error HookNotImplemented();
-
     // =============================================================
     //                      DATA STRUCTURES
     // =============================================================
@@ -161,13 +159,14 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     /// @notice Double-claim prevention: poolId => windowId => user => pushed
     mapping(PoolId => mapping(uint256 => mapping(address => bool))) public payoutPushed;
 
-    /// @notice User nonces for EIP-712 signatures: user => nonce
+    /// @notice User nonces for EIP-712 bet signatures: user => nonce
     mapping(address => uint256) public betNonces;
+
+    /// @notice User nonces for EIP-712 claim signatures: user => nonce
     mapping(address => uint256) public claimNonces;
 
-    /// @notice Track per-user cells touched in a window for refund iteration.
-    mapping(PoolId => mapping(uint256 => mapping(address => uint256[]))) private userWindowCells;
-    mapping(PoolId => mapping(uint256 => mapping(address => mapping(uint256 => bool)))) private userWindowCellSeen;
+    /// @notice Total amount staked by a user in a window across all cells — used for void refunds
+    mapping(PoolId => mapping(uint256 => mapping(address => uint256))) public userWindowStake;
 
     /// @notice EIP-712 domain separator
     bytes32 public immutable DOMAIN_SEPARATOR;
@@ -248,7 +247,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         poolManager = _poolManager;
         pythOracle = _pythOracle;
 
-        // NOTE: Hook address permission-bit validation is intentionally disabled for test deployments.
+        // TODO: Re-enable hook address validation for production deployment
         // Hook address must be mined to have correct bit pattern
         // For testing, we skip validation
         // IHooks(this).validateHookPermissions(
@@ -381,7 +380,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     }
 
     function afterInitialize(address, PoolKey calldata, uint160, int24) external pure override returns (bytes4) {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function beforeAddLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
@@ -390,7 +389,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function afterAddLiquidity(
@@ -401,7 +400,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         BalanceDelta,
         bytes calldata
     ) external pure override returns (bytes4, BalanceDelta) {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function beforeRemoveLiquidity(address, PoolKey calldata, ModifyLiquidityParams calldata, bytes calldata)
@@ -410,7 +409,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function afterRemoveLiquidity(
@@ -421,7 +420,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         BalanceDelta,
         bytes calldata
     ) external pure override returns (bytes4, BalanceDelta) {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function beforeSwap(address, PoolKey calldata, SwapParams calldata, bytes calldata)
@@ -430,7 +429,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4, BeforeSwapDelta, uint24)
     {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function afterSwap(address, PoolKey calldata, SwapParams calldata, BalanceDelta, bytes calldata)
@@ -439,7 +438,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4, int128)
     {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
@@ -448,7 +447,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
@@ -457,7 +456,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         override
         returns (bytes4)
     {
-        revert HookNotImplemented();
+        revert("Hook not implemented");
     }
 
     // =============================================================
@@ -672,15 +671,13 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         onlyRole(TREASURY_ROLE)
     {
         PoolId poolId = key.toId();
-        GridConfig storage cfg = gridConfigs[poolId];
         Window storage window = windows[poolId][windowId];
+        GridConfig storage cfg = gridConfigs[poolId];
 
-        require(cfg.bandWidth != 0, "Grid not configured");
         require(window.settled, "Window not settled");
-        require(!window.voided, "Window is voided");
 
         uint256 winningCell = window.winningCell;
-        uint256 redemptionRate = window.redemptionRate;
+        uint256 rate = window.redemptionRate;
 
         for (uint256 i = 0; i < winners.length; i++) {
             address winner = winners[i];
@@ -689,11 +686,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
             uint256 stake = window.userStakes[winningCell][winner];
             if (stake == 0) continue;
 
-            uint256 payout = (stake * redemptionRate) / REDEMPTION_PRECISION;
-            window.userStakes[winningCell][winner] = 0;
+            uint256 payout = (stake * rate) / REDEMPTION_PRECISION;
             payoutPushed[poolId][windowId][winner] = true;
-            require(IERC20(cfg.usdcToken).transfer(winner, payout), "USDC transfer failed");
+            window.userStakes[winningCell][winner] = 0;
 
+            require(IERC20(cfg.usdcToken).transfer(winner, payout), "Transfer failed");
             emit PayoutPushed(poolId, windowId, winner, payout);
         }
     }
@@ -704,7 +701,7 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param windowIds Array of window IDs to claim from
      */
     function claimAll(PoolKey calldata key, uint256[] calldata windowIds) external nonReentrant {
-        _claimAll(key.toId(), windowIds, msg.sender);
+        _claimAll(key, windowIds, msg.sender);
     }
 
     /**
@@ -729,17 +726,48 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         require(block.timestamp <= deadline, "Signature expired");
 
         uint256 nonce = claimNonces[user];
-        ClaimIntent memory intent = ClaimIntent({
-            user: user,
-            poolId: bytes32(PoolId.unwrap(key.toId())),
-            windowIds: windowIds,
-            nonce: nonce,
-            deadline: deadline
-        });
-        require(_verifyClaimSignature(intent, v, r, s), "Invalid signature");
-        claimNonces[user] = nonce + 1;
+        bytes32 poolIdBytes = bytes32(PoolId.unwrap(key.toId()));
+        bytes32 windowIdsHash = keccak256(abi.encodePacked(windowIds));
 
-        _claimAll(key.toId(), windowIds, user);
+        bytes32 structHash = keccak256(
+            abi.encode(CLAIM_INTENT_TYPEHASH, user, poolIdBytes, windowIdsHash, nonce, deadline)
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+
+        address recovered = ecrecover(digest, v, r, s);
+        require(recovered != address(0) && recovered == user, "Invalid signature");
+
+        claimNonces[user]++;
+        _claimAll(key, windowIds, user);
+    }
+
+    /// @dev Internal payout logic shared by claimAll and claimAllFor.
+    function _claimAll(PoolKey calldata key, uint256[] calldata windowIds, address user) internal {
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        uint256 totalPayout = 0;
+
+        for (uint256 i = 0; i < windowIds.length; i++) {
+            uint256 wid = windowIds[i];
+            Window storage w = windows[poolId][wid];
+
+            if (!w.settled || w.voided) continue;
+            if (payoutPushed[poolId][wid][user]) continue;
+
+            uint256 stake = w.userStakes[w.winningCell][user];
+            if (stake == 0) continue;
+
+            uint256 payout = (stake * w.redemptionRate) / REDEMPTION_PRECISION;
+            payoutPushed[poolId][wid][user] = true;
+            w.userStakes[w.winningCell][user] = 0;
+
+            totalPayout += payout;
+            emit PayoutClaimed(poolId, wid, user, payout);
+        }
+
+        if (totalPayout > 0) {
+            require(IERC20(cfg.usdcToken).transfer(user, totalPayout), "Transfer failed");
+        }
     }
 
     /**
@@ -750,25 +778,16 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     function claimRefund(PoolKey calldata key, uint256 windowId) external nonReentrant {
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
-        Window storage window = windows[poolId][windowId];
 
-        require(cfg.bandWidth != 0, "Grid not configured");
-        require(window.voided, "Window not voided");
+        require(windows[poolId][windowId].voided, "Window not voided");
 
-        uint256 refundAmount = _consumeUserRefund(poolId, windowId, msg.sender);
+        uint256 refund = userWindowStake[poolId][windowId][msg.sender];
+        require(refund > 0, "No stake to refund");
 
-        if (msg.sender == backstopDepositor[poolId][windowId] && window.backstopPool > 0) {
-            uint256 backstopRefund = window.backstopPool;
-            refundAmount += backstopRefund;
-            window.backstopPool = 0;
-            backstopBalances[poolId] -= backstopRefund;
-            backstopDepositor[poolId][windowId] = address(0);
-        }
+        userWindowStake[poolId][windowId][msg.sender] = 0;
 
-        require(refundAmount > 0, "No refundable amount");
-        require(IERC20(cfg.usdcToken).transfer(msg.sender, refundAmount), "USDC transfer failed");
-
-        emit RefundClaimed(poolId, windowId, msg.sender, refundAmount);
+        require(IERC20(cfg.usdcToken).transfer(msg.sender, refund), "Transfer failed");
+        emit RefundClaimed(poolId, windowId, msg.sender, refund);
     }
 
     // =============================================================
@@ -783,19 +802,13 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @param amount   USDC amount (6 decimals)
      */
     function depositBackstop(PoolKey calldata key, uint256 windowId, uint256 amount) external onlyRole(TREASURY_ROLE) {
-        require(amount > 0, "Amount must be > 0");
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
-        require(cfg.bandWidth != 0, "Grid not configured");
 
-        address depositor = backstopDepositor[poolId][windowId];
-        require(depositor == address(0) || depositor == msg.sender, "Backstop depositor mismatch");
+        require(IERC20(cfg.usdcToken).transferFrom(msg.sender, address(this), amount), "Transfer failed");
 
-        require(IERC20(cfg.usdcToken).transferFrom(msg.sender, address(this), amount), "USDC transfer failed");
-
-        Window storage window = windows[poolId][windowId];
-        window.backstopPool += amount;
-        window.totalPool += amount;
+        windows[poolId][windowId].backstopPool += amount;
+        windows[poolId][windowId].totalPool += amount;
         backstopBalances[poolId] += amount;
         backstopDepositor[poolId][windowId] = msg.sender;
 
@@ -828,44 +841,34 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     function withdrawFees(PoolKey calldata key, uint256 amount) external onlyRole(TREASURY_ROLE) {
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
-        require(cfg.bandWidth != 0, "Grid not configured");
-        require(amount <= collectedFees[poolId], "Insufficient fees");
 
+        require(amount <= collectedFees[poolId], "Insufficient collected fees");
         collectedFees[poolId] -= amount;
-        require(IERC20(cfg.usdcToken).transfer(msg.sender, amount), "USDC transfer failed");
+
+        require(IERC20(cfg.usdcToken).transfer(msg.sender, amount), "Transfer failed");
         emit FeesWithdrawn(poolId, msg.sender, amount);
     }
 
     /// @notice Update protocol fee. Max 10% (1000 bps).
     function setFeeBps(PoolKey calldata key, uint256 feeBps) external onlyRole(ADMIN_ROLE) {
         require(feeBps <= 1000, "Max 10%");
-        PoolId poolId = key.toId();
-        require(gridConfigs[poolId].bandWidth != 0, "Grid not configured");
-        gridConfigs[poolId].feeBps = feeBps;
+        gridConfigs[key.toId()].feeBps = feeBps;
     }
 
     /// @notice Update frozen window count (anti-sniping buffer).
     function setFrozenWindows(PoolKey calldata key, uint256 count) external onlyRole(ADMIN_ROLE) {
         require(count >= 1, "Min 1 frozen window");
-        require(count <= 10, "Max 10 frozen windows");
-        PoolId poolId = key.toId();
-        require(gridConfigs[poolId].bandWidth != 0, "Grid not configured");
-        gridConfigs[poolId].frozenWindows = count;
+        gridConfigs[key.toId()].frozenWindows = count;
     }
 
     /// @notice Update minimum organic pool threshold for void trigger. 0 = disabled.
     function setMinPoolThreshold(PoolKey calldata key, uint256 threshold) external onlyRole(ADMIN_ROLE) {
-        PoolId poolId = key.toId();
-        require(gridConfigs[poolId].bandWidth != 0, "Grid not configured");
-        gridConfigs[poolId].minPoolThreshold = threshold;
+        gridConfigs[key.toId()].minPoolThreshold = threshold;
     }
 
     /// @notice Update maximum stake per cell (whale cap).
     function setMaxStakePerCell(PoolKey calldata key, uint256 max) external onlyRole(ADMIN_ROLE) {
-        require(max > 0, "Max stake must be > 0");
-        PoolId poolId = key.toId();
-        require(gridConfigs[poolId].bandWidth != 0, "Grid not configured");
-        gridConfigs[poolId].maxStakePerCell = max;
+        gridConfigs[key.toId()].maxStakePerCell = max;
     }
 
     /**
@@ -1024,11 +1027,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         view
         returns (uint256)
     {
-        Window storage window = windows[key.toId()][windowId];
-        if (!window.settled || window.voided || cellId != window.winningCell) return 0;
-        uint256 stake = window.userStakes[cellId][user];
-        if (stake == 0) return 0;
-        return (stake * window.redemptionRate) / REDEMPTION_PRECISION;
+        Window storage w = windows[key.toId()][windowId];
+        if (!w.settled || w.voided) return 0;
+        if (cellId != w.winningCell) return 0;
+        uint256 stake = w.userStakes[cellId][user];
+        return (stake * w.redemptionRate) / REDEMPTION_PRECISION;
     }
 
     /**
@@ -1045,13 +1048,11 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
     {
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
-        Window storage window = windows[poolId][windowId];
-
-        uint256 cellStake = window.cellStakes[cellId];
-        if (cellStake == 0) return 0;
-
-        uint256 netPool = (window.totalPool * (BPS_DENOMINATOR - cfg.feeBps)) / BPS_DENOMINATOR;
-        return (netPool * REDEMPTION_PRECISION) / cellStake;
+        Window storage w = windows[poolId][windowId];
+        uint256 stake = w.cellStakes[cellId];
+        if (stake == 0) return 0;
+        uint256 netPool = (w.totalPool * (BPS_DENOMINATOR - cfg.feeBps)) / BPS_DENOMINATOR;
+        return (netPool * REDEMPTION_PRECISION) / stake;
     }
 
     // =============================================================
@@ -1093,17 +1094,14 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         // 3. Hook validates bet, calls poolManager.settle() to transfer USDC from user to PoolManager
         // 4. PoolManager holds all USDC; hook only tracks accounting
         //
-        // NOTE: Pre-mainnet hardening: move custody to PoolManager unlock/callback flow.
+        // TODO: Implement PoolManager unlock/callback pattern before mainnet deployment
         require(IERC20(cfg.usdcToken).transferFrom(user, address(this), amount), "USDC transfer failed");
 
         window.totalPool += amount;
         window.organicPool += amount;
         window.cellStakes[cellId] += amount;
         window.userStakes[cellId][user] += amount;
-        if (!userWindowCellSeen[poolId][windowId][user][cellId]) {
-            userWindowCellSeen[poolId][windowId][user][cellId] = true;
-            userWindowCells[poolId][windowId][user].push(cellId);
-        }
+        userWindowStake[poolId][windowId][user] += amount;
 
         emit BetPlaced(poolId, windowId, cellId, user, amount);
     }
@@ -1227,21 +1225,10 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
      * @return True if signature valid
      */
     function _verifyBetSignature(BetIntent memory intent, uint8 v, bytes32 r, bytes32 s) internal view returns (bool) {
-        bytes32 structHash = keccak256(
-            abi.encode(
-                BET_INTENT_TYPEHASH,
-                intent.user,
-                intent.poolId,
-                intent.cellId,
-                intent.windowId,
-                intent.amount,
-                intent.nonce,
-                intent.deadline
-            )
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-        address signer = ecrecover(digest, v, r, s);
-        return signer != address(0) && signer == intent.user;
+        // TODO: Reconstruct EIP-712 hash
+        // TODO: Recover signer via ecrecover
+        // TODO: Verify signer == intent.user
+        return false;
     }
 
     /**
@@ -1257,57 +1244,10 @@ contract PariHook is IHooks, AccessControl, Pausable, ReentrancyGuard {
         view
         returns (bool)
     {
-        bytes32 windowIdsHash = keccak256(abi.encodePacked(intent.windowIds));
-        bytes32 structHash = keccak256(
-            abi.encode(CLAIM_INTENT_TYPEHASH, intent.user, intent.poolId, windowIdsHash, intent.nonce, intent.deadline)
-        );
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-        address signer = ecrecover(digest, v, r, s);
-        return signer != address(0) && signer == intent.user;
-    }
-
-    function _claimAll(PoolId poolId, uint256[] calldata windowIds, address user) internal {
-        GridConfig storage cfg = gridConfigs[poolId];
-        require(cfg.bandWidth != 0, "Grid not configured");
-
-        uint256 totalPayout;
-        for (uint256 i = 0; i < windowIds.length; i++) {
-            uint256 windowId = windowIds[i];
-            Window storage window = windows[poolId][windowId];
-            if (!window.settled || window.voided) continue;
-            if (payoutPushed[poolId][windowId][user]) continue;
-
-            uint256 stake = window.userStakes[window.winningCell][user];
-            if (stake == 0) continue;
-
-            uint256 payout = (stake * window.redemptionRate) / REDEMPTION_PRECISION;
-            window.userStakes[window.winningCell][user] = 0;
-            payoutPushed[poolId][windowId][user] = true;
-            totalPayout += payout;
-
-            emit PayoutClaimed(poolId, windowId, user, payout);
-        }
-
-        require(totalPayout > 0, "No claimable payout");
-        require(IERC20(cfg.usdcToken).transfer(user, totalPayout), "USDC transfer failed");
-    }
-
-    function _consumeUserRefund(PoolId poolId, uint256 windowId, address user)
-        internal
-        returns (uint256 refundAmount)
-    {
-        Window storage window = windows[poolId][windowId];
-        uint256[] storage cellIds = userWindowCells[poolId][windowId][user];
-
-        for (uint256 i = 0; i < cellIds.length; i++) {
-            uint256 cellId = cellIds[i];
-            uint256 stake = window.userStakes[cellId][user];
-            if (stake == 0) continue;
-
-            window.userStakes[cellId][user] = 0;
-            window.cellStakes[cellId] -= stake;
-            refundAmount += stake;
-        }
+        // TODO: Reconstruct EIP-712 hash
+        // TODO: Recover signer via ecrecover
+        // TODO: Verify signer == intent.user
+        return false;
     }
 
     /**
