@@ -8,11 +8,30 @@ type AssetConfig = {
 }
 
 const ASSET_CONFIG: Record<string, AssetConfig> = {
-    'ETH-USD': { defaultPrice: 3000, volatility: 2.5 },
-    'BTC-USD': { defaultPrice: 50000, volatility: 18 },
+    'ETH-USD': {
+        defaultPrice: 3000,
+        volatility: 2.5,
+    },
+    'BTC-USD': {
+        defaultPrice: 50000,
+        volatility: 18,
+    },
 }
 
-const getAssetConfig = (assetId: string) => ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
+const getAssetConfig = (assetId: string) => {
+    return ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
+}
+
+const fetchPublicPrice = async (assetId: string) => {
+    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080'
+    const baseURL = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`
+    const url = `${baseURL}/public-price?asset_id=${encodeURIComponent(assetId)}`
+    const res = await fetch(url)
+    if (!res.ok) return null
+    const data = await res.json()
+    const parsed = Number(data?.price)
+    return Number.isFinite(parsed) ? parsed : null
+}
 
 export const usePublicPriceFeed = (assetId: string) => {
     const config = getAssetConfig(assetId)
@@ -32,15 +51,12 @@ export const usePublicPriceFeed = (assetId: string) => {
         seededRef.current = false
 
         const updateTarget = async () => {
-            try {
-                const { data } = await api.getPublicPrice(assetId)
-                if (!mountedRef.current) return
-                if (typeof data.price === 'number' && Number.isFinite(data.price)) {
-                    targetPriceRef.current = data.price
-                    return
-                }
-            } catch {
-                // keep last cached target
+            const publicPrice = await fetchPublicPrice(assetId)
+            if (!mountedRef.current) return
+
+            if (publicPrice !== null) {
+                targetPriceRef.current = publicPrice
+                return
             }
 
             if (targetPriceRef.current === null) {

@@ -29,8 +29,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const [walletAddress, setWalletAddress] = useState<string | null>(null)
     const [authSynced, setAuthSynced] = useState(false)
 
-    // Get the embedded wallet address
-    const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
+    // Get embedded Privy wallet (walletClientType can vary by SDK version).
+    const embeddedWallet = wallets.find((w) =>
+        (w.walletClientType || '').toLowerCase().includes('privy'),
+    )
     const activeWallet = embeddedWallet || wallets[0]
 
     // Sync Privy auth state with backend

@@ -24,6 +24,7 @@ import { Contest, api, LeaderboardEntry } from '@/services/apiService'
 import { ContestRequirements } from './ContestRequirements'
 import { TerminalHeader } from '@/components/terminal/TerminalHeader'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
+import { useTokenBalance } from '@/hooks/useTokenBalance'
 
 export function ContestHub() {
     const {

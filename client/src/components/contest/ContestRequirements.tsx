@@ -11,6 +11,7 @@ import {
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { toast } from 'sonner'
 import { Contest } from '@/services/apiService'
+import { cn } from '@/lib/utils'
 
 interface ContestRequirementsProps {
     isOpen: boolean
@@ -25,9 +26,17 @@ export function ContestRequirements({
     contest,
     onRequirementsMet
 }: ContestRequirementsProps) {
-    const { address, formatted, refetch } = useTokenBalance()
-    const walletBalance = Number(formatted || '0')
+    const { address, formatted, refetch, isRefetching } = useTokenBalance()
+
+    // On-chain USDC balance for the embedded wallet on configured network/token.
+    const walletBalance = Number(formatted ?? '0')
     const hasBalance = walletBalance > 0
+
+    useEffect(() => {
+        if (isOpen) {
+            refetch()
+        }
+    }, [isOpen, refetch])
 
     const handleContinue = () => {
         if (hasBalance) {
@@ -47,11 +56,11 @@ export function ContestRequirements({
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="max-w-[90vw] sm:max-w-[400px] p-0 gap-0 bg-background border-border overflow-hidden">
+            <DialogContent className="max-w-[90vw] sm:max-w-[420px] p-0 gap-0 bg-card border border-primary/30 text-foreground font-mono overflow-hidden">
                 {/* Header */}
                 <div className="relative px-6 pt-6 pb-4">
                     <div className="text-center">
-                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                        <div className="w-12 h-12 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center mx-auto mb-3">
                             <Wallet className="w-6 h-6 text-primary" />
                         </div>
                         <DialogTitle className="text-lg font-bold text-foreground">Setup Required</DialogTitle>
@@ -66,7 +75,7 @@ export function ContestRequirements({
 
                     {/* Progress Bar */}
                     <div className="flex gap-1.5 mt-4">
-                        <div className={`h-1 flex-1 rounded-full transition-colors ${hasBalance ? 'bg-primary' : 'bg-secondary'}`} />
+                        <div className={`h-1 flex-1 rounded-full transition-colors ${hasBalance ? 'bg-green-500' : 'bg-primary/30'}`} />
                     </div>
                 </div>
 
@@ -80,8 +89,8 @@ export function ContestRequirements({
                         isActive={!hasBalance}
                     >
                         {hasBalance ? (
-                            <span className="text-sm text-muted-foreground">
-                                ${walletBalance.toFixed(2)} USDC in wallet
+                            <span className="text-sm text-green-400">
+                                ${walletBalance.toFixed(2)} USDC available (on-chain)
                             </span>
                         ) : (
                             <div className="space-y-2">
@@ -90,19 +99,19 @@ export function ContestRequirements({
                                 </p>
                                 <button
                                     onClick={copyAddress}
-                                    className="flex items-center gap-2 text-xs bg-secondary hover:bg-secondary/80 px-3 py-2 rounded-lg transition-colors w-full"
+                                    className="flex items-center gap-2 text-xs bg-background hover:bg-primary/10 px-3 py-2 rounded-lg border border-primary/25 transition-colors w-full"
                                 >
                                     <code className="font-mono text-muted-foreground">
                                         {shortenAddress(address)}
                                     </code>
-                                    <Copy className="w-3 h-3 text-muted-foreground ml-auto" />
+                                    <Copy className="w-3 h-3 text-primary ml-auto" />
                                 </button>
                                 <button
                                     onClick={() => refetch()}
-                                    className="flex items-center justify-center gap-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 rounded-lg transition-colors w-full"
+                                    className="flex items-center justify-center gap-2 text-xs bg-green-500/10 hover:bg-green-500/20 text-green-400 px-3 py-2 rounded-lg border border-green-500/30 transition-colors w-full"
                                 >
-                                    <RefreshCw className="w-3 h-3" />
-                                    I've deposited, refresh balance
+                                    <RefreshCw className={cn('w-3 h-3', isRefetching && 'animate-spin')} />
+                                    {isRefetching ? 'Refreshing...' : "I've deposited, refresh balance"}
                                 </button>
                             </div>
                         )}
@@ -110,7 +119,7 @@ export function ContestRequirements({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 bg-secondary/30 border-t border-border">
+                <div className="px-6 py-4 bg-background/60 border-t border-primary/20">
                     <Button
                         className="w-full h-11 font-semibold"
                         onClick={handleContinue}
@@ -150,10 +159,10 @@ function StepCard({
         <div
             className={`relative p-4 rounded-xl border transition-all overflow-hidden ${
                 isComplete
-                    ? 'bg-primary/5 border-primary/20'
+                    ? 'bg-green-500/10 border-green-500/30'
                     : isActive
-                    ? 'bg-card border-border ring-1 ring-primary/20'
-                    : 'bg-card border-border'
+                    ? 'bg-primary/10 border-primary/30 ring-1 ring-primary/30'
+                    : 'bg-card border-primary/20'
             }`}
         >
             <div className="flex items-start gap-3 min-w-0 overflow-hidden">
@@ -161,10 +170,10 @@ function StepCard({
                 <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         isComplete
-                            ? 'bg-primary text-primary-foreground'
-                            : isActive
+                            ? 'bg-green-500 text-black'
+                        : isActive
                             ? 'bg-primary/10 text-primary border border-primary/30'
-                            : 'bg-secondary text-muted-foreground'
+                            : 'bg-card border border-primary/20 text-muted-foreground'
                     }`}
                 >
                     {isComplete ? (
@@ -177,11 +186,11 @@ function StepCard({
                 {/* Content */}
                 <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-2 mb-1">
-                        <span className={`text-sm font-semibold ${isComplete ? 'text-primary' : 'text-foreground'}`}>
+                        <span className={`text-sm font-semibold ${isComplete ? 'text-green-400' : 'text-foreground'}`}>
                             {title}
                         </span>
                         {isComplete && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium flex-shrink-0">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 font-medium flex-shrink-0">
                                 Done
                             </span>
                         )}

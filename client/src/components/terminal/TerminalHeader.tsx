@@ -137,7 +137,7 @@ export function TerminalHeader() {
           </div>
 
           {/* Network Badge - only show on testnet */}
-          {networkName === 'Sepolia' && (
+          {networkName.includes('Sepolia') && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-orange-500/20 text-orange-400 border border-orange-500/30">
               Testnet
             </span>

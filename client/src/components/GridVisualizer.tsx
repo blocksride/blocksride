@@ -275,7 +275,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return parts.find((part) => part.type === 'timeZoneName')?.value ?? ''
     }, [])
 
-    const { user, refreshUser, authenticated } = useAuth()
+    const { user, refreshUser, authenticated, walletAddress } = useAuth()
+    const { formatted: onchainUsdcBalance } = useTokenBalance()
     const { wallets } = useWallets()
     const walletsRef = useRef(wallets)
     walletsRef.current = wallets
@@ -305,8 +306,10 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         cellStakes: onChainCellStakes,
     })
     const practiceBalance = user?.practice_balance ?? 1000
-    const liveBalance = Number(onChainWalletBalance || '0')
-    const userBalance = isPracticeMode ? practiceBalance : liveBalance
+    const parsedOnchainBalance = Number(onchainUsdcBalance ?? 0)
+    const onchainBalance = Number.isFinite(parsedOnchainBalance) ? parsedOnchainBalance : 0
+    const platformBalance = onchainBalance
+    const userBalance = isPracticeMode ? practiceBalance : platformBalance
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
     const claimItems = useMemo(() => {
@@ -397,11 +400,16 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 return
             }
 
-            const activeWallet =
-                walletsRef.current.find(w => w.walletClientType === 'privy') ??
-                walletsRef.current[0]
+            const activeWallet = walletsRef.current.find((w) => {
+                const isPrivyWallet = (w.walletClientType || '').toLowerCase().includes('privy')
+                if (!isPrivyWallet) return false
+                if (!walletAddress) return true
+                return (w.address || '').toLowerCase() === walletAddress.toLowerCase()
+            })
             if (!activeWallet) {
-                toast.error('No wallet connected')
+                toast.error('Embedded wallet not ready', {
+                    description: 'Sign in with Privy to claim wins/refunds.',
+                })
                 return
             }
 
@@ -433,7 +441,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 return s
             })
         }
-    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds])
+    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds, walletAddress])
 
     const handleClaim = useCallback((positionId: string) => {
         executeClaim([positionId])
@@ -524,9 +532,14 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                     throw new Error('no-pool')
                 }
 
-                const activeWallet =
-                    walletsRef.current.find(w => w.walletClientType === 'privy') ??
-                    walletsRef.current[0]
+                // Force embedded Privy wallet for betting flows.
+                // Do not fall back to injected wallets (e.g. MetaMask), which causes extra popups.
+                const activeWallet = walletsRef.current.find((w) => {
+                    const isPrivyWallet = (w.walletClientType || '').toLowerCase().includes('privy')
+                    if (!isPrivyWallet) return false
+                    if (!walletAddress) return true
+                    return (w.address || '').toLowerCase() === walletAddress.toLowerCase()
+                })
                 if (!activeWallet) throw new Error('no-wallet')
 
                 const provider = await activeWallet.getEthereumProvider()
@@ -567,9 +580,22 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 })
             }
         } catch (err) {
-            const msg = err instanceof Error ? err.message : ''
-            if (msg !== 'no-pool' && msg !== 'no-wallet') {
-                toast.error('Failed to place bet')
+            const responseMessage =
+                typeof err === 'object' &&
+                err !== null &&
+                'response' in err &&
+                typeof (err as { response?: { data?: unknown } }).response?.data === 'string'
+                    ? (err as { response?: { data?: string } }).response?.data
+                    : null
+            const msg = responseMessage || (err instanceof Error ? err.message : '')
+            if (msg === 'no-wallet') {
+                toast.error('Embedded wallet not ready', {
+                    description: 'Sign in with Privy to use the embedded wallet for betting.',
+                })
+            } else if (msg !== 'no-pool') {
+                toast.error('Failed to place bet', {
+                    description: msg || 'Unexpected error while scheduling bet.',
+                })
             }
             removeOptimisticCell(slotKey)
             placedCellsRef.current.delete(slotKey)
@@ -580,7 +606,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         }
     }, [
         isPracticeMode, selectedAsset, refreshUser,
-        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid,
+        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid, walletAddress,
     ])
 
     const handleCellClick = useCallback(async (cellId: number, windowId: number) => {

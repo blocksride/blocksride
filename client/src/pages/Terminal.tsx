@@ -10,12 +10,14 @@ import { useContest } from '@/contexts/ContestContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useOnboarding } from '@/contexts/OnboardingContext'
 import { toast } from 'sonner'
+import { useTokenBalance } from '@/hooks/useTokenBalance'
 
 const ADD_FUNDS_PROMPT_KEY = 'blocksride_add_funds_prompted'
 
 export const Terminal = () => {
     useAccount() // Keep for wagmi state
     const { authenticated, loading, user } = useAuth()
+    const { formatted: onchainUsdcBalance } = useTokenBalance()
     const { selectedContest, sessionMode, isWaitingForStart, isPracticeMode } = useContest()
     const { startOnboarding, isOnboardingActive } = useOnboarding()
 
@@ -31,7 +33,7 @@ export const Terminal = () => {
 
     useEffect(() => {
         if (loading || !authenticated || !user || isPracticeMode) return
-        if ((user.balance ?? 0) > 0) return
+        if (Number(onchainUsdcBalance ?? 0) > 0) return
         if (typeof window === 'undefined') return
 
         const prompted = localStorage.getItem(ADD_FUNDS_PROMPT_KEY) === 'true'
@@ -47,7 +49,7 @@ export const Terminal = () => {
         })
 
         localStorage.setItem(ADD_FUNDS_PROMPT_KEY, 'true')
-    }, [loading, authenticated, user, isPracticeMode])
+    }, [loading, authenticated, user, isPracticeMode, onchainUsdcBalance])
 
     // Show nothing while checking auth
     if (loading) {
