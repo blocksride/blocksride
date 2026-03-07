@@ -156,7 +156,7 @@ export function ContestWaiting() {
                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-600 dark:bg-yellow-500" />
                             </span>
                             <span className="text-xs font-bold text-amber-700 dark:text-yellow-500 uppercase tracking-wider">
-                                Contest Starting Soon
+                                Ride Starting Soon
                             </span>
                         </div>
 
@@ -213,7 +213,7 @@ export function ContestWaiting() {
 
                         {/* Info Text */}
                         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                            The trading grid will appear automatically when the contest begins.
+                            The trading grid will appear automatically when the ride begins.
                             <br />
                             <span className="text-xs">Get ready to place your predictions!</span>
                         </p>

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import type { Grid, Cell, Position } from '@/types/grid'
+import { useAuth } from '@/contexts/AuthContext'
 import { usePublicPriceFeed } from '@/hooks/usePublicPriceFeed'
 import { useGridViewport } from '@/hooks/useGridViewport'
 import { GridCanvas } from '@/components/grid/GridCanvas'
@@ -8,7 +9,6 @@ import { TradeControls } from '@/components/grid/TradeControls'
 import { PositionSummary } from '@/components/grid/PositionSummary'
 import { BetHistory } from '@/components/grid/BetHistory'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/contexts/AuthContext'
 
 interface GuestTerminalProps {
     assetId: string

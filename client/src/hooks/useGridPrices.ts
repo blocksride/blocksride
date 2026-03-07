@@ -2,12 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../services/apiService'
 import type { Grid } from '../types/grid'
 import { PricePoint } from '../types/grid'
-import { useAuth } from '../contexts/AuthContext'
 
 export function useGridPrices(selectedAsset: string, grid: Grid | null) {
   const [prices, setPrices] = useState<PricePoint[]>([])
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
-  const { authenticated } = useAuth()
 
   // Batch price updates to reduce re-renders
   const pendingPricesRef = useRef<PricePoint[]>([])
@@ -32,10 +30,10 @@ export function useGridPrices(selectedAsset: string, grid: Grid | null) {
   useEffect(() => {
     setPrices([])
     setCurrentPrice(null)
-  }, [selectedAsset, authenticated])
+  }, [selectedAsset])
 
   useEffect(() => {
-    if (!grid || !authenticated) return
+    if (!grid) return
 
     let isMounted = true
     const now = Date.now()
@@ -98,11 +96,9 @@ export function useGridPrices(selectedAsset: string, grid: Grid | null) {
     return () => {
       isMounted = false
     }
-  }, [grid, authenticated])
+  }, [grid])
 
   useEffect(() => {
-    if (!authenticated) return
-
     let ws: WebSocket | null = null
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     let isActive = true
@@ -160,7 +156,7 @@ export function useGridPrices(selectedAsset: string, grid: Grid | null) {
       // Flush any remaining prices
       flushPrices()
     }
-  }, [selectedAsset, authenticated, flushPrices])
+  }, [selectedAsset, flushPrices])
 
   return { prices, currentPrice }
 }

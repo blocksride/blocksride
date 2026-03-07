@@ -140,8 +140,8 @@ export function NoHistoryEmpty() {
 export function NoContestsEmpty() {
   return (
     <EmptyState
-      title="No contests available"
-      description="Check back later for upcoming contests."
+      title="No rides available"
+      description="Check back later for upcoming rides."
     />
   )
 }

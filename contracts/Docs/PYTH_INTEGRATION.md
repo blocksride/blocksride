@@ -221,7 +221,7 @@ Source: https://docs.pyth.network/price-feeds/contract-addresses/evm
 
 ## Price Feed IDs
 
-Common price feeds for ETH Ride:
+Common price feeds for BlocksRide:
 
 | Asset Pair | Feed ID |
 |------------|---------|

@@ -35,6 +35,9 @@ export const api = {
         >(`/prices/${assetId}?${params.toString()}`)
     },
 
+    getPublicPrice: (assetId: string = 'ETH-USD') =>
+        axiosInstance.get<PublicPrice>(`/public-price?asset_id=${assetId}`),
+
     createPosition: (cellId: string, assetId: string, stake: number, isPractice: boolean = false) =>
         axiosInstance.post<Position>(`/positions`, {
             cell_id: cellId,
@@ -140,6 +143,14 @@ export interface TradingPair {
     status: string
     created_at: string
     updated_at: string
+}
+
+export interface PublicPrice {
+    asset_id: string
+    price: number
+    source: string
+    ts: string
+    stale?: boolean
 }
 
 export type WithdrawalStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'queued'
