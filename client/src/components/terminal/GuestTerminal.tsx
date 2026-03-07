@@ -9,7 +9,6 @@ import { TradeControls } from '@/components/grid/TradeControls'
 import { PositionSummary } from '@/components/grid/PositionSummary'
 import { BetHistory } from '@/components/grid/BetHistory'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/contexts/AuthContext'
 
 interface GuestTerminalProps {
     assetId: string
