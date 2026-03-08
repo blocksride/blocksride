@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
 
 import {PariHook} from "../src/PariHook.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
@@ -13,6 +12,8 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 // =============================================================================
 //                          MOCK PYTH ORACLE
@@ -56,6 +57,34 @@ contract MockPyth {
     receive() external payable {}
 }
 
+// =============================================================================
+//                         MOCK POOL MANAGER
+// =============================================================================
+
+/// @dev Minimal PoolManager stub for testing the unlock/unlockCallback pattern.
+///      Implements exactly the functions that PariHook.unlockCallback calls:
+///        sync()   — no-op (no transient-storage tracking needed in tests)
+///        settle() — no-op (delta tracking not enforced in tests)
+///        take()   — transfers ERC-20 from MockPoolManager's own balance to `to`
+///      unlock() routes data straight to hook.unlockCallback(), which in turn
+///      calls transferFrom/transfer to move tokens into/out of MockPoolManager,
+///      then calls settle() and take() to complete the round-trip.
+contract MockPoolManager {
+    function unlock(bytes calldata data) external returns (bytes memory) {
+        return IUnlockCallback(msg.sender).unlockCallback(data);
+    }
+
+    function sync(Currency) external {}
+
+    function settle() external payable returns (uint256) {
+        return 0;
+    }
+
+    function take(Currency currency, address to, uint256 amount) external {
+        require(IERC20(Currency.unwrap(currency)).transfer(to, amount), "MockPM: take failed");
+    }
+}
+
 /**
  * @title PayoutFlowTest
  * @notice End-to-end tests for the complete betting lifecycle:
@@ -70,6 +99,7 @@ contract PayoutFlowTest is Test {
     // ── Contracts ──────────────────────────────────────────────────────────
     PariHook public hook;
     MockPyth public mockPyth;
+    MockPoolManager public mockPM;
     MockERC20 public usdc;
 
     // ── Roles ──────────────────────────────────────────────────────────────
@@ -121,8 +151,9 @@ contract PayoutFlowTest is Test {
 
         usdc = new MockERC20("USD Coin", "USDC", 6);
         mockPyth = new MockPyth();
+        mockPM = new MockPoolManager();
         hook = new PariHook(
-            IPoolManager(makeAddr("poolManager")),
+            IPoolManager(address(mockPM)),
             IPyth(address(mockPyth)),
             admin,
             treasury,
@@ -188,7 +219,7 @@ contract PayoutFlowTest is Test {
     ///      so no scaling is applied by _parsePythPrice.
     function _forceSettle(uint256 windowId, uint256 winningCell) internal {
         // Price = middle of the target band (avoids boundary rounding)
-        int64 rawPrice = int64(uint64(winningCell * BAND_WIDTH + BAND_WIDTH / 2));
+        int64 rawPrice = SafeCast.toInt64(SafeCast.toInt256(winningCell * BAND_WIDTH + BAND_WIDTH / 2));
         mockPyth.setMockPrice(rawPrice);
 
         // Warp into the 10-second grace window after windowEnd
@@ -678,7 +709,7 @@ contract PayoutFlowTest is Test {
         assertEq(payout, 0, "Loser should have 0 payout");
     }
 
-    function test_GetLiveMultiplier_NoStake() public {
+    function test_GetLiveMultiplier_NoStake() public view {
         uint256 multiplier = hook.getLiveMultiplier(poolKey, targetWindow, targetCell);
         assertEq(multiplier, 0, "Multiplier should be 0 when no stake");
     }

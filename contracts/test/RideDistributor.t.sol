@@ -23,10 +23,11 @@ contract RideDistributorTest is Test {
         ride = new RIDE(coldAdmin, admin, treasury, relayer, address(distributor));
         staking = new RideStaking(address(ride), coldAdmin, admin, treasury, relayer);
 
-        vm.startPrank(admin);
-        distributor.setRideToken(address(ride));
-        ride.wireSystemContracts(address(distributor), address(staking));
-        vm.stopPrank();
+        vm.prank(owner);
+        ride.setTransferWhitelist(address(distributor), true);
+
+        // Fund distributor for rewards/airdrops from the initial minted supply.
+        assertTrue(ride.transfer(address(distributor), 1_000_000e18));
     }
 
     function test_AllocateAndClaimBetRewards() public {

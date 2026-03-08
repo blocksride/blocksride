@@ -33,23 +33,37 @@ contract RIDETest is Test {
     }
 
     function test_Transfer_RevertWhen_NeitherSideWhitelisted() public {
-        vm.prank(address(distributorContract));
-        ride.transfer(alice, 100e18);
+        vm.prank(distributor);
+        assertTrue(ride.transfer(alice, 100e18));
 
         vm.prank(alice);
         vm.expectRevert(RIDE.TransfersRestricted.selector);
+        // forge-lint: disable-next-line(erc20-unchecked-transfer) — expected to revert, no return value possible
         ride.transfer(bob, 1e18);
     }
 
-    function test_Transfer_SuccessForStakingFlow() public {
-        vm.prank(address(distributorContract));
-        ride.transfer(alice, 100e18);
+    function test_Transfer_SuccessWhen_RecipientWhitelisted() public {
+        vm.prank(owner);
+        ride.setTransferWhitelist(alice, true);
+
+        vm.prank(distributor);
+        assertTrue(ride.transfer(alice, 100e18));
 
         vm.prank(alice);
-        ride.approve(address(staking), 10e18);
+        assertTrue(ride.transfer(bob, 10e18));
+
+        assertEq(ride.balanceOf(bob), 10e18);
+    }
+
+    function test_Transfer_SuccessWhen_RestrictionsDisabled() public {
+        vm.prank(distributor);
+        assertTrue(ride.transfer(alice, 100e18));
+
+        vm.prank(owner);
+        ride.setTransfersRestricted(false);
 
         vm.prank(alice);
-        staking.stake(10e18);
+        assertTrue(ride.transfer(bob, 10e18));
 
         assertEq(staking.stakedBalance(alice), 10e18);
     }

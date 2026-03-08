@@ -32,7 +32,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         uint256 emitted;
     }
 
-    IERC20 public rideToken;
+    IERC20 public immutable RIDE_TOKEN;
     uint256 public periodCount;
     bytes32 public airdropMerkleRoot;
 
@@ -49,21 +49,8 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     event AirdropClaimed(address indexed user, uint256 amount);
     event RideTokenSet(address indexed rideToken);
 
-    constructor(address coldAdmin, address admin, address treasury, address relayer) {
-        if (coldAdmin == address(0) || admin == address(0) || treasury == address(0) || relayer == address(0)) {
-            revert ZeroAddress();
-        }
-        _grantRole(DEFAULT_ADMIN_ROLE, coldAdmin);
-        _grantRole(ADMIN_ROLE, admin);
-        _grantRole(TREASURY_ROLE, treasury);
-        _grantRole(RELAYER_ROLE, relayer);
-    }
-
-    function setRideToken(address _rideToken) external onlyRole(ADMIN_ROLE) {
-        if (_rideToken == address(0)) revert ZeroAddress();
-        if (address(rideToken) != address(0)) revert RideTokenAlreadySet();
-        rideToken = IERC20(_rideToken);
-        emit RideTokenSet(_rideToken);
+    constructor(address _rideToken, address initialOwner) Ownable(initialOwner) {
+        RIDE_TOKEN = IERC20(_rideToken);
     }
 
     function createEmissionPeriod(uint256 startTime, uint256 endTime, uint256 totalAllocation)
@@ -115,7 +102,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         }
 
         if (totalClaimed == 0) revert NoRewards();
-        require(rideToken.transfer(msg.sender, totalClaimed), "RIDE transfer failed");
+        require(RIDE_TOKEN.transfer(msg.sender, totalClaimed), "RIDE transfer failed");
         emit BetRewardsClaimed(msg.sender, rawPoolId, windowIds, totalClaimed);
     }
 
@@ -129,7 +116,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         if (!valid) revert InvalidMerkleProof();
 
         hasClaimedAirdrop[msg.sender] = true;
-        require(rideToken.transfer(msg.sender, amount), "RIDE transfer failed");
+        require(RIDE_TOKEN.transfer(msg.sender, amount), "RIDE transfer failed");
         emit AirdropClaimed(msg.sender, amount);
     }
 }

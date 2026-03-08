@@ -8,8 +8,9 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
+import {PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
 /**
@@ -34,12 +35,14 @@ contract TestSettlement is Script {
     using PoolIdLibrary for PoolKey;
 
     // Deployed contracts
-    PariHook public constant PARI_HOOK = PariHook(0xdbB492353B57698a5443bF1846F00c71EFA41824);
+    PariHook public constant PARI_HOOK = PariHook(0xE6dB8dF1ECa3E26bD8D6f21b64a19db5505D9Db6);
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408);
     IPyth public constant PYTH_ORACLE = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
 
     // Constants
     bytes32 public constant ETH_USD_FEED_ID = 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace;
+    uint256 public constant GRID_EPOCH = 1772985060;
+    uint256 public constant WINDOW_DURATION = 60;
 
     function run() public view {
         address user = vm.addr(vm.envUint("PRIVATE_KEY"));
@@ -117,13 +120,13 @@ contract TestSettlement is Script {
 
         PythStructs.Price memory pythPrice = PYTH_ORACLE.getPriceUnsafe(ETH_USD_FEED_ID);
 
-        console.log("  Raw Price:", uint64(pythPrice.price));
-        console.log("  Exponent:", uint32(pythPrice.expo));
+        console.log("  Raw Price:", int256(pythPrice.price));
+        console.log("  Exponent:", int256(pythPrice.expo));
         console.log("  Publish Time:", pythPrice.publishTime);
         console.log("");
 
         // Convert to USDC 6-decimal format
-        uint256 currentPrice = convertToUSDC6Decimal(uint64(pythPrice.price), pythPrice.expo);
+        uint256 currentPrice = convertToUsdc6Decimal(pythPrice.price, pythPrice.expo);
         console.log("  Current ETH Price: $", currentPrice / 1e6);
         console.log("");
 
@@ -200,12 +203,13 @@ contract TestSettlement is Script {
         console.log("============================================\n");
     }
 
-    function convertToUSDC6Decimal(uint64 pythPrice, int32 pythExpo) internal pure returns (uint256) {
+    function convertToUsdc6Decimal(int64 pythPrice, int32 pythExpo) internal pure returns (uint256) {
+        uint256 absPrice = SafeCast.toUint256(int256(pythPrice));
         int32 exponentAdjustment = pythExpo + 6;
         if (exponentAdjustment >= 0) {
-            return uint256(pythPrice) * (10 ** uint32(exponentAdjustment));
+            return absPrice * (10 ** SafeCast.toUint256(int256(exponentAdjustment)));
         } else {
-            return uint256(pythPrice) / (10 ** uint32(-exponentAdjustment));
+            return absPrice / (10 ** SafeCast.toUint256(int256(-exponentAdjustment)));
         }
     }
 }
