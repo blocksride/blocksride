@@ -1,5 +1,6 @@
-import { encodeAbiParameters, isAddress, keccak256, type WalletClient } from 'viem'
+import { createPublicClient, encodeAbiParameters, http, isAddress, keccak256, maxUint256, parseSignature, type WalletClient } from 'viem'
 import axiosInstance from '../utility/axiosInterceptor'
+import { activeChain } from '@/providers/Web3Provider'
 
 // Pool shape returned by GET /api/pools
 export interface Pool {
@@ -34,6 +35,42 @@ export interface ScheduledBet {
 export interface SubmittedClaim {
     txHash: string
 }
+
+export interface ApprovalResult {
+    allowance: bigint
+    requiresPermit: boolean
+}
+
+export interface PermitPayload {
+    permitAmount: bigint
+    permitDeadline: bigint
+    permitV: number
+    permitR: `0x${string}`
+    permitS: `0x${string}`
+}
+
+const erc20ApprovalAbi = [
+    {
+        name: 'allowance',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [
+            { name: 'owner', type: 'address' },
+            { name: 'spender', type: 'address' },
+        ],
+        outputs: [{ name: '', type: 'uint256' }],
+    },
+    {
+        name: 'approve',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [
+            { name: 'spender', type: 'address' },
+            { name: 'amount', type: 'uint256' },
+        ],
+        outputs: [{ name: '', type: 'bool' }],
+    },
+] as const
 
 // EIP-712 types matching BetIntent in PariHook.sol
 const BET_INTENT_TYPES = {
@@ -110,6 +147,88 @@ export const betService = {
         return BigInt(res.data.nonce)
     },
 
+    getHookApprovalStatus: async (
+        userAddress: `0x${string}`,
+        tokenAddress: `0x${string}`,
+        hookAddress: `0x${string}`,
+        requiredAmount: bigint,
+    ): Promise<ApprovalResult> => {
+        const publicClient = createPublicClient({
+            chain: activeChain,
+            transport: http(),
+        })
+
+        const allowance = await publicClient.readContract({
+            address: tokenAddress,
+            abi: erc20ApprovalAbi,
+            functionName: 'allowance',
+            args: [userAddress, hookAddress],
+        })
+
+        return { allowance, requiresPermit: allowance < requiredAmount }
+    },
+
+    getPermitInfo: async (address: `0x${string}`) => {
+        const res = await axiosInstance.get<{
+            nonce: string
+            tokenAddress: `0x${string}`
+            chainId: string
+        }>(`/wallet/permit-info?address=${address}`)
+        return {
+            nonce: BigInt(res.data.nonce),
+            tokenAddress: res.data.tokenAddress,
+            chainId: Number(res.data.chainId),
+        }
+    },
+
+    signHookPermit: async (
+        walletClient: WalletClient,
+        userAddress: `0x${string}`,
+        tokenAddress: `0x${string}`,
+        hookAddress: `0x${string}`,
+        chainId: number,
+    ): Promise<PermitPayload> => {
+        const { nonce } = await betService.getPermitInfo(userAddress)
+        const permitAmount = maxUint256
+        const permitDeadline = BigInt(Math.floor(Date.now() / 1000) + 300)
+
+        const signature = await walletClient.signTypedData({
+            account: userAddress,
+            domain: {
+                name: 'USD Coin',
+                version: '2',
+                chainId,
+                verifyingContract: tokenAddress,
+            },
+            types: {
+                Permit: [
+                    { name: 'owner', type: 'address' },
+                    { name: 'spender', type: 'address' },
+                    { name: 'value', type: 'uint256' },
+                    { name: 'nonce', type: 'uint256' },
+                    { name: 'deadline', type: 'uint256' },
+                ],
+            },
+            primaryType: 'Permit',
+            message: {
+                owner: userAddress,
+                spender: hookAddress,
+                value: permitAmount,
+                nonce,
+                deadline: permitDeadline,
+            },
+        })
+
+        const parsed = parseSignature(signature)
+        return {
+            permitAmount,
+            permitDeadline,
+            permitV: parsed.v,
+            permitR: parsed.r,
+            permitS: parsed.s,
+        }
+    },
+
     // Sign a BetIntent EIP-712 message and POST to POST /api/relay/bet.
     // Returns intentId + submitAfter timestamp; relay auto-submits after 3 s undo window.
     signAndScheduleBet: async (
@@ -126,6 +245,23 @@ export const betService = {
         const deadline = BigInt(Math.floor(Date.now() / 1000) + 300) // 5 min
 
         const normalizedPoolId = betService.normalizePoolId(pool)
+        const tokenAddress = (import.meta.env.VITE_TOKEN_ADDRESS ||
+            '0x036CbD53842c5426634e7929541eC2318f3dCF7e') as `0x${string}`
+        const approval = await betService.getHookApprovalStatus(
+            userAddress,
+            tokenAddress,
+            pool.poolKey.hooks as `0x${string}`,
+            amountUsdc,
+        )
+        const permit = approval.requiresPermit
+            ? await betService.signHookPermit(
+                walletClient,
+                userAddress,
+                tokenAddress,
+                pool.poolKey.hooks as `0x${string}`,
+                chainId,
+            )
+            : null
 
         const signature = await walletClient.signTypedData({
             account: userAddress,
@@ -159,6 +295,11 @@ export const betService = {
             signature,
             signer:        userAddress,
             submitAfterMs,
+            permitAmount: permit?.permitAmount.toString(),
+            permitDeadline: permit?.permitDeadline.toString(),
+            permitV: permit?.permitV,
+            permitR: permit?.permitR,
+            permitS: permit?.permitS,
         })
 
         return res.data
