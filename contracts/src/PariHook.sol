@@ -610,8 +610,11 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         uint256 excessEth = msg.value - updateFee;
 
         uint256 closingPrice;
-        try this._parsePythPrice{value: updateFee}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime)
-        returns (uint256 price) {
+        try this._parsePythPrice{value: updateFee}(
+            pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime
+        ) returns (
+            uint256 price
+        ) {
             closingPrice = price;
         } catch (bytes memory reason) {
             // Only auto-void when Pyth explicitly reports no price in this publish-time range.
@@ -739,9 +742,8 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         bytes32 poolIdBytes = bytes32(PoolId.unwrap(key.toId()));
         bytes32 windowIdsHash = keccak256(abi.encodePacked(windowIds));
 
-        bytes32 structHash = keccak256(
-            abi.encode(CLAIM_INTENT_TYPEHASH, user, poolIdBytes, windowIdsHash, nonce, deadline)
-        );
+        bytes32 structHash =
+            keccak256(abi.encode(CLAIM_INTENT_TYPEHASH, user, poolIdBytes, windowIdsHash, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
 
         address recovered = ecrecover(digest, v, r, s);
@@ -1051,11 +1053,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
      * @param cellId Cell ID
      * @return Multiplier in 1e18 precision (e.g., 1.5e18 = 1.5x)
      */
-    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId)
-        external
-        view
-        returns (uint256)
-    {
+    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
         Window storage w = windows[poolId][windowId];
@@ -1271,19 +1269,18 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
             // Snapshot current balance so settle() measures exactly this transfer.
             POOL_MANAGER.sync(currency);
             require(IERC20(token).transferFrom(party, address(POOL_MANAGER), amount), "USDC transferFrom failed");
-            POOL_MANAGER.settle();                              // delta += amount (PM credits hook)
+            POOL_MANAGER.settle(); // delta += amount (PM credits hook)
             POOL_MANAGER.take(currency, address(this), amount); // delta  = 0     (hook takes custody)
         } else {
             // Hook owns the tokens; move them to PM then route to recipient.
             POOL_MANAGER.sync(currency);
             require(IERC20(token).transfer(address(POOL_MANAGER), amount), "USDC transfer failed");
-            POOL_MANAGER.settle();                    // delta += amount (PM credits hook)
+            POOL_MANAGER.settle(); // delta += amount (PM credits hook)
             POOL_MANAGER.take(currency, party, amount); // delta  = 0     (recipient receives)
         }
 
         return "";
     }
-
 
     /**
      * @notice Calculate absolute cell ID from price

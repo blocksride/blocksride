@@ -9,7 +9,6 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 contract PariHookTest is Test {
@@ -174,8 +173,7 @@ contract PariHookTest is Test {
             uint256 frozen,
             uint256 maxStake,
             uint256 fee,
-            uint256 epoch,
-            ,
+            uint256 epoch,,
             uint256 threshold
         ) = hook.gridConfigs(testPoolId);
 

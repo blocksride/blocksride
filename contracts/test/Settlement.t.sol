@@ -301,7 +301,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         uint256 keeperBalanceBefore = keeper.balance;
 
@@ -339,7 +341,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         uint256 keeperBalanceBefore = keeper.balance;
 
@@ -364,14 +368,18 @@ contract SettlementTest is Test {
 
         uint256 firstWindowEnd = GRID_EPOCH + ((firstWindowId + 1) * WINDOW_DURATION);
         vm.warp(firstWindowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(firstWindowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(firstWindowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, firstWindowId, hex"01");
 
         uint256 secondWindowEnd = GRID_EPOCH + ((secondWindowId + 1) * WINDOW_DURATION);
         vm.warp(secondWindowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(secondWindowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(secondWindowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, secondWindowId, hex"01");
@@ -427,7 +435,9 @@ contract SettlementTest is Test {
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.expectEmit(true, true, false, true);
         emit WindowVoided(poolId, windowId, 500_000);
@@ -466,7 +476,9 @@ contract SettlementTest is Test {
         // Settle window first
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
@@ -559,7 +571,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
@@ -592,7 +606,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.expectRevert("Insufficient Pyth update fee");
         vm.prank(keeper);
@@ -611,7 +627,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.expectRevert(bytes4(keccak256("InvalidUpdateData()")));
         vm.prank(keeper);

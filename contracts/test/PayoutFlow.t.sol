@@ -39,12 +39,11 @@ contract MockPyth {
     ///      We ignore publishTime bounds — the hook delegates that check to Pyth, which is us.
     ///      We return block.timestamp as publishTime, always within the grace window when
     ///      called from _forceSettle (which warps to windowEnd+5).
-    function parsePriceFeedUpdates(
-        bytes[] calldata,
-        bytes32[] calldata priceIds,
-        uint64,
-        uint64
-    ) external payable returns (PythStructs.PriceFeed[] memory feeds) {
+    function parsePriceFeedUpdates(bytes[] calldata, bytes32[] calldata priceIds, uint64, uint64)
+        external
+        payable
+        returns (PythStructs.PriceFeed[] memory feeds)
+    {
         feeds = new PythStructs.PriceFeed[](priceIds.length);
         for (uint256 i = 0; i < priceIds.length; i++) {
             feeds[i].id = priceIds[i];
@@ -99,7 +98,7 @@ contract PayoutFlowTest is Test {
     // ── Contracts ──────────────────────────────────────────────────────────
     PariHook public hook;
     MockPyth public mockPyth;
-    MockPoolManager public mockPM;
+    MockPoolManager public mockPoolManager;
     MockERC20 public usdc;
 
     // ── Roles ──────────────────────────────────────────────────────────────
@@ -151,14 +150,8 @@ contract PayoutFlowTest is Test {
 
         usdc = new MockERC20("USD Coin", "USDC", 6);
         mockPyth = new MockPyth();
-        mockPM = new MockPoolManager();
-        hook = new PariHook(
-            IPoolManager(address(mockPM)),
-            IPyth(address(mockPyth)),
-            admin,
-            treasury,
-            relayer
-        );
+        mockPoolManager = new MockPoolManager();
+        hook = new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(mockPyth)), admin, treasury, relayer);
 
         poolKey = PoolKey({
             currency0: Currency.wrap(address(usdc)),
@@ -495,9 +488,8 @@ contract PayoutFlowTest is Test {
         windowIds[0] = targetWindow;
 
         bytes32 windowIdsHash = keccak256(abi.encodePacked(windowIds));
-        bytes32 structHash = keccak256(
-            abi.encode(hook.CLAIM_INTENT_TYPEHASH(), aliceSigner, pid, windowIdsHash, nonce, deadline)
-        );
+        bytes32 structHash =
+            keccak256(abi.encode(hook.CLAIM_INTENT_TYPEHASH(), aliceSigner, pid, windowIdsHash, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", hook.DOMAIN_SEPARATOR(), structHash));
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(alicePk, digest);

@@ -91,16 +91,19 @@ contract CompMockPyth is IPyth {
     int64 public mockPrice;
     int32 public mockExpo = -6;
 
-    function setMockPrice(int64 price) external { mockPrice = price; }
+    function setMockPrice(int64 price) external {
+        mockPrice = price;
+    }
 
-    function getUpdateFee(bytes[] calldata) external pure returns (uint256) { return 0; }
+    function getUpdateFee(bytes[] calldata) external pure returns (uint256) {
+        return 0;
+    }
 
-    function parsePriceFeedUpdates(
-        bytes[] calldata updateData,
-        bytes32[] calldata,
-        uint64,
-        uint64
-    ) external payable returns (PythStructs.PriceFeed[] memory feeds) {
+    function parsePriceFeedUpdates(bytes[] calldata updateData, bytes32[] calldata, uint64, uint64)
+        external
+        payable
+        returns (PythStructs.PriceFeed[] memory feeds)
+    {
         require(updateData.length > 0 && updateData[0].length > 0, "MockPyth: empty data");
         feeds = new PythStructs.PriceFeed[](1);
         feeds[0].price.price = mockPrice;
@@ -109,19 +112,45 @@ contract CompMockPyth is IPyth {
     }
 
     // Unused IPyth interface methods
-    function getPrice(bytes32) external pure returns (PythStructs.Price memory) { revert(); }
-    function getEmaPrice(bytes32) external pure returns (PythStructs.Price memory) { revert(); }
-    function getPriceUnsafe(bytes32) external view returns (PythStructs.Price memory p) {
-        p.price = mockPrice; p.expo = mockExpo; p.publishTime = block.timestamp;
+    function getPrice(bytes32) external pure returns (PythStructs.Price memory) {
+        revert();
     }
-    function getEmaPriceUnsafe(bytes32) external pure returns (PythStructs.Price memory) { revert(); }
-    function getPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) { revert(); }
-    function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) { revert(); }
+
+    function getEmaPrice(bytes32) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
+
+    function getPriceUnsafe(bytes32) external view returns (PythStructs.Price memory p) {
+        p.price = mockPrice;
+        p.expo = mockExpo;
+        p.publishTime = block.timestamp;
+    }
+
+    function getEmaPriceUnsafe(bytes32) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
+
+    function getPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
+
+    function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
     function updatePriceFeeds(bytes[] calldata) external payable {}
     function updatePriceFeedsIfNecessary(bytes[] calldata, bytes32[] calldata, uint64[] calldata) external payable {}
-    function getValidTimePeriod() external pure returns (uint256) { return 60; }
+
+    function getValidTimePeriod() external pure returns (uint256) {
+        return 60;
+    }
+
     function parsePriceFeedUpdatesUnique(bytes[] calldata, bytes32[] calldata, uint64, uint64)
-        external payable returns (PythStructs.PriceFeed[] memory) { revert(); }
+        external
+        payable
+        returns (PythStructs.PriceFeed[] memory)
+    {
+        revert();
+    }
 }
 
 /// @dev Minimal PoolManager stub (same as PayoutFlow.t.sol).
@@ -130,7 +159,11 @@ contract CompMockPoolManager {
         return IUnlockCallback(msg.sender).unlockCallback(data);
     }
     function sync(Currency) external {}
-    function settle() external payable returns (uint256) { return 0; }
+
+    function settle() external payable returns (uint256) {
+        return 0;
+    }
+
     function take(Currency currency, address to, uint256 amount) external {
         require(IERC20(Currency.unwrap(currency)).transfer(to, amount), "MockPM: take failed");
     }
@@ -146,7 +179,7 @@ contract ComprehensiveTest is Test {
     // ── Contracts ──────────────────────────────────────────────────────────
     PariHook public hook;
     CompMockPyth public mockPyth;
-    CompMockPoolManager public mockPM;
+    CompMockPoolManager public mockPoolManager;
     CompMockERC20 public usdc;
 
     // ── Roles ──────────────────────────────────────────────────────────────
@@ -157,24 +190,24 @@ contract ComprehensiveTest is Test {
 
     // ── Users ──────────────────────────────────────────────────────────────
     address public alice = makeAddr("alice");
-    address public bob   = makeAddr("bob");
+    address public bob = makeAddr("bob");
     address public carol = makeAddr("carol");
-    address public eve   = makeAddr("eve");   // attacker / wrong wallet
+    address public eve = makeAddr("eve"); // attacker / wrong wallet
 
     // ── Pool config ────────────────────────────────────────────────────────
     PoolKey public poolKey;
-    PoolId  public poolId;
-    PoolKey public unconfiguredKey;   // second key, never configured
+    PoolId public poolId;
+    PoolKey public unconfiguredKey; // second key, never configured
 
-    bytes32 constant PYTH_FEED    = bytes32(uint256(0xDEAD));
-    uint256 constant BAND_WIDTH   = 2_000_000;      // $2.00 in 6-dec USDC
-    uint256 constant WIN_DURATION = 60;              // 60-second windows
-    uint256 constant FROZEN       = 3;               // frozenWindows
-    uint256 constant MAX_STAKE    = 50_000_000;      // $50 per cell
-    uint256 constant FEE_BPS      = 200;             // 2%
-    uint256 constant MIN_THRESH   = 1_000_000;       // $1 minimum pool
-    uint256 constant GRID_EPOCH   = 120;             // minute-aligned
-    uint256 constant INITIAL_BAL  = 1_000_000_000;  // $1000 per user
+    bytes32 constant PYTH_FEED = bytes32(uint256(0xDEAD));
+    uint256 constant BAND_WIDTH = 2_000_000; // $2.00 in 6-dec USDC
+    uint256 constant WIN_DURATION = 60; // 60-second windows
+    uint256 constant FROZEN = 3; // frozenWindows
+    uint256 constant MAX_STAKE = 50_000_000; // $50 per cell
+    uint256 constant FEE_BPS = 200; // 2%
+    uint256 constant MIN_THRESH = 1_000_000; // $1 minimum pool
+    uint256 constant GRID_EPOCH = 120; // minute-aligned
+    uint256 constant INITIAL_BAL = 1_000_000_000; // $1000 per user
 
     uint256 public targetWindow;
     uint256 public winCell;
@@ -184,9 +217,8 @@ contract ComprehensiveTest is Test {
     bytes32 constant BET_INTENT_TYPEHASH = keccak256(
         "BetIntent(address user,bytes32 poolId,uint256 cellId,uint256 windowId,uint256 amount,uint256 nonce,uint256 deadline)"
     );
-    bytes32 constant CLAIM_INTENT_TYPEHASH = keccak256(
-        "ClaimIntent(address user,bytes32 poolId,uint256[] windowIds,uint256 nonce,uint256 deadline)"
-    );
+    bytes32 constant CLAIM_INTENT_TYPEHASH =
+        keccak256("ClaimIntent(address user,bytes32 poolId,uint256[] windowIds,uint256 nonce,uint256 deadline)");
 
     // =======================================================================
     //                              SETUP
@@ -195,39 +227,41 @@ contract ComprehensiveTest is Test {
     function setUp() public {
         relayer = vm.addr(relayerPk);
 
-        usdc    = new CompMockERC20("USD Coin", "USDC", 6);
+        usdc = new CompMockERC20("USD Coin", "USDC", 6);
         mockPyth = new CompMockPyth();
-        mockPM  = new CompMockPoolManager();
+        mockPoolManager = new CompMockPoolManager();
 
-        hook = new PariHook(
-            IPoolManager(address(mockPM)),
-            IPyth(address(mockPyth)),
-            admin,
-            treasury,
-            relayer
-        );
+        hook = new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(mockPyth)), admin, treasury, relayer);
 
         poolKey = PoolKey({
-            currency0:   Currency.wrap(address(usdc)),
-            currency1:   Currency.wrap(address(0)),
-            fee:         0,
+            currency0: Currency.wrap(address(usdc)),
+            currency1: Currency.wrap(address(0)),
+            fee: 0,
             tickSpacing: 60,
-            hooks:       IHooks(address(hook))
+            hooks: IHooks(address(hook))
         });
         poolId = poolKey.toId();
 
         unconfiguredKey = PoolKey({
-            currency0:   Currency.wrap(address(usdc)),
-            currency1:   Currency.wrap(address(1)),  // different token → different poolId
-            fee:         0,
+            currency0: Currency.wrap(address(usdc)),
+            currency1: Currency.wrap(address(1)), // different token → different poolId
+            fee: 0,
             tickSpacing: 60,
-            hooks:       IHooks(address(hook))
+            hooks: IHooks(address(hook))
         });
 
         // Configure the main grid
         hook.configureGrid(
-            poolKey, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN,
-            MAX_STAKE, FEE_BPS, MIN_THRESH, GRID_EPOCH, address(usdc)
+            poolKey,
+            PYTH_FEED,
+            BAND_WIDTH,
+            WIN_DURATION,
+            FROZEN,
+            MAX_STAKE,
+            FEE_BPS,
+            MIN_THRESH,
+            GRID_EPOCH,
+            address(usdc)
         );
 
         // Warp past epoch
@@ -241,12 +275,12 @@ contract ComprehensiveTest is Test {
             usdc.approve(address(hook), type(uint256).max);
         }
         // Fund hook itself (to cover USDC payouts in tests)
-        usdc.mint(address(mockPM), INITIAL_BAL);
+        usdc.mint(address(mockPoolManager), INITIAL_BAL);
 
         // Pick a bettable window
         (uint256 start,) = hook.getBettableWindows(poolKey);
         targetWindow = start;
-        winCell  = 1500;
+        winCell = 1500;
         loseCell = 1501;
     }
 
@@ -274,29 +308,34 @@ contract ComprehensiveTest is Test {
 
     /// @dev Builds a packed EIP-712 BetIntent signature.
     function _betSig(
-        uint256 pk, address user, uint256 cellId,
-        uint256 windowId, uint256 amount, uint256 nonce, uint256 deadline
+        uint256 pk,
+        address user,
+        uint256 cellId,
+        uint256 windowId,
+        uint256 amount,
+        uint256 nonce,
+        uint256 deadline
     ) internal view returns (bytes memory sig) {
-        bytes32 structHash = keccak256(abi.encode(
-            BET_INTENT_TYPEHASH,
-            user,
-            bytes32(PoolId.unwrap(poolId)),
-            cellId, windowId, amount, nonce, deadline
-        ));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                BET_INTENT_TYPEHASH, user, bytes32(PoolId.unwrap(poolId)), cellId, windowId, amount, nonce, deadline
+            )
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", hook.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         sig = abi.encodePacked(r, s, v); // contract expects [r][s][v]
     }
 
     /// @dev Builds an EIP-712 ClaimIntent signature (v, r, s separately).
-    function _claimSig(
-        uint256 pk, address user, uint256[] memory windowIds, uint256 nonce, uint256 deadline
-    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+    function _claimSig(uint256 pk, address user, uint256[] memory windowIds, uint256 nonce, uint256 deadline)
+        internal
+        view
+        returns (uint8 v, bytes32 r, bytes32 s)
+    {
         bytes32 windowIdsHash = keccak256(abi.encodePacked(windowIds));
         bytes32 poolIdBytes = bytes32(PoolId.unwrap(poolId));
-        bytes32 structHash = keccak256(
-            abi.encode(CLAIM_INTENT_TYPEHASH, user, poolIdBytes, windowIdsHash, nonce, deadline)
-        );
+        bytes32 structHash =
+            keccak256(abi.encode(CLAIM_INTENT_TYPEHASH, user, poolIdBytes, windowIdsHash, nonce, deadline));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", hook.DOMAIN_SEPARATOR(), structHash));
         (v, r, s) = vm.sign(pk, digest);
     }
@@ -310,8 +349,16 @@ contract ComprehensiveTest is Test {
         vm.prank(eve);
         vm.expectRevert();
         hook.configureGrid(
-            unconfiguredKey, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN,
-            MAX_STAKE, FEE_BPS, MIN_THRESH, GRID_EPOCH + 600, address(usdc)
+            unconfiguredKey,
+            PYTH_FEED,
+            BAND_WIDTH,
+            WIN_DURATION,
+            FROZEN,
+            MAX_STAKE,
+            FEE_BPS,
+            MIN_THRESH,
+            GRID_EPOCH + 600,
+            address(usdc)
         );
     }
 
@@ -535,20 +582,27 @@ contract ComprehensiveTest is Test {
     }
 
     function _setupAliceSig(uint256 cellId, uint256 windowId, uint256 amount, uint256 nonce, uint256 deadline)
-        internal view returns (bytes memory)
+        internal
+        view
+        returns (bytes memory)
     {
         return _betSigForUser(ALICE_PK, _aliceAddr(), cellId, windowId, amount, nonce, deadline);
     }
 
     function _betSigForUser(
-        uint256 pk, address user, uint256 cellId, uint256 windowId,
-        uint256 amount, uint256 nonce, uint256 deadline
+        uint256 pk,
+        address user,
+        uint256 cellId,
+        uint256 windowId,
+        uint256 amount,
+        uint256 nonce,
+        uint256 deadline
     ) internal view returns (bytes memory sig) {
-        bytes32 structHash = keccak256(abi.encode(
-            BET_INTENT_TYPEHASH, user,
-            bytes32(PoolId.unwrap(poolId)),
-            cellId, windowId, amount, nonce, deadline
-        ));
+        bytes32 structHash = keccak256(
+            abi.encode(
+                BET_INTENT_TYPEHASH, user, bytes32(PoolId.unwrap(poolId)), cellId, windowId, amount, nonce, deadline
+            )
+        );
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", hook.DOMAIN_SEPARATOR(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         sig = abi.encodePacked(r, s, v);
@@ -610,7 +664,8 @@ contract ComprehensiveTest is Test {
         _setupAliceSigUser();
         address a = _aliceAddr();
         // eve (pk=0xEEEE) signs but we claim it's alice's sig
-        bytes memory sig = _betSigForUser(0xEEEE, _aliceAddr(), winCell, targetWindow, 5_000_000, 0, block.timestamp + 300);
+        bytes memory sig =
+            _betSigForUser(0xEEEE, _aliceAddr(), winCell, targetWindow, 5_000_000, 0, block.timestamp + 300);
 
         vm.expectRevert("Invalid signature");
         vm.prank(relayer);
@@ -724,22 +779,29 @@ contract ComprehensiveTest is Test {
     function test_Settle_RevertWhen_InsufficientPythFee() public {
         // Deploy a Pyth mock that charges a non-zero fee
         CompMockPythWithFee pricyPyth = new CompMockPythWithFee();
-        PariHook feeHook = new PariHook(
-            IPoolManager(address(mockPM)), IPyth(address(pricyPyth)),
-            admin, treasury, relayer
-        );
+        PariHook feeHook =
+            new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(pricyPyth)), admin, treasury, relayer);
         PoolKey memory feeKey = PoolKey({
             currency0: Currency.wrap(address(usdc)),
             currency1: Currency.wrap(address(2)),
-            fee: 0, tickSpacing: 60,
+            fee: 0,
+            tickSpacing: 60,
             hooks: IHooks(address(feeHook))
         });
         // block.timestamp is GRID_EPOCH + 1 (from setUp), so GRID_EPOCH is in the past.
         // Use a fresh epoch that is definitively in the future.
         uint256 freshEpoch = ((block.timestamp / 60) + 2) * 60; // ≥ 2 minutes ahead, minute-aligned
         feeHook.configureGrid(
-            feeKey, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN,
-            MAX_STAKE, FEE_BPS, MIN_THRESH, freshEpoch, address(usdc)
+            feeKey,
+            PYTH_FEED,
+            BAND_WIDTH,
+            WIN_DURATION,
+            FROZEN,
+            MAX_STAKE,
+            FEE_BPS,
+            MIN_THRESH,
+            freshEpoch,
+            address(usdc)
         );
         // Warp into the fresh grid
         vm.warp(freshEpoch + 1);
@@ -861,8 +923,8 @@ contract ComprehensiveTest is Test {
     }
 
     function test_PushPayouts_Success_LoserInWinnersList() public {
-        _bet(alice, winCell,  targetWindow, 10_000_000);
-        _bet(bob,   loseCell, targetWindow, 10_000_000);
+        _bet(alice, winCell, targetWindow, 10_000_000);
+        _bet(bob, loseCell, targetWindow, 10_000_000);
         _settle(targetWindow, winCell);
 
         address[] memory list = new address[](2);
@@ -918,11 +980,11 @@ contract ComprehensiveTest is Test {
         uint256 w1 = start;
         uint256 w2 = start + 1;
 
-        _bet(alice, winCell,  w1, 10_000_000);
+        _bet(alice, winCell, w1, 10_000_000);
         _bet(alice, loseCell, w2, 10_000_000); // alice loses on w2
 
-        _settle(w1, winCell);   // alice wins w1
-        _settle(w2, winCell);   // winning cell = winCell, alice bet on loseCell
+        _settle(w1, winCell); // alice wins w1
+        _settle(w2, winCell); // winning cell = winCell, alice bet on loseCell
 
         uint256 payout = hook.calculatePayout(poolKey, w1, winCell, alice);
 
@@ -1036,7 +1098,7 @@ contract ComprehensiveTest is Test {
 
     function test_ClaimRefund_StakeOnMultipleCells_FullRefund() public {
         // Alice bets on two different cells in the same window
-        _bet(alice, winCell,  targetWindow, 10_000_000);
+        _bet(alice, winCell, targetWindow, 10_000_000);
         _bet(alice, loseCell, targetWindow, 20_000_000);
         _void(targetWindow);
 
@@ -1091,9 +1153,11 @@ contract ComprehensiveTest is Test {
         assertEq(maxStake, 200_000_000);
     }
 
-    function _getConfig() internal view returns (
-        bytes32, uint256, uint256, uint256, uint256, uint256, uint256, address, uint256
-    ) {
+    function _getConfig()
+        internal
+        view
+        returns (bytes32, uint256, uint256, uint256, uint256, uint256, uint256, address, uint256)
+    {
         return hook.gridConfigs(poolId);
     }
 
@@ -1182,8 +1246,8 @@ contract ComprehensiveTest is Test {
     // =======================================================================
 
     function test_CalculatePayout_ReturnsZero_ForLoser() public {
-        _bet(alice, winCell,  targetWindow, 10_000_000);
-        _bet(bob,   loseCell, targetWindow, 10_000_000);
+        _bet(alice, winCell, targetWindow, 10_000_000);
+        _bet(bob, loseCell, targetWindow, 10_000_000);
         _settle(targetWindow, winCell);
 
         uint256 payout = hook.calculatePayout(poolKey, targetWindow, loseCell, bob);
@@ -1217,7 +1281,7 @@ contract ComprehensiveTest is Test {
 
     function test_GetLiveMultiplier_IncreasesWhenOpposingCell_HasMoreStake() public {
         // With only alice on winCell: multiplier = netPool / winCellStake
-        _bet(alice, winCell,  targetWindow, 10_000_000);
+        _bet(alice, winCell, targetWindow, 10_000_000);
         uint256 multBefore = hook.getLiveMultiplier(poolKey, targetWindow, winCell);
 
         // Bob on loseCell increases totalPool → alice's cell multiplier goes up
@@ -1252,7 +1316,7 @@ contract ComprehensiveTest is Test {
         (uint256 start, uint256 end) = hook.getBettableWindows(poolKey);
         // At GRID_EPOCH+1 with frozenWindows=3: start=4, end=6
         assertEq(start, 4, "bettableStart should be current + frozen + 1");
-        assertEq(end,   6, "bettableEnd should be current + frozen + 3");
+        assertEq(end, 6, "bettableEnd should be current + frozen + 3");
     }
 
     function test_GetBettableWindows_AdvancesWithTime() public {
@@ -1269,18 +1333,18 @@ contract ComprehensiveTest is Test {
     function test_Proportional_ThreeWinners_CorrectShares() public {
         // Alice: 10M, Bob: 40M, Carol: 50M → all on winning cell
         _bet(alice, winCell, targetWindow, 10_000_000);
-        _bet(bob,   winCell, targetWindow, 40_000_000);
+        _bet(bob, winCell, targetWindow, 40_000_000);
         // carol's bet would exceed MAX_STAKE (10+40+50=100 > 50), so only 0 remains
         // Let's just use alice=10 and bob=40 within MAX_STAKE=50
         _settle(targetWindow, winCell);
 
         uint256 alicePayout = hook.calculatePayout(poolKey, targetWindow, winCell, alice);
-        uint256 bobPayout   = hook.calculatePayout(poolKey, targetWindow, winCell, bob);
+        uint256 bobPayout = hook.calculatePayout(poolKey, targetWindow, winCell, bob);
 
         // Alice gets 20%, Bob gets 80% of net pool
         // Net pool = 50M * 0.98 = 49M
         assertApproxEqRel(alicePayout, 9_800_000, 0.001e18, "Alice ~20% of net pool");
-        assertApproxEqRel(bobPayout,   39_200_000, 0.001e18, "Bob ~80% of net pool");
+        assertApproxEqRel(bobPayout, 39_200_000, 0.001e18, "Bob ~80% of net pool");
         assertApproxEqAbs(alicePayout + bobPayout, 49_000_000, 1, "Total payouts = net pool");
     }
 
@@ -1294,15 +1358,15 @@ contract ComprehensiveTest is Test {
     }
 
     function test_Proportional_WinnerLosersInSameWindow() public {
-        _bet(alice, winCell,  targetWindow, 10_000_000);
-        _bet(bob,   loseCell, targetWindow, 10_000_000);
+        _bet(alice, winCell, targetWindow, 10_000_000);
+        _bet(bob, loseCell, targetWindow, 10_000_000);
         _settle(targetWindow, winCell);
 
-        uint256 alicePayout = hook.calculatePayout(poolKey, targetWindow, winCell,  alice);
-        uint256 bobPayout   = hook.calculatePayout(poolKey, targetWindow, loseCell, bob);
+        uint256 alicePayout = hook.calculatePayout(poolKey, targetWindow, winCell, alice);
+        uint256 bobPayout = hook.calculatePayout(poolKey, targetWindow, loseCell, bob);
 
         assertGt(alicePayout, 10_000_000, "Winner should receive more than original stake");
-        assertEq(bobPayout, 0,             "Loser should receive nothing");
+        assertEq(bobPayout, 0, "Loser should receive nothing");
     }
 
     function test_IndependentWindows_DoNotSharePools() public {
@@ -1311,17 +1375,17 @@ contract ComprehensiveTest is Test {
         uint256 w2 = start + 1;
 
         _bet(alice, winCell, w1, 10_000_000);
-        _bet(bob,   winCell, w2, 20_000_000);
+        _bet(bob, winCell, w2, 20_000_000);
 
         _settle(w1, winCell);
         _settle(w2, winCell);
 
         uint256 alicePayout = hook.calculatePayout(poolKey, w1, winCell, alice);
-        uint256 bobPayout   = hook.calculatePayout(poolKey, w2, winCell, bob);
+        uint256 bobPayout = hook.calculatePayout(poolKey, w2, winCell, bob);
 
         // Each window has its own pool; alice/bob only get their window's payout
-        assertApproxEqAbs(alicePayout, 9_800_000,  1, "Alice gets net of w1 only");
-        assertApproxEqAbs(bobPayout,   19_600_000,  1, "Bob gets net of w2 only");
+        assertApproxEqAbs(alicePayout, 9_800_000, 1, "Alice gets net of w1 only");
+        assertApproxEqAbs(bobPayout, 19_600_000, 1, "Bob gets net of w2 only");
         (end); // silence
     }
 }
@@ -1334,35 +1398,64 @@ contract CompMockPythWithFee is IPyth {
     int64 public mockPrice;
     int32 public mockExpo = -6;
 
-    function setMockPrice(int64 price) external { mockPrice = price; }
+    function setMockPrice(int64 price) external {
+        mockPrice = price;
+    }
 
-    function getUpdateFee(bytes[] calldata) external pure returns (uint256) { return 1; } // 1 wei
+    function getUpdateFee(bytes[] calldata) external pure returns (uint256) {
+        return 1; // 1 wei
+    }
 
-    function parsePriceFeedUpdates(
-        bytes[] calldata updateData,
-        bytes32[] calldata,
-        uint64,
-        uint64
-    ) external payable returns (PythStructs.PriceFeed[] memory feeds) {
+    function parsePriceFeedUpdates(bytes[] calldata updateData, bytes32[] calldata, uint64, uint64)
+        external
+        payable
+        returns (PythStructs.PriceFeed[] memory feeds)
+    {
         require(msg.value >= 1, "MockPyth: insufficient fee");
         require(updateData.length > 0 && updateData[0].length > 0, "MockPyth: empty data");
         feeds = new PythStructs.PriceFeed[](1);
         feeds[0].price.price = mockPrice;
-        feeds[0].price.expo  = mockExpo;
+        feeds[0].price.expo = mockExpo;
         feeds[0].price.publishTime = block.timestamp;
     }
 
-    function getPrice(bytes32) external pure returns (PythStructs.Price memory) { revert(); }
-    function getEmaPrice(bytes32) external pure returns (PythStructs.Price memory) { revert(); }
-    function getPriceUnsafe(bytes32) external view returns (PythStructs.Price memory p) {
-        p.price = mockPrice; p.expo = mockExpo; p.publishTime = block.timestamp;
+    function getPrice(bytes32) external pure returns (PythStructs.Price memory) {
+        revert();
     }
-    function getEmaPriceUnsafe(bytes32) external pure returns (PythStructs.Price memory) { revert(); }
-    function getPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) { revert(); }
-    function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) { revert(); }
+
+    function getEmaPrice(bytes32) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
+
+    function getPriceUnsafe(bytes32) external view returns (PythStructs.Price memory p) {
+        p.price = mockPrice;
+        p.expo = mockExpo;
+        p.publishTime = block.timestamp;
+    }
+
+    function getEmaPriceUnsafe(bytes32) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
+
+    function getPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
+
+    function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
+        revert();
+    }
     function updatePriceFeeds(bytes[] calldata) external payable {}
     function updatePriceFeedsIfNecessary(bytes[] calldata, bytes32[] calldata, uint64[] calldata) external payable {}
-    function getValidTimePeriod() external pure returns (uint256) { return 60; }
+
+    function getValidTimePeriod() external pure returns (uint256) {
+        return 60;
+    }
+
     function parsePriceFeedUpdatesUnique(bytes[] calldata, bytes32[] calldata, uint64, uint64)
-        external payable returns (PythStructs.PriceFeed[] memory) { revert(); }
+        external
+        payable
+        returns (PythStructs.PriceFeed[] memory)
+    {
+        revert();
+    }
 }
