@@ -26,7 +26,6 @@ export interface Cell {
     p_high: number
     result?: string
     total_stake?: number
-    // Share-based pricing fields
     probability?: number
     total_shares?: number
     max_shares?: number
@@ -52,23 +51,19 @@ export interface Position {
     payout?: number
     result?: string
     resolved_at?: string
-    // Share-based pricing fields
     shares_bought?: number
     purchase_price?: number
     potential_payout?: number
 }
 
-// Share-based pricing types
 export interface BetQuote {
     cell_id: string
     stake: number
-    probability: number
-    share_price: number
-    shares_bought: number
-    potential_payout: number
-    expected_value: number
-    available_shares: number
-    can_purchase: boolean
+    current_multiplier: number
+    estimated_payout: number
+    estimated_net_profit: number
+    total_pool: number
+    cell_stake: number
 }
 
 export interface CellPrice {

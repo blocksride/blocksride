@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PricePoint } from '../types/grid'
+import { api } from '@/services/apiService'
+import type { PricePoint } from '@/types/grid'
 
 type AssetConfig = {
     defaultPrice: number
@@ -7,30 +8,11 @@ type AssetConfig = {
 }
 
 const ASSET_CONFIG: Record<string, AssetConfig> = {
-    'ETH-USD': {
-        defaultPrice: 3000,
-        volatility: 2.5,
-    },
-    'BTC-USD': {
-        defaultPrice: 50000,
-        volatility: 18,
-    },
+    'ETH-USD': { defaultPrice: 3000, volatility: 2.5 },
+    'BTC-USD': { defaultPrice: 50000, volatility: 18 },
 }
 
-const getAssetConfig = (assetId: string) => {
-    return ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
-}
-
-const fetchPublicPrice = async (assetId: string) => {
-    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080'
-    const baseURL = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`
-    const url = `${baseURL}/public-price?asset_id=${encodeURIComponent(assetId)}`
-    const res = await fetch(url)
-    if (!res.ok) return null
-    const data = await res.json()
-    const parsed = Number(data?.price)
-    return Number.isFinite(parsed) ? parsed : null
-}
+const getAssetConfig = (assetId: string) => ASSET_CONFIG[assetId] || ASSET_CONFIG['ETH-USD']
 
 export const usePublicPriceFeed = (assetId: string) => {
     const config = getAssetConfig(assetId)
@@ -50,12 +32,15 @@ export const usePublicPriceFeed = (assetId: string) => {
         seededRef.current = false
 
         const updateTarget = async () => {
-            const publicPrice = await fetchPublicPrice(assetId)
-            if (!mountedRef.current) return
-
-            if (publicPrice !== null) {
-                targetPriceRef.current = publicPrice
-                return
+            try {
+                const { data } = await api.getPublicPrice(assetId)
+                if (!mountedRef.current) return
+                if (typeof data.price === 'number' && Number.isFinite(data.price)) {
+                    targetPriceRef.current = data.price
+                    return
+                }
+            } catch {
+                // keep last cached target
             }
 
             if (targetPriceRef.current === null) {
@@ -69,7 +54,7 @@ export const usePublicPriceFeed = (assetId: string) => {
 
             setCurrentPrice((prev) => {
                 const base = prev ?? target
-                const drift = (target - base) * 0.2
+                const drift = (target - base) * 0.25
                 const noise = (Math.random() - 0.5) * config.volatility
                 const next = Math.max(0, base + drift + noise)
                 const now = Date.now()
@@ -85,7 +70,7 @@ export const usePublicPriceFeed = (assetId: string) => {
                     }
                     setPrices(initialPoints)
                     lastPointRef.current = now
-                } else if (now - lastPointRef.current > 1000) {
+                } else if (now - lastPointRef.current >= 1000) {
                     setPrices((prevPrices) => {
                         const updated = [...prevPrices, { time: now, price: next }]
                         return updated.length > 5000 ? updated.slice(-5000) : updated
@@ -97,8 +82,8 @@ export const usePublicPriceFeed = (assetId: string) => {
             })
         }
 
-        updateTarget()
-        const pollId = window.setInterval(updateTarget, 60000)
+        void updateTarget()
+        const pollId = window.setInterval(updateTarget, 5000)
         const tickId = window.setInterval(tick, 500)
 
         return () => {

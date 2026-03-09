@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
@@ -28,16 +27,8 @@ export function ContestRequirements({
     onRequirementsMet
 }: ContestRequirementsProps) {
     const { address, formatted, refetch, isRefetching } = useTokenBalance()
-
-    // On-chain USDC balance for the embedded wallet on configured network/token.
-    const walletBalance = Number(formatted ?? '0')
+    const walletBalance = Number(formatted || '0')
     const hasBalance = walletBalance > 0
-
-    useEffect(() => {
-        if (isOpen) {
-            refetch()
-        }
-    }, [isOpen, refetch])
 
     const handleContinue = () => {
         if (hasBalance) {
@@ -67,9 +58,9 @@ export function ContestRequirements({
                         <DialogTitle className="text-lg font-bold text-foreground">Setup Required</DialogTitle>
                         <DialogDescription className="text-sm text-muted-foreground mt-1 break-words">
                             {hasBalance ? (
-                                <>You're ready to join <span className="text-foreground font-medium break-all">{contest.name}</span></>
+                                <>You are ready to join <span className="text-foreground font-medium break-all">{contest.name}</span></>
                             ) : (
-                                <>Fund your wallet to join <span className="text-foreground font-medium break-all">{contest.name}</span></>
+                                <>Fund your wallet to ride <span className="text-foreground font-medium break-all">{contest.name}</span></>
                             )}
                         </DialogDescription>
                     </div>
@@ -90,13 +81,13 @@ export function ContestRequirements({
                         isActive={!hasBalance}
                     >
                         {hasBalance ? (
-                            <span className="text-sm text-green-400">
-                                ${walletBalance.toFixed(2)} USDC available (on-chain)
+                            <span className="text-sm text-muted-foreground">
+                                ${walletBalance.toFixed(2)} USDC in wallet
                             </span>
                         ) : (
                             <div className="space-y-2">
                                 <p className="text-xs text-muted-foreground">
-                                    Deposit USDC (Base) to your wallet
+                                    Deposit Base Sepolia USDC into your embedded wallet
                                 </p>
                                 <button
                                     onClick={copyAddress}
@@ -109,7 +100,7 @@ export function ContestRequirements({
                                 </button>
                                 <button
                                     onClick={() => refetch()}
-                                    className="flex items-center justify-center gap-2 text-xs bg-green-500/10 hover:bg-green-500/20 text-green-400 px-3 py-2 rounded-lg border border-green-500/30 transition-colors w-full"
+                                    className="flex items-center justify-center gap-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 rounded-lg transition-colors w-full"
                                 >
                                     <RefreshCw className={cn('w-3 h-3', isRefetching && 'animate-spin')} />
                                     {isRefetching ? 'Refreshing...' : "I've deposited, refresh balance"}
@@ -128,7 +119,7 @@ export function ContestRequirements({
                     >
                         {hasBalance ? (
                             <>
-                                Enter Contest
+                                Enter Ride
                                 <ArrowRight className="w-4 h-4 ml-2" />
                             </>
                         ) : (

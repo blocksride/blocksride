@@ -26,7 +26,7 @@ contract RideStaking is AccessControl, ReentrancyGuard {
         uint256 unlockTime;
     }
 
-    IERC20 public immutable rideToken;
+    IERC20 public immutable RIDE_TOKEN;
     uint256 public totalStaked;
 
     mapping(address => uint256) public stakedBalance;
@@ -37,13 +37,7 @@ contract RideStaking is AccessControl, ReentrancyGuard {
     event UnstakeCompleted(address indexed user, uint256 amount);
 
     constructor(address _rideToken, address coldAdmin, address admin, address treasury, address relayer) {
-        if (
-            _rideToken == address(0) || coldAdmin == address(0) || admin == address(0) || treasury == address(0)
-                || relayer == address(0)
-        ) {
-            revert ZeroAddress();
-        }
-        rideToken = IERC20(_rideToken);
+        RIDE_TOKEN = IERC20(_rideToken);
         _grantRole(DEFAULT_ADMIN_ROLE, coldAdmin);
         _grantRole(ADMIN_ROLE, admin);
         _grantRole(TREASURY_ROLE, treasury);
@@ -52,7 +46,7 @@ contract RideStaking is AccessControl, ReentrancyGuard {
 
     function stake(uint256 amount) external nonReentrant {
         if (amount == 0) revert AmountZero();
-        require(rideToken.transferFrom(msg.sender, address(this), amount), "RIDE transfer failed");
+        require(RIDE_TOKEN.transferFrom(msg.sender, address(this), amount), "RIDE transfer failed");
 
         stakedBalance[msg.sender] += amount;
         totalStaked += amount;
@@ -78,7 +72,7 @@ contract RideStaking is AccessControl, ReentrancyGuard {
         if (block.timestamp < pending.unlockTime) revert CooldownNotMet();
 
         delete pendingUnstakes[msg.sender];
-        require(rideToken.transfer(msg.sender, pending.amount), "RIDE transfer failed");
+        require(RIDE_TOKEN.transfer(msg.sender, pending.amount), "RIDE transfer failed");
         emit UnstakeCompleted(msg.sender, pending.amount);
     }
 

@@ -12,6 +12,7 @@ import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title SettlementIntegrationTest
@@ -166,8 +167,8 @@ contract SettlementIntegrationTest is Test {
         PythStructs.Price memory price = PYTH_ORACLE.getPriceUnsafe(ETH_USD_FEED_ID);
 
         console.log("Raw Pyth Price:");
-        console.log("  price:", uint64(price.price));
-        console.log("  expo:", uint32(price.expo));
+        console.log("  price:", int256(price.price));
+        console.log("  expo:", int256(price.expo));
         console.log("  conf:", price.conf);
         console.log("  publishTime:", price.publishTime);
 
@@ -178,9 +179,9 @@ contract SettlementIntegrationTest is Test {
         // Calculate actual price: price * 10^expo
         uint256 actualPrice;
         if (expo < 0) {
-            actualPrice = uint256(uint64(rawPrice)) / (10 ** uint32(-expo));
+            actualPrice = SafeCast.toUint256(int256(rawPrice)) / (10 ** SafeCast.toUint256(int256(-expo)));
         } else {
-            actualPrice = uint256(uint64(rawPrice)) * (10 ** uint32(expo));
+            actualPrice = SafeCast.toUint256(int256(rawPrice)) * (10 ** SafeCast.toUint256(int256(expo)));
         }
 
         console.log("\nConverted Price:");
@@ -215,11 +216,11 @@ contract SettlementIntegrationTest is Test {
         PythStructs.Price memory pythPrice = PYTH_ORACLE.getPriceUnsafe(ETH_USD_FEED_ID);
 
         console.log("Input (Pyth format):");
-        console.log("  price:", uint64(pythPrice.price));
-        console.log("  expo:", uint32(pythPrice.expo));
+        console.log("  price:", int256(pythPrice.price));
+        console.log("  expo:", int256(pythPrice.expo));
 
         // Manually convert to USDC 6-decimal using our contract's logic
-        uint256 convertedPrice = convertPythToUSDC(uint64(pythPrice.price), pythPrice.expo);
+        uint256 convertedPrice = convertPythToUsdc(pythPrice.price, pythPrice.expo);
 
         console.log("\nOutput (USDC 6-decimal):");
         console.log("  price:", convertedPrice);
@@ -244,10 +245,10 @@ contract SettlementIntegrationTest is Test {
 
         // Get current price to know which cell to bet on
         PythStructs.Price memory currentPrice = PYTH_ORACLE.getPriceUnsafe(ETH_USD_FEED_ID);
-        uint256 priceInUSDC = convertPythToUSDC(uint64(currentPrice.price), currentPrice.expo);
-        uint256 currentCell = priceInUSDC / BAND_WIDTH;
+        uint256 priceInUsdc = convertPythToUsdc(currentPrice.price, currentPrice.expo);
+        uint256 currentCell = priceInUsdc / BAND_WIDTH;
 
-        console.log("Current ETH Price: $", priceInUSDC / 1e6);
+        console.log("Current ETH Price: $", priceInUsdc / 1e6);
         console.log("Current Cell ID:", currentCell);
 
         // Place bet in window 4 (first bettable window)
@@ -279,14 +280,14 @@ contract SettlementIntegrationTest is Test {
 
         // Get latest price at settlement time
         PythStructs.Price memory settlementPrice = PYTH_ORACLE.getPriceUnsafe(ETH_USD_FEED_ID);
-        uint256 closingPriceUSDC = convertPythToUSDC(uint64(settlementPrice.price), settlementPrice.expo);
-        uint256 winningCell = closingPriceUSDC / BAND_WIDTH;
+        uint256 closingPriceUsdc = convertPythToUsdc(settlementPrice.price, settlementPrice.expo);
+        uint256 winningCell = closingPriceUsdc / BAND_WIDTH;
 
-        console.log("\nSettlement Price: $", closingPriceUSDC / 1e6);
+        console.log("\nSettlement Price: $", closingPriceUsdc / 1e6);
         console.log("Winning Cell ID:", winningCell);
 
         // Verify price is valid
-        assertGt(closingPriceUSDC, 0, "Closing price should be > 0");
+        assertGt(closingPriceUsdc, 0, "Closing price should be > 0");
 
         console.log("\nReal Pyth integration working correctly!");
     }
@@ -299,18 +300,19 @@ contract SettlementIntegrationTest is Test {
      * @notice Convert Pyth price format to USDC 6-decimal
      * @dev Matches the conversion logic in PariHook._parsePythPrice()
      */
-    function convertPythToUSDC(uint64 pythPrice, int32 pythExpo) internal pure returns (uint256) {
+    function convertPythToUsdc(int64 pythPrice, int32 pythExpo) internal pure returns (uint256) {
         // Target: USDC 6-decimal format
         // Formula: usdcPrice = pythPrice * 10^(pythExpo + 6)
+        uint256 absPrice = SafeCast.toUint256(int256(pythPrice)); // validates >= 0
 
         int32 exponentAdjustment = pythExpo + 6;
 
         if (exponentAdjustment >= 0) {
             // Multiply: price * 10^exponentAdjustment
-            return uint256(pythPrice) * (10 ** uint32(exponentAdjustment));
+            return absPrice * (10 ** SafeCast.toUint256(int256(exponentAdjustment)));
         } else {
             // Divide: price / 10^(-exponentAdjustment)
-            return uint256(pythPrice) / (10 ** uint32(-exponentAdjustment));
+            return absPrice / (10 ** SafeCast.toUint256(int256(-exponentAdjustment)));
         }
     }
 }

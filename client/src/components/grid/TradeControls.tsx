@@ -105,40 +105,36 @@ export const TradeControls: React.FC<TradeControlsProps> = ({
                         {betQuote && !quoteLoading ? (
                             <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div className="flex flex-col">
-                                    <span className="text-muted-foreground text-[9px]">Win Probability</span>
+                                    <span className="text-muted-foreground text-[9px]">Multiplier</span>
                                     <span className="font-mono font-semibold text-foreground">
-                                        {(betQuote.probability * 100).toFixed(1)}%
+                                        {betQuote.current_multiplier.toFixed(2)}x
                                     </span>
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-muted-foreground text-[9px]">Payout Ratio</span>
+                                    <span className="text-muted-foreground text-[9px]">Estimated Payout</span>
                                     <span className="font-mono font-semibold text-trade-up">
-                                        {(1 / betQuote.probability).toFixed(2)}x
+                                        ${betQuote.estimated_payout.toFixed(2)}
                                     </span>
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-muted-foreground text-[9px]">If Win</span>
+                                    <span className="text-muted-foreground text-[9px]">Net If Win</span>
                                     <span className="font-mono font-semibold text-trade-up">
-                                        +${betQuote.potential_payout.toFixed(2)}
+                                        {betQuote.estimated_net_profit >= 0 ? '+' : '-'}
+                                        ${Math.abs(betQuote.estimated_net_profit).toFixed(2)}
                                     </span>
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-muted-foreground text-[9px]">Shares</span>
+                                    <span className="text-muted-foreground text-[9px]">Cell / Pool</span>
                                     <span className="font-mono font-semibold text-foreground">
-                                        {betQuote.shares_bought.toFixed(2)}
+                                        ${betQuote.cell_stake.toFixed(2)} / ${betQuote.total_pool.toFixed(2)}
                                     </span>
                                 </div>
                             </div>
                         ) : !quoteLoading ? (
                             <p className="text-[10px] text-muted-foreground">
-                                Tap a cell to see potential payout
+                                Tap a cell to see estimated payout
                             </p>
                         ) : null}
-                        {betQuote && !betQuote.can_purchase && (
-                            <p className="text-[10px] text-trade-down mt-2">
-                                Insufficient shares available
-                            </p>
-                        )}
                     </div>
                 )}
             </div>

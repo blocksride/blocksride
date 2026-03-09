@@ -11,6 +11,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title TestPariHookIntegration
@@ -34,7 +35,7 @@ contract TestPariHookIntegration is Script {
     using PoolIdLibrary for PoolKey;
 
     // Deployed contract addresses
-    PariHook public constant PARI_HOOK = PariHook(0xdbB492353B57698a5443bF1846F00c71EFA41824);
+    PariHook public constant PARI_HOOK = PariHook(0xE6dB8dF1ECa3E26bD8D6f21b64a19db5505D9Db6);
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408);
     IPyth public constant PYTH_ORACLE = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
     address public constant USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
@@ -102,33 +103,33 @@ contract TestPariHookIntegration is Script {
 
     function testDeploymentState() internal view {
         console.log("Contract State:");
-        console.log("  PoolManager:", address(PARI_HOOK.poolManager()));
-        console.log("  Pyth Oracle:", address(PARI_HOOK.pythOracle()));
+        console.log("  PoolManager:", address(PARI_HOOK.POOL_MANAGER()));
+        console.log("  Pyth Oracle:", address(PARI_HOOK.PYTH_ORACLE()));
         console.log("  Paused:", PARI_HOOK.paused());
         console.log("  DOMAIN_SEPARATOR:", vm.toString(PARI_HOOK.DOMAIN_SEPARATOR()));
 
-        require(address(PARI_HOOK.poolManager()) == address(POOL_MANAGER), "PoolManager mismatch");
+        require(address(PARI_HOOK.POOL_MANAGER()) == address(POOL_MANAGER), "PoolManager mismatch");
         require(!PARI_HOOK.paused(), "Contract should not be paused");
 
         console.log("\n  [OK] Deployment state verified");
     }
 
     function testRoleAssignments(address admin) internal view {
-        bytes32 DEFAULT_ADMIN_ROLE = PARI_HOOK.DEFAULT_ADMIN_ROLE();
-        bytes32 ADMIN_ROLE = PARI_HOOK.ADMIN_ROLE();
-        bytes32 TREASURY_ROLE = PARI_HOOK.TREASURY_ROLE();
-        bytes32 RELAYER_ROLE = PARI_HOOK.RELAYER_ROLE();
+        bytes32 defaultAdminRole = PARI_HOOK.DEFAULT_ADMIN_ROLE();
+        bytes32 adminRole = PARI_HOOK.ADMIN_ROLE();
+        bytes32 treasuryRole = PARI_HOOK.TREASURY_ROLE();
+        bytes32 relayerRole = PARI_HOOK.RELAYER_ROLE();
 
         console.log("Checking roles for:", admin);
-        console.log("  DEFAULT_ADMIN_ROLE:", PARI_HOOK.hasRole(DEFAULT_ADMIN_ROLE, admin));
-        console.log("  ADMIN_ROLE:", PARI_HOOK.hasRole(ADMIN_ROLE, admin));
-        console.log("  TREASURY_ROLE:", PARI_HOOK.hasRole(TREASURY_ROLE, admin));
+        console.log("  DEFAULT_ADMIN_ROLE:", PARI_HOOK.hasRole(defaultAdminRole, admin));
+        console.log("  ADMIN_ROLE:", PARI_HOOK.hasRole(adminRole, admin));
+        console.log("  TREASURY_ROLE:", PARI_HOOK.hasRole(treasuryRole, admin));
 
         address relayer = 0xF41886af501e2a0958dBD31D9a28AcD6c2f5db06;
         console.log("\nChecking RELAYER_ROLE for:", relayer);
-        console.log("  RELAYER_ROLE:", PARI_HOOK.hasRole(RELAYER_ROLE, relayer));
+        console.log("  RELAYER_ROLE:", PARI_HOOK.hasRole(relayerRole, relayer));
 
-        require(PARI_HOOK.hasRole(ADMIN_ROLE, admin), "Admin should have ADMIN_ROLE");
+        require(PARI_HOOK.hasRole(adminRole, admin), "Admin should have ADMIN_ROLE");
 
         console.log("\n  [OK] Role assignments verified");
     }
@@ -139,11 +140,7 @@ contract TestPariHookIntegration is Script {
         Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 0,
-            tickSpacing: 60,
-            hooks: IHooks(address(PARI_HOOK))
+            currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 60, hooks: IHooks(address(PARI_HOOK))
         });
         PoolId poolId = poolKey.toId();
 
@@ -194,11 +191,7 @@ contract TestPariHookIntegration is Script {
         Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 0,
-            tickSpacing: 60,
-            hooks: IHooks(address(PARI_HOOK))
+            currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 60, hooks: IHooks(address(PARI_HOOK))
         });
 
         console.log("Testing view functions...");
@@ -233,20 +226,20 @@ contract TestPariHookIntegration is Script {
         try PYTH_ORACLE.getPriceUnsafe(ETH_USD_FEED_ID) returns (PythStructs.Price memory price) {
             console.log("");
             console.log("  Raw Price Data:");
-            console.log("    price:", uint64(price.price));
-            console.log("    expo:", uint32(price.expo));
+            console.log("    price:", int256(price.price));
+            console.log("    expo:", int256(price.expo));
             console.log("    conf:", price.conf);
             console.log("    publishTime:", price.publishTime);
             console.log("");
 
             // Convert to human-readable format
-            uint256 humanPrice = convertPythPrice(uint64(price.price), price.expo);
+            uint256 humanPrice = convertPythPrice(price.price, price.expo);
             console.log("  Human-Readable Price:");
             console.log("    $", humanPrice);
             console.log("");
 
             // Convert to USDC 6-decimal format (for contract use)
-            uint256 usdcPrice = convertToUSDC6Decimal(uint64(price.price), price.expo);
+            uint256 usdcPrice = convertToUsdc6Decimal(price.price, price.expo);
             console.log("  USDC 6-Decimal Format:");
             console.log("    value:", usdcPrice);
             console.log("    dollars:", usdcPrice / 1e6);
@@ -280,7 +273,7 @@ contract TestPariHookIntegration is Script {
         // Test BTC/USD as well
         console.log("Testing BTC/USD Price Feed:");
         try PYTH_ORACLE.getPriceUnsafe(BTC_USD_FEED_ID) returns (PythStructs.Price memory price) {
-            uint256 humanPrice = convertPythPrice(uint64(price.price), price.expo);
+            uint256 humanPrice = convertPythPrice(price.price, price.expo);
             console.log("  Current BTC Price: $", humanPrice);
             console.log("  [OK] BTC/USD feed working");
         } catch {
@@ -289,24 +282,26 @@ contract TestPariHookIntegration is Script {
         console.log("");
     }
 
-    function convertPythPrice(uint64 price, int32 expo) internal pure returns (uint256) {
+    function convertPythPrice(int64 price, int32 expo) internal pure returns (uint256) {
+        uint256 absPrice = SafeCast.toUint256(int256(price));
         if (expo >= 0) {
-            return uint256(price) * (10 ** uint32(expo));
+            return absPrice * (10 ** SafeCast.toUint256(int256(expo)));
         } else {
-            return uint256(price) / (10 ** uint32(-expo));
+            return absPrice / (10 ** SafeCast.toUint256(int256(-expo)));
         }
     }
 
-    function convertToUSDC6Decimal(uint64 pythPrice, int32 pythExpo) internal pure returns (uint256) {
+    function convertToUsdc6Decimal(int64 pythPrice, int32 pythExpo) internal pure returns (uint256) {
+        uint256 absPrice = SafeCast.toUint256(int256(pythPrice));
         int32 exponentAdjustment = pythExpo + 6;
         if (exponentAdjustment >= 0) {
-            return uint256(pythPrice) * (10 ** uint32(exponentAdjustment));
+            return absPrice * (10 ** SafeCast.toUint256(int256(exponentAdjustment)));
         } else {
-            return uint256(pythPrice) / (10 ** uint32(-exponentAdjustment));
+            return absPrice / (10 ** SafeCast.toUint256(int256(-exponentAdjustment)));
         }
     }
 
-    function testHookPermissions() internal view {
+    function testHookPermissions() internal pure {
         console.log("Hook Permissions:");
         console.log("  Hook Address:", address(PARI_HOOK));
         console.log("");

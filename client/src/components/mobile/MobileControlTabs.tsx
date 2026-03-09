@@ -4,6 +4,7 @@ import { TradeControls } from '@/components/grid/TradeControls'
 import { PositionSummary } from '@/components/grid/PositionSummary'
 import { BetHistory } from '@/components/grid/BetHistory'
 import { Cell, Position, BetQuote } from '@/types/grid'
+import { normalizeSlotKey } from '@/lib/gridSlots'
 import { DollarSign, TrendingUp, History } from 'lucide-react'
 
 interface MobileControlTabsProps {
@@ -33,7 +34,7 @@ export const MobileControlTabs: React.FC<MobileControlTabsProps> = ({
   quoteLoading,
   selectedCellId,
 }) => {
-  const activePositionsCount = positions.filter(p => selectedCells.includes(p.cell_id)).length
+  const activePositionsCount = positions.filter(p => selectedCells.includes(normalizeSlotKey(p.cell_id, cells))).length
   const completedBetsCount = Object.keys(betResults).filter(
     cellId => betResults[cellId] === 'won' || betResults[cellId] === 'lost'
   ).length

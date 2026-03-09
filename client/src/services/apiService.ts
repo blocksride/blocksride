@@ -1,5 +1,5 @@
 import axiosInstance from '../utility/axiosInterceptor'
-import { Grid, Cell, Position, BetQuote, CellPrice } from '../types/grid'
+import { Grid, Cell, Position, CellPrice } from '../types/grid'
 
 export const api = {
     health: () => axiosInstance.get(`/health`),
@@ -35,6 +35,9 @@ export const api = {
         >(`/prices/${assetId}?${params.toString()}`)
     },
 
+    getPublicPrice: (assetId: string = 'ETH-USD') =>
+        axiosInstance.get<PublicPrice>(`/public-price?asset_id=${assetId}`),
+
     createPosition: (cellId: string, assetId: string, stake: number, isPractice: boolean = false) =>
         axiosInstance.post<Position>(`/positions`, {
             cell_id: cellId,
@@ -47,18 +50,6 @@ export const api = {
         const params = isPractice !== undefined ? `?is_practice=${isPractice}` : ''
         return axiosInstance.get<Position[]>(`/positions${params}`)
     },
-
-    updatePosition: (positionId: string, state: string, payout?: number) =>
-        axiosInstance.patch(`/positions/${positionId}`, { state, payout }),
-
-    withdraw: (amount: number, address: string) =>
-        axiosInstance.post(`/users/withdraw`, { amount, address }),
-
-    getWithdrawals: (limit: number = 20, offset: number = 0) =>
-        axiosInstance.get<WithdrawalRequest[]>(`/users/withdrawals?limit=${limit}&offset=${offset}`),
-
-    getWithdrawalByID: (id: string) =>
-        axiosInstance.get<WithdrawalRequest>(`/users/withdrawals/${id}`),
 
     getUserStats: () => axiosInstance.get('/user/stats'),
 
@@ -88,13 +79,6 @@ export const api = {
     // Share-based pricing endpoints
     getCellPrices: (gridId: string) =>
         axiosInstance.get<CellPrice[]>(`/grids/${gridId}/prices`),
-
-    getBetQuote: (cellId: string, assetId: string, stake: number) =>
-        axiosInstance.post<BetQuote>(`/positions/quote`, {
-            cell_id: cellId,
-            asset_id: assetId,
-            stake,
-        }),
 
     logMiniAppContext: (payload: MiniAppContextPayload) =>
         axiosInstance.post(`/analytics/miniapp`, payload),
@@ -142,19 +126,12 @@ export interface TradingPair {
     updated_at: string
 }
 
-export type WithdrawalStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'queued'
-
-export interface WithdrawalRequest {
-    id: string
-    user_id: string
-    amount: number
-    to_address: string
-    status: WithdrawalStatus
-    tx_hash?: string
-    error_message?: string
-    created_at: string
-    processed_at?: string
-    completed_at?: string
+export interface PublicPrice {
+    asset_id: string
+    price: number
+    source: string
+    ts: string
+    stale?: boolean
 }
 
 export interface MiniAppContextPayload {

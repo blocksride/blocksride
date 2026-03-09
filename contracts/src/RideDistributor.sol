@@ -50,9 +50,6 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     event RideTokenSet(address indexed rideToken);
 
     constructor(address coldAdmin, address admin, address treasury, address relayer) {
-        if (coldAdmin == address(0) || admin == address(0) || treasury == address(0) || relayer == address(0)) {
-            revert ZeroAddress();
-        }
         _grantRole(DEFAULT_ADMIN_ROLE, coldAdmin);
         _grantRole(ADMIN_ROLE, admin);
         _grantRole(TREASURY_ROLE, treasury);
@@ -60,8 +57,8 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     }
 
     function setRideToken(address _rideToken) external onlyRole(ADMIN_ROLE) {
-        if (_rideToken == address(0)) revert ZeroAddress();
         if (address(rideToken) != address(0)) revert RideTokenAlreadySet();
+        if (_rideToken == address(0)) revert ZeroAddress();
         rideToken = IERC20(_rideToken);
         emit RideTokenSet(_rideToken);
     }

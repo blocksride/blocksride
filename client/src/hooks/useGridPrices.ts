@@ -2,12 +2,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../services/apiService'
 import type { Grid } from '../types/grid'
 import { PricePoint } from '../types/grid'
-import { useAuth } from '../contexts/AuthContext'
 
 export function useGridPrices(selectedAsset: string, grid: Grid | null) {
   const [prices, setPrices] = useState<PricePoint[]>([])
   const [currentPrice, setCurrentPrice] = useState<number | null>(null)
-  const { authenticated } = useAuth()
 
   // Batch price updates to reduce re-renders
   const pendingPricesRef = useRef<PricePoint[]>([])
@@ -32,10 +30,10 @@ export function useGridPrices(selectedAsset: string, grid: Grid | null) {
   useEffect(() => {
     setPrices([])
     setCurrentPrice(null)
-  }, [selectedAsset, authenticated])
+  }, [selectedAsset])
 
   useEffect(() => {
-    if (!grid || !authenticated) return
+    if (!grid) return
 
     let isMounted = true
     const now = Date.now()
@@ -98,69 +96,49 @@ export function useGridPrices(selectedAsset: string, grid: Grid | null) {
     return () => {
       isMounted = false
     }
-  }, [grid, authenticated])
+  }, [grid])
 
   useEffect(() => {
-    if (!authenticated) return
-
-    let ws: WebSocket | null = null
-    let timeoutId: ReturnType<typeof setTimeout> | null = null
     let isActive = true
+    const serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:8080'
+    const baseURL = serverUrl.endsWith('/api') ? serverUrl : `${serverUrl}/api`
 
-    const connect = () => {
+    const poll = async () => {
       if (!isActive) return
-      const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8080'
-      ws = new WebSocket(`${wsBase}/api/ws`)
-      ws.onopen = () => {
-        // Connected to WebSocket
-      }
-      ws.onmessage = (event) => {
-        if (!isActive) return
-        try {
-          const msg = JSON.parse(event.data)
-          if (msg.asset_id === selectedAsset && typeof msg.price === 'number') {
-            const price = msg.price
-            const timestamp = new Date(msg.timestamp).getTime()
-            setCurrentPrice(price)
+      try {
+        const res = await fetch(`${baseURL}/public-price?asset_id=${encodeURIComponent(selectedAsset)}`)
+        if (!res.ok || !isActive) return
+        const data = await res.json()
+        const price = Number(data?.price)
+        if (!Number.isFinite(price) || !isActive) return
 
-            // Batch price updates instead of updating state on every message
-            pendingPricesRef.current.push({ time: timestamp, price })
-
-            // Flush every 100ms to batch multiple updates
-            if (!flushTimeoutRef.current) {
-              flushTimeoutRef.current = setTimeout(() => {
-                flushTimeoutRef.current = null
-                flushPrices()
-              }, 100)
-            }
-          }
-        } catch (error) {
-          console.error('[useGridPrices] Failed to parse WebSocket message:', error)
+        const now = Date.now()
+        setCurrentPrice(price)
+        pendingPricesRef.current.push({ time: now, price })
+        if (!flushTimeoutRef.current) {
+          flushTimeoutRef.current = setTimeout(() => {
+            flushTimeoutRef.current = null
+            flushPrices()
+          }, 100)
         }
-      }
-      ws.onclose = () => {
-        if (!isActive) return
-        timeoutId = setTimeout(connect, 3000)
+      } catch {
+        // ignore fetch errors
       }
     }
 
-    connect()
+    poll()
+    const pollId = setInterval(poll, 2000)
 
     return () => {
       isActive = false
-      if (ws) {
-        ws.onclose = null
-        ws.close()
-      }
-      if (timeoutId) clearTimeout(timeoutId)
+      clearInterval(pollId)
       if (flushTimeoutRef.current) {
         clearTimeout(flushTimeoutRef.current)
         flushTimeoutRef.current = null
       }
-      // Flush any remaining prices
       flushPrices()
     }
-  }, [selectedAsset, authenticated, flushPrices])
+  }, [selectedAsset, flushPrices])
 
   return { prices, currentPrice }
 }

@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/contexts/AuthContext'
 import { useWriteContract, useWaitForTransactionReceipt, useReadContract, type BaseError } from 'wagmi'
-import { parseUnits, createWalletClient, custom, type WalletClient } from 'viem'
+import { parseUnits } from 'viem'
 import { toast } from 'sonner'
-import { Loader2, Copy, CheckCircle2, Info, Zap } from 'lucide-react'
-import { networkName, expectedChainId, activeChain } from '@/providers/Web3Provider'
-import { depositService } from '@/services/depositService'
+import { Loader2, Copy, CheckCircle2, Info } from 'lucide-react'
+import { networkName } from '@/providers/Web3Provider'
 import { useWallets } from '@privy-io/react-auth'
 
 const erc20Abi = [
@@ -43,40 +42,10 @@ export function WalletDeposit() {
     const address = activeWallet?.address as `0x${string}` | undefined
 
     const [amount, setAmount] = useState('')
-    const [privyWalletClient, setPrivyWalletClient] = useState<WalletClient | null>(null)
-
-    // Get wallet client from Privy embedded wallet
-    const getWalletClient = useCallback(async () => {
-        if (!activeWallet) return null
-        try {
-            const provider = await activeWallet.getEthereumProvider()
-            const client = createWalletClient({
-                account: activeWallet.address as `0x${string}`,
-                chain: activeChain,
-                transport: custom(provider),
-            })
-            return client
-        } catch (error) {
-            console.error('Failed to get wallet client:', error)
-            return null
-        }
-    }, [activeWallet])
-
-    // Initialize wallet client when wallet is available
-    useEffect(() => {
-        if (activeWallet) {
-            getWalletClient().then(setPrivyWalletClient)
-        }
-    }, [activeWallet, getWalletClient])
     const [isOpen, setIsOpen] = useState(false)
     const [copied, setCopied] = useState(false)
-    const [isGaslessDeposit, setIsGaslessDeposit] = useState(false)
-    const [isSigningPermit, setIsSigningPermit] = useState(false)
 
-    // Treasury address for deposits (Base Mainnet)
     const TREASURY_ADDRESS = import.meta.env.VITE_PLATFORM_TREASURY || ''
-
-    // USDC token address (Base Mainnet)
     const TOKEN_ADDRESS = import.meta.env.VITE_TOKEN_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 
     const { data: decimals } = useReadContract({
@@ -114,88 +83,18 @@ export function WalletDeposit() {
         }
     }, [writeError])
 
-    // Handle standard deposit (user pays gas)
-    const handleStandardDeposit = () => {
+    const handleDeposit = () => {
         if (!amount || isNaN(parseFloat(amount))) {
             toast.error('Please enter a valid amount')
             return
         }
-
         const safeDecimals = decimals ?? 6
-
         writeContract({
             address: TOKEN_ADDRESS as `0x${string}`,
             abi: erc20Abi,
             functionName: 'transfer',
             args: [TREASURY_ADDRESS as `0x${string}`, parseUnits(amount, safeDecimals)],
         })
-    }
-
-    // Handle gasless deposit (relayer pays gas)
-    const handleGaslessDeposit = async () => {
-        if (!amount || isNaN(parseFloat(amount))) {
-            toast.error('Please enter a valid amount')
-            return
-        }
-
-        if (!address) {
-            toast.error('Wallet not connected')
-            return
-        }
-
-        // Get wallet client from Privy
-        const walletClient = privyWalletClient || await getWalletClient()
-        if (!walletClient) {
-            toast.error('Failed to get wallet client')
-            return
-        }
-
-        const safeDecimals = decimals ?? 6
-        const amountWei = parseUnits(amount, safeDecimals)
-
-        setIsSigningPermit(true)
-        try {
-            // Execute gasless deposit
-            const result = await depositService.executeGaslessDeposit(
-                walletClient,
-                address as `0x${string}`,
-                amountWei,
-                expectedChainId
-            )
-
-            if (result.success) {
-                toast.success(
-                    'Deposit submitted! Your balance will be credited when the transaction confirms.',
-                    { duration: 5000 }
-                )
-                setAmount('')
-                // Refresh user balance
-                refreshUser()
-            } else {
-                toast.error('Deposit failed. Please try again.')
-            }
-        } catch (error) {
-            console.error('Gasless deposit error:', error)
-            if (error instanceof Error) {
-                if (error.message.includes('User rejected')) {
-                    toast.error('Signature rejected')
-                } else {
-                    toast.error(error.message)
-                }
-            } else {
-                toast.error('Gasless deposit failed')
-            }
-        } finally {
-            setIsSigningPermit(false)
-        }
-    }
-
-    const handleDeposit = () => {
-        if (isGaslessDeposit) {
-            handleGaslessDeposit()
-        } else {
-            handleStandardDeposit()
-        }
     }
 
     const copyToClipboard = async () => {
@@ -241,37 +140,6 @@ export function WalletDeposit() {
                     </div>
                 ) : (
                     <div className="flex flex-col gap-4 py-4">
-                        {/* Deposit method toggle */}
-                        <div className="flex gap-2">
-                            <Button
-                                variant={isGaslessDeposit ? "outline" : "default"}
-                                size="sm"
-                                onClick={() => setIsGaslessDeposit(false)}
-                                className="flex-1"
-                            >
-                                Standard
-                            </Button>
-                            <Button
-                                variant={isGaslessDeposit ? "default" : "outline"}
-                                size="sm"
-                                onClick={() => setIsGaslessDeposit(true)}
-                                className="flex-1 gap-1"
-                            >
-                                <Zap className="h-3 w-3" />
-                                Gasless
-                            </Button>
-                        </div>
-
-                        {/* Gasless deposit notice */}
-                        {isGaslessDeposit && (
-                            <div className="flex items-start gap-2 p-3 bg-green-100 border border-green-300 dark:bg-green-500/10 dark:border-green-500/20 rounded-md">
-                                <Zap className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
-                                <p className="text-xs text-green-600 dark:text-green-400">
-                                    Gasless deposit: Sign a permit message (no gas needed). We'll pay the transaction fee for you!
-                                </p>
-                            </div>
-                        )}
-
                         {/* Auto-detection notice */}
                         <div className="flex items-start gap-2 p-3 bg-blue-100 border border-blue-300 dark:bg-blue-500/10 dark:border-blue-500/20 rounded-md">
                             <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
@@ -290,33 +158,27 @@ export function WalletDeposit() {
                             </div>
                         </div>
 
-                        {/* User's Wallet Address - fund this, then use gasless deposit */}
-                        {!isGaslessDeposit && (
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Step 1: Fund Your Wallet</label>
-                                <div className="flex items-center gap-2">
-                                    <div className="flex-1 p-2 border rounded-md bg-muted/30 text-xs font-mono text-muted-foreground truncate">
-                                        {walletAddress || 'Not connected'}
-                                    </div>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={copyToClipboard}
-                                        disabled={!walletAddress}
-                                        className="shrink-0"
-                                    >
-                                        {copied ? (
-                                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                        ) : (
-                                            <Copy className="h-4 w-4" />
-                                        )}
-                                    </Button>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Your Wallet Address</label>
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 p-2 border rounded-md bg-muted/30 text-xs font-mono text-muted-foreground truncate">
+                                    {walletAddress || 'Not connected'}
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Send USDC to this address from any wallet, then switch to Gasless to deposit.
-                                </p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={copyToClipboard}
+                                    disabled={!walletAddress}
+                                    className="shrink-0"
+                                >
+                                    {copied ? (
+                                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    ) : (
+                                        <Copy className="h-4 w-4" />
+                                    )}
+                                </Button>
                             </div>
-                        )}
+                        </div>
 
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Amount</label>
@@ -330,23 +192,15 @@ export function WalletDeposit() {
 
                         <Button
                             onClick={handleDeposit}
-                            disabled={isSending || isConfirming || isSigningPermit || !amount || !TREASURY_ADDRESS}
+                            disabled={isSending || isConfirming || !amount || !TREASURY_ADDRESS}
                         >
-                            {isSigningPermit ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sign Permit...
-                                </>
-                            ) : isSending ? (
+                            {isSending ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirm in Wallet...
                                 </>
                             ) : isConfirming ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Confirming...
-                                </>
-                            ) : isGaslessDeposit ? (
-                                <>
-                                    <Zap className="mr-2 h-4 w-4" /> Deposit USDC (Gasless)
                                 </>
                             ) : (
                                 'Deposit USDC'

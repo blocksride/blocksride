@@ -1,9 +1,7 @@
 import React, { useMemo } from 'react'
-import { Grid, Cell, PricePoint, CellPrice } from '../../types/grid'
-
-interface CellPricesMap {
-    [cellId: string]: CellPrice
-}
+import { Grid, Cell, PricePoint } from '../../types/grid'
+import type { Pool } from '../../services/betService'
+import { getAbsoluteCellId, getGridEpochMs, getWindowDurationMs, getWindowIdAtTime } from '../../lib/gridSlots'
 import { GridBackground } from './canvas/GridBackground'
 import { PriceChart } from './canvas/PriceChart'
 import { GridCells } from './canvas/GridCells'
@@ -16,6 +14,7 @@ interface GridCanvasProps {
     width: number
     height: number
     grid: Grid | null
+    pool: Pool | null
     cells: Cell[]
     prices: PricePoint[]
     currentPrice: number | null
@@ -27,7 +26,6 @@ interface GridCanvasProps {
     onCellClick: (cellId: number, windowId: number) => void
     betResults: Record<string, string>
     cellStakes?: Record<string, number>
-    cellPrices?: CellPricesMap
     /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
     multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
@@ -38,6 +36,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     width,
     height,
     grid,
+    pool,
     cells,
     prices,
     currentPrice,
@@ -49,7 +48,6 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     onCellClick,
     betResults,
     cellStakes,
-    cellPrices,
     multipliers,
     recentCellIds,
     contestEndTime,
@@ -73,8 +71,8 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     const timeSteps = useMemo(() => {
         if (!grid) return []
         const steps: number[] = []
-        const windowDuration = (grid.timeframe_sec || 60) * 1000
-        const gridStartTime = new Date(grid.start_time).getTime()
+        const windowDuration = getWindowDurationMs(pool, grid)
+        const gridStartTime = getGridEpochMs(pool, grid)
         const offset = gridStartTime % windowDuration
 
         const startWindow =
@@ -87,7 +85,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
             steps.push(t)
         }
         return steps
-    }, [grid, viewportStart, viewportEnd])
+    }, [grid, pool, viewportStart, viewportEnd])
 
     const priceSteps = useMemo(() => {
         if (!grid) return []
@@ -110,13 +108,10 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
 
     if (!grid) return null
 
-    const windowDuration = (grid.timeframe_sec || 60) * 1000
-    const bandWidthUsdc = Math.round((grid.price_interval || 2) * 1_000_000)
-    const activeCellId = currentPrice !== null && bandWidthUsdc > 0
-        ? Math.floor(currentPrice * 1_000_000 / bandWidthUsdc)
-        : undefined
-    const gridStartTime = new Date(grid.start_time).getTime()
-    const currentWindowIndex = Math.floor((now - gridStartTime) / windowDuration)
+    const windowDuration = getWindowDurationMs(pool, grid)
+    const activeCellId = currentPrice !== null ? getAbsoluteCellId(currentPrice, grid.price_interval || 2) : undefined
+    const gridStartTime = getGridEpochMs(pool, grid)
+    const currentWindowIndex = getWindowIdAtTime(now, pool, grid)
     const currentWindowStart = gridStartTime + currentWindowIndex * windowDuration
     const currentWindowEnd = currentWindowStart + windowDuration
     const frozenEndTime = currentWindowStart + (frozenWindows + 1) * windowDuration
@@ -217,13 +212,13 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
                 width={width}
                 height={height}
                 grid={grid}
+                pool={pool}
                 cells={cells}
                 visibleTimeRange={visibleTimeRange}
                 visiblePriceRange={visiblePriceRange}
                 selectedCells={selectedCells}
                 betResults={betResults}
                 cellStakes={cellStakes}
-                cellPrices={cellPrices}
                 multipliers={multipliers}
                 recentCellIds={recentCellIds}
                 activeCellId={activeCellId}
@@ -337,15 +332,14 @@ export const GridCanvas = React.memo(GridCanvasInner, (prevProps, nextProps) => 
         prevProps.selectedCells !== nextProps.selectedCells ||
         prevProps.betResults !== nextProps.betResults ||
         prevProps.cellStakes !== nextProps.cellStakes ||
-        prevProps.cellPrices !== nextProps.cellPrices ||
         prevProps.multipliers !== nextProps.multipliers ||
         prevProps.contestEndTime !== nextProps.contestEndTime
     ) {
         return false
     }
 
-    // Re-render if cells change
-    if (prevProps.cells !== nextProps.cells) {
+    // Re-render if cells or on-chain pool config changes
+    if (prevProps.cells !== nextProps.cells || prevProps.pool !== nextProps.pool) {
         return false
     }
 
