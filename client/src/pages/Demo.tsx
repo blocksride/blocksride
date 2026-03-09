@@ -484,7 +484,6 @@ export const Demo = () => {
             const cellId = Number(cellStr)
             const ws = gridStartRef.current + effectiveWindow * windowDuration
             const we = ws + windowDuration
-            const pLow = cellId * PRICE_INTERVAL
             const pHigh = (cellId + 1) * PRICE_INTERVAL
             const x1 = ((ws - tStart) / tRange) * width
             const x2 = ((we - tStart) / tRange) * width
@@ -724,6 +723,7 @@ export const Demo = () => {
                             <GridCanvas
                                 width={viewport.dimensions.width}
                                 height={viewport.dimensions.height}
+                                pool={null}
                                 grid={grid}
                                 cells={demoCells}
                                 prices={chartPrices}
