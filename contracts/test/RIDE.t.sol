@@ -33,7 +33,7 @@ contract RIDETest is Test {
     }
 
     function test_Transfer_RevertWhen_NeitherSideWhitelisted() public {
-        vm.prank(distributor);
+        vm.prank(address(distributorContract));
         assertTrue(ride.transfer(alice, 100e18));
 
         vm.prank(alice);
@@ -43,29 +43,23 @@ contract RIDETest is Test {
     }
 
     function test_Transfer_SuccessWhen_RecipientWhitelisted() public {
-        vm.prank(owner);
-        ride.setTransferWhitelist(alice, true);
-
-        vm.prank(distributor);
+        // Give alice some RIDE (distributor is whitelisted sender)
+        vm.prank(address(distributorContract));
         assertTrue(ride.transfer(alice, 100e18));
 
+        // alice (non-whitelisted EOA) can transfer to staking (whitelisted contract recipient)
         vm.prank(alice);
-        assertTrue(ride.transfer(bob, 10e18));
+        assertTrue(ride.transfer(address(staking), 10e18));
 
-        assertEq(ride.balanceOf(bob), 10e18);
+        assertEq(ride.balanceOf(address(staking)), 10e18);
     }
 
-    function test_Transfer_SuccessWhen_RestrictionsDisabled() public {
-        vm.prank(distributor);
+    function test_Transfer_SuccessWhen_SenderWhitelisted() public {
+        // distributor is whitelisted (receives minted supply), so it can transfer freely
+        vm.prank(address(distributorContract));
         assertTrue(ride.transfer(alice, 100e18));
 
-        vm.prank(owner);
-        ride.setTransfersRestricted(false);
-
-        vm.prank(alice);
-        assertTrue(ride.transfer(bob, 10e18));
-
-        assertEq(staking.stakedBalance(alice), 10e18);
+        assertEq(ride.balanceOf(alice), 100e18);
     }
 
     function test_SetTransferWhitelist_OnlyAdminRole() public {

@@ -36,8 +36,12 @@ contract RideStaking is AccessControl, ReentrancyGuard {
     event UnstakeInitiated(address indexed user, uint256 amount, uint256 unlockTime);
     event UnstakeCompleted(address indexed user, uint256 amount);
 
-    constructor(address _rideToken, address initialOwner) Ownable(initialOwner) {
+    constructor(address _rideToken, address coldAdmin, address admin, address treasury, address relayer) {
         RIDE_TOKEN = IERC20(_rideToken);
+        _grantRole(DEFAULT_ADMIN_ROLE, coldAdmin);
+        _grantRole(ADMIN_ROLE, admin);
+        _grantRole(TREASURY_ROLE, treasury);
+        _grantRole(RELAYER_ROLE, relayer);
     }
 
     function stake(uint256 amount) external nonReentrant {

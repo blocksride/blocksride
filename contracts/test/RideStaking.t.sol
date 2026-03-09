@@ -25,7 +25,7 @@ contract RideStakingTest is Test {
         vm.prank(admin);
         ride.wireSystemContracts(address(distributorContract), address(staking));
 
-        vm.prank(distributor);
+        vm.prank(address(distributorContract));
         assertTrue(ride.transfer(alice, 20_000e18));
 
         vm.prank(alice);

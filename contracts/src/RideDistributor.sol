@@ -32,7 +32,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         uint256 emitted;
     }
 
-    IERC20 public immutable RIDE_TOKEN;
+    IERC20 public RIDE_TOKEN;
     uint256 public periodCount;
     bytes32 public airdropMerkleRoot;
 
@@ -49,8 +49,18 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     event AirdropClaimed(address indexed user, uint256 amount);
     event RideTokenSet(address indexed rideToken);
 
-    constructor(address _rideToken, address initialOwner) Ownable(initialOwner) {
+    constructor(address coldAdmin, address admin, address treasury, address relayer) {
+        _grantRole(DEFAULT_ADMIN_ROLE, coldAdmin);
+        _grantRole(ADMIN_ROLE, admin);
+        _grantRole(TREASURY_ROLE, treasury);
+        _grantRole(RELAYER_ROLE, relayer);
+    }
+
+    function setRideToken(address _rideToken) external onlyRole(ADMIN_ROLE) {
+        if (address(RIDE_TOKEN) != address(0)) revert RideTokenAlreadySet();
+        if (_rideToken == address(0)) revert ZeroAddress();
         RIDE_TOKEN = IERC20(_rideToken);
+        emit RideTokenSet(_rideToken);
     }
 
     function createEmissionPeriod(uint256 startTime, uint256 endTime, uint256 totalAllocation)
@@ -89,7 +99,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     }
 
     function claimBetRewards(PoolId poolId, uint256[] calldata windowIds) external nonReentrant {
-        if (address(rideToken) == address(0)) revert RideTokenNotSet();
+        if (address(RIDE_TOKEN) == address(0)) revert RideTokenNotSet();
         bytes32 rawPoolId = PoolId.unwrap(poolId);
         uint256 totalClaimed;
 
@@ -107,7 +117,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     }
 
     function claimAirdrop(bytes32[] calldata merkleProof, uint256 amount) external nonReentrant {
-        if (address(rideToken) == address(0)) revert RideTokenNotSet();
+        if (address(RIDE_TOKEN) == address(0)) revert RideTokenNotSet();
         if (amount == 0) revert ZeroAmount();
         if (hasClaimedAirdrop[msg.sender]) revert AirdropAlreadyClaimed();
 

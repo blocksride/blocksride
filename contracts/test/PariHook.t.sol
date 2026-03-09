@@ -87,7 +87,7 @@ contract PariHookTest is Test {
     }
 
     function test_Constructor_SetsRolesAndDependencies() public view {
-        assertEq(address(hook.poolManager()), address(poolManager));
+        assertEq(address(hook.POOL_MANAGER()), address(poolManager));
         assertTrue(hook.hasRole(hook.DEFAULT_ADMIN_ROLE(), address(this)));
         assertTrue(hook.hasRole(hook.ADMIN_ROLE(), admin));
         assertTrue(hook.hasRole(hook.TREASURY_ROLE(), treasury));
