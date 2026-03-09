@@ -7,15 +7,12 @@ import {
 import { BlocksrideLogo } from '@/components/BlocksrideLogo'
 import { GridCanvas } from '@/components/grid/GridCanvas'
 import { useGridViewport } from '@/hooks/useGridViewport'
-import { usePublicPriceFeed } from '@/hooks/usePublicPriceFeed'
 import type { Grid, Cell, PricePoint } from '@/types/grid'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const INITIAL_PRICE = 1983.47
 const PRICE_INTERVAL = 4
 const TIMEFRAME_SEC = 60
 const GRID_WINDOWS_AHEAD = 240
-const GRID_ANCHOR = Math.round(INITIAL_PRICE / PRICE_INTERVAL) * PRICE_INTERVAL
 const BET_SLOTS = 10
 const SIM_SETTLE_MS = 10000    // how often a window settles in the demo
 const AGENT_BET_MS = 3200      // how often agents place bets
@@ -99,12 +96,13 @@ interface AgentBet {
 // ── Demo Page ─────────────────────────────────────────────────────────────────
 export const Demo = () => {
     const navigate = useNavigate()
-    const { prices: oraclePrices, currentPrice: oraclePrice } = usePublicPriceFeed('ETH-USD')
 
     // ── Price state ───────────────────────────────────────────────────────────
-    const [price, setPrice] = useState(INITIAL_PRICE)
-    const [chartPrices, setChartPrices] = useState<PricePoint[]>([{ time: Date.now(), price: INITIAL_PRICE }])
-    const priceRef = useRef(INITIAL_PRICE)
+    const [price, setPrice] = useState(0)
+    const [gridAnchor, setGridAnchor] = useState(0)
+    const [chartPrices, setChartPrices] = useState<PricePoint[]>([])
+    const priceRef = useRef(0)
+    const coinbasePriceRef = useRef(0) // latest Coinbase spot price (target for simulation)
     const [timeStr, setTimeStr] = useState('')
     const gridStartRef = useRef(Date.now() - TIMEFRAME_SEC * 6 * 1000)
     const containerRef = useRef<HTMLDivElement>(null)
@@ -162,16 +160,58 @@ export const Demo = () => {
         return () => clearInterval(i)
     }, [])
 
-    // ── Oracle price feed (same source used by the original public grid) ────
+    // ── Coinbase price feed (demo fetches directly — no backend dependency) ───
     useEffect(() => {
-        if (oraclePrice === null) return
-        priceRef.current = oraclePrice
-        setPrice(oraclePrice)
-    }, [oraclePrice])
-    useEffect(() => {
-        if (!oraclePrices.length) return
-        setChartPrices(oraclePrices.slice(-6000))
-    }, [oraclePrices])
+        const fetchSpot = async () => {
+            try {
+                const res = await fetch('https://api.coinbase.com/v2/prices/ETH-USD/spot')
+                const { data } = await res.json()
+                const p = parseFloat(data?.amount)
+                if (Number.isFinite(p) && p > 0) coinbasePriceRef.current = p
+            } catch { /* keep last known price */ }
+        }
+
+        // On mount: fetch, set initial price + anchor, seed chart history
+        fetchSpot().then(() => {
+            const p = coinbasePriceRef.current
+            if (p === 0) return
+            priceRef.current = p
+            setPrice(p)
+            setGridAnchor(Math.round(p / PRICE_INTERVAL) * PRICE_INTERVAL)
+            const now = Date.now()
+            setChartPrices(                                                                                                                 
+                Array.from({ length: 60 }, (_, i) => ({                                                                                            
+                    time: now - (60 - i) * 1000,                                                                                                 
+                    price: p + (Math.random() - 0.5) * 5,                                                                                          
+                }))                                                                                                                                
+            ) 
+        })
+
+        // Refresh Coinbase target every 10s
+        const pollId = setInterval(fetchSpot, 10_000)
+
+        // Simulate price movement every 500ms drifting toward Coinbase spot
+        const tickId = setInterval(() => {
+            const target = coinbasePriceRef.current
+            if (target === 0) return
+            setPrice(prev => {
+                const base = prev || target
+                const next = Math.max(0, base + (target - base) * 0.1 + (Math.random() - 0.5) * 2.5)
+                priceRef.current = next
+                const now = Date.now()
+                setChartPrices(prevPts => {
+                    const pts = [...prevPts, { time: now, price: next }]
+                    return pts.length > 6000 ? pts.slice(-6000) : pts
+                })
+                return next
+            })
+        }, 500)
+
+        return () => {
+            clearInterval(pollId)
+            clearInterval(tickId)
+        }
+    }, [])
 
     // ── Window settlement ─────────────────────────────────────────────────────
     useEffect(() => {
@@ -312,9 +352,9 @@ export const Demo = () => {
         timeframe_sec: TIMEFRAME_SEC,
         start_time: new Date(gridStartRef.current).toISOString(),
         end_time: new Date(gridStartRef.current + TIMEFRAME_SEC * GRID_WINDOWS_AHEAD * 1000).toISOString(),
-        anchor_price: GRID_ANCHOR,
+        anchor_price: gridAnchor,
         price_interval: PRICE_INTERVAL,
-    }), [])
+    }), [gridAnchor])
 
     const viewport = useGridViewport(
         price,
@@ -322,7 +362,7 @@ export const Demo = () => {
         containerRef,
         false,
         PRICE_INTERVAL,
-        GRID_ANCHOR,
+        gridAnchor,
         null
     )
 
@@ -600,10 +640,10 @@ export const Demo = () => {
         setSessionSec(0)
         setSessionActive(false)
         gridStartRef.current = Date.now() - TIMEFRAME_SEC * 6 * 1000
-        const resetPrice = oraclePrice ?? INITIAL_PRICE
+        const resetPrice = coinbasePriceRef.current || gridAnchor
         priceRef.current = resetPrice
         setPrice(resetPrice)
-        setChartPrices(oraclePrices.length ? oraclePrices.slice(-6000) : [{ time: Date.now(), price: resetPrice }])
+        setChartPrices(chartPrices.length ? chartPrices.slice(-6000) : [{ time: Date.now(), price: resetPrice }])
         setAgents(AGENT_DEFS.map(d => ({
             id: d.id,
             deposit: d.defaultDeposit,
