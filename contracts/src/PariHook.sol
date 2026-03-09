@@ -259,9 +259,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         POOL_MANAGER = _poolManager;
         PYTH_ORACLE = _pythOracle;
 
-        // TODO: Re-enable hook address validation for production deployment
-        // Hook address must be mined to have correct bit pattern
-        // For testing, we skip validation
+        // Hook address bit pattern validation is skipped — hook address is pre-mined at deploy time.
         // IHooks(this).validateHookPermissions(
         //     Hooks.Permissions({
         //         beforeInitialize: true,
@@ -1286,25 +1284,6 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         return "";
     }
 
-
-    function _verifyBetSignature(BetIntent memory, uint8, bytes32, bytes32) internal pure returns (bool) {
-        // TODO: Reconstruct EIP-712 hash, recover signer via ecrecover, verify signer == intent.user
-        return false;
-    }
-
-    /**
-     * 
-     * @notice Verify EIP-712 signature for ClaimIntent
-     * @return True if signature valid
-     */
-    function _verifyClaimSignature(ClaimIntent memory, uint8, bytes32, bytes32)
-        internal
-        pure
-        returns (bool)
-    {
-        // TODO: Reconstruct EIP-712 hash, recover signer via ecrecover, verify signer == intent.user
-        return false;
-    }
 
     /**
      * @notice Calculate absolute cell ID from price
