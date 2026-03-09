@@ -96,6 +96,35 @@ const CLAIM_INTENT_TYPES = {
     ],
 } as const
 
+const bigintJsonReplacer = (_key: string, value: unknown) =>
+    typeof value === 'bigint' ? value.toString() : value
+
+const signTypedDataWithProvider = async (
+    walletClient: WalletClient,
+    account: `0x${string}`,
+    typedData: Record<string, unknown>,
+) => {
+    const request = walletClient.transport.request
+    if (!request) {
+        return walletClient.signTypedData({
+            account,
+            ...(typedData as Parameters<typeof walletClient.signTypedData>[0]),
+        })
+    }
+
+    const payload = JSON.stringify(typedData, bigintJsonReplacer)
+    const signature = await request({
+        method: 'eth_signTypedData_v4',
+        params: [account, payload],
+    })
+
+    if (typeof signature !== 'string') {
+        throw new Error('Wallet returned invalid typed-data signature')
+    }
+
+    return signature as `0x${string}`
+}
+
 export const betService = {
     normalizePoolId: (pool: Pool): `0x${string}` => {
         const candidate = pool.poolId as `0x${string}` | undefined
@@ -192,8 +221,7 @@ export const betService = {
         const permitAmount = maxUint256
         const permitDeadline = BigInt(Math.floor(Date.now() / 1000) + 300)
 
-        const signature = await walletClient.signTypedData({
-            account: userAddress,
+        const signature = await signTypedDataWithProvider(walletClient, userAddress, {
             domain: {
                 name: 'USD Coin',
                 version: '2',
@@ -201,6 +229,12 @@ export const betService = {
                 verifyingContract: tokenAddress,
             },
             types: {
+                EIP712Domain: [
+                    { name: 'name', type: 'string' },
+                    { name: 'version', type: 'string' },
+                    { name: 'chainId', type: 'uint256' },
+                    { name: 'verifyingContract', type: 'address' },
+                ],
                 Permit: [
                     { name: 'owner', type: 'address' },
                     { name: 'spender', type: 'address' },
@@ -263,15 +297,22 @@ export const betService = {
             )
             : null
 
-        const signature = await walletClient.signTypedData({
-            account: userAddress,
+        const signature = await signTypedDataWithProvider(walletClient, userAddress, {
             domain: {
                 name:              'PariHook',
                 version:           '1',
                 chainId,
                 verifyingContract: pool.poolKey.hooks as `0x${string}`,
             },
-            types:       BET_INTENT_TYPES,
+            types: {
+                EIP712Domain: [
+                    { name: 'name', type: 'string' },
+                    { name: 'version', type: 'string' },
+                    { name: 'chainId', type: 'uint256' },
+                    { name: 'verifyingContract', type: 'address' },
+                ],
+                ...BET_INTENT_TYPES,
+            },
             primaryType: 'BetIntent',
             message: {
                 user:     userAddress,
@@ -330,15 +371,22 @@ export const betService = {
 
         const normalizedPoolId = betService.normalizePoolId(pool)
 
-        const signature = await walletClient.signTypedData({
-            account: userAddress,
+        const signature = await signTypedDataWithProvider(walletClient, userAddress, {
             domain: {
                 name:              'PariHook',
                 version:           '1',
                 chainId,
                 verifyingContract: pool.poolKey.hooks as `0x${string}`,
             },
-            types:       CLAIM_INTENT_TYPES,
+            types: {
+                EIP712Domain: [
+                    { name: 'name', type: 'string' },
+                    { name: 'version', type: 'string' },
+                    { name: 'chainId', type: 'uint256' },
+                    { name: 'verifyingContract', type: 'address' },
+                ],
+                ...CLAIM_INTENT_TYPES,
+            },
             primaryType: 'ClaimIntent',
             message: {
                 user:      userAddress,

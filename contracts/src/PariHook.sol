@@ -1293,6 +1293,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
     }
 
     /**
+     * 
      * @notice Verify EIP-712 signature for ClaimIntent
      * @return True if signature valid
      */
