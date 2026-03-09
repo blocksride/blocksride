@@ -32,7 +32,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         uint256 emitted;
     }
 
-    IERC20 public RIDE_TOKEN;
+    IERC20 public rideToken;
     uint256 public periodCount;
     bytes32 public airdropMerkleRoot;
 
@@ -57,9 +57,9 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     }
 
     function setRideToken(address _rideToken) external onlyRole(ADMIN_ROLE) {
-        if (address(RIDE_TOKEN) != address(0)) revert RideTokenAlreadySet();
+        if (address(rideToken) != address(0)) revert RideTokenAlreadySet();
         if (_rideToken == address(0)) revert ZeroAddress();
-        RIDE_TOKEN = IERC20(_rideToken);
+        rideToken = IERC20(_rideToken);
         emit RideTokenSet(_rideToken);
     }
 
@@ -99,7 +99,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
     }
 
     function claimBetRewards(PoolId poolId, uint256[] calldata windowIds) external nonReentrant {
-        if (address(RIDE_TOKEN) == address(0)) revert RideTokenNotSet();
+        if (address(rideToken) == address(0)) revert RideTokenNotSet();
         bytes32 rawPoolId = PoolId.unwrap(poolId);
         uint256 totalClaimed;
 
@@ -112,12 +112,12 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         }
 
         if (totalClaimed == 0) revert NoRewards();
-        require(RIDE_TOKEN.transfer(msg.sender, totalClaimed), "RIDE transfer failed");
+        require(rideToken.transfer(msg.sender, totalClaimed), "RIDE transfer failed");
         emit BetRewardsClaimed(msg.sender, rawPoolId, windowIds, totalClaimed);
     }
 
     function claimAirdrop(bytes32[] calldata merkleProof, uint256 amount) external nonReentrant {
-        if (address(RIDE_TOKEN) == address(0)) revert RideTokenNotSet();
+        if (address(rideToken) == address(0)) revert RideTokenNotSet();
         if (amount == 0) revert ZeroAmount();
         if (hasClaimedAirdrop[msg.sender]) revert AirdropAlreadyClaimed();
 
@@ -126,7 +126,7 @@ contract RideDistributor is AccessControl, ReentrancyGuard {
         if (!valid) revert InvalidMerkleProof();
 
         hasClaimedAirdrop[msg.sender] = true;
-        require(RIDE_TOKEN.transfer(msg.sender, amount), "RIDE transfer failed");
+        require(rideToken.transfer(msg.sender, amount), "RIDE transfer failed");
         emit AirdropClaimed(msg.sender, amount);
     }
 }
