@@ -23,10 +23,9 @@ contract RideDistributorTest is Test {
         ride = new RIDE(coldAdmin, admin, treasury, relayer, address(distributor));
         staking = new RideStaking(address(ride), coldAdmin, admin, treasury, relayer);
 
-        vm.startPrank(admin);
+        // Wire RIDE token into distributor (breaks circular deploy dependency)
+        vm.prank(admin);
         distributor.setRideToken(address(ride));
-        ride.wireSystemContracts(address(distributor), address(staking));
-        vm.stopPrank();
     }
 
     function test_AllocateAndClaimBetRewards() public {

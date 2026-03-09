@@ -8,6 +8,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 contract PariHookTest is Test {
@@ -85,7 +86,7 @@ contract PariHookTest is Test {
     }
 
     function test_Constructor_SetsRolesAndDependencies() public view {
-        assertEq(address(hook.poolManager()), address(poolManager));
+        assertEq(address(hook.POOL_MANAGER()), address(poolManager));
         assertTrue(hook.hasRole(hook.DEFAULT_ADMIN_ROLE(), address(this)));
         assertTrue(hook.hasRole(hook.ADMIN_ROLE(), admin));
         assertTrue(hook.hasRole(hook.TREASURY_ROLE(), treasury));
@@ -172,8 +173,7 @@ contract PariHookTest is Test {
             uint256 frozen,
             uint256 maxStake,
             uint256 fee,
-            uint256 epoch,
-            ,
+            uint256 epoch,,
             uint256 threshold
         ) = hook.gridConfigs(testPoolId);
 

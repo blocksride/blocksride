@@ -1,4 +1,5 @@
-import { Position } from '../../types/grid'
+import { Position, Cell } from '../../types/grid'
+import { normalizeSlotKey } from '../../lib/gridSlots'
 import { Activity, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 import { useContest } from '../../contexts/ContestContext'
 
@@ -6,6 +7,7 @@ interface PositionSummaryProps {
     selectedCells: string[]
     betResults: Record<string, string>
     positions: Position[]
+    cells?: Cell[]
 }
 
 export const PositionSummary: React.FC<PositionSummaryProps> = ({
@@ -13,6 +15,7 @@ export const PositionSummary: React.FC<PositionSummaryProps> = ({
     // but we now show all active positions instead of just selected cells
     betResults,
     positions,
+    cells = [],
 }) => {
     const { isPracticeMode } = useContest()
     // Show ALL active/pending positions, not just selected cells
@@ -23,7 +26,7 @@ export const PositionSummary: React.FC<PositionSummaryProps> = ({
     let totalProfit = 0
 
     activePositions.forEach((p) => {
-        const result = betResults[p.cell_id]
+        const result = betResults[normalizeSlotKey(p.cell_id, cells)]
         if (result === 'won' && p.payout) {
             // Payout now includes stake for both practice and contest modes
             // So profit = payout - stake

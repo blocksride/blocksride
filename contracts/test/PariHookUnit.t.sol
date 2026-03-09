@@ -2,7 +2,6 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
 
 import {PariHook} from "../src/PariHook.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";

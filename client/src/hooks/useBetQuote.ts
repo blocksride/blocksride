@@ -1,90 +1,51 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { api } from '../services/apiService'
+import { useMemo } from 'react'
 import type { BetQuote } from '../types/grid'
-import { useAuth } from '../contexts/AuthContext'
+
+interface UseBetQuoteArgs {
+    cellKey: string | null
+    stake: number
+    windowTotals: Record<number, number>
+    cellStakes: Record<string, number>
+}
 
 /**
- * Hook to fetch a bet quote for share-based pricing.
- * Debounces requests to avoid excessive API calls when stake changes rapidly.
+ * Builds a local parimutuel preview from live on-chain pool state.
+ * The returned values are estimates only: later bets can still change the pool.
  */
-export function useBetQuote(
-    cellId: string | null,
-    assetId: string | null,
-    stake: number,
-    debounceMs: number = 300
-) {
-    const [quote, setQuote] = useState<BetQuote | null>(null)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    const { authenticated } = useAuth()
+export function useBetQuote({ cellKey, stake, windowTotals, cellStakes }: UseBetQuoteArgs) {
+    const quote = useMemo<BetQuote | null>(() => {
+        if (!cellKey || stake <= 0) return null
 
-    const isMountedRef = useRef(true)
-    const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+        const [windowIdRaw] = cellKey.split('_')
+        const windowId = Number(windowIdRaw)
+        if (!Number.isFinite(windowId)) return null
 
-    const fetchQuote = useCallback(async () => {
-        if (!cellId || !assetId || stake <= 0 || !authenticated) {
-            setQuote(null)
-            return
+        const currentWindowTotal = windowTotals[windowId] ?? 0
+        const currentCellStake = cellStakes[cellKey] ?? 0
+
+        const nextWindowTotal = currentWindowTotal + stake
+        const nextCellStake = currentCellStake + stake
+        if (nextCellStake <= 0) return null
+
+        const feeAdjustedPool = nextWindowTotal * 0.98
+        const currentMultiplier = feeAdjustedPool / nextCellStake
+        const estimatedPayout = stake * currentMultiplier
+
+        return {
+            cell_id: cellKey,
+            stake,
+            current_multiplier: currentMultiplier,
+            estimated_payout: estimatedPayout,
+            estimated_net_profit: estimatedPayout - stake,
+            total_pool: currentWindowTotal,
+            cell_stake: currentCellStake,
         }
-
-        try {
-            setLoading(true)
-            setError(null)
-
-            const { data } = await api.getBetQuote(cellId, assetId, stake)
-
-            if (!isMountedRef.current) return
-
-            setQuote(data)
-        } catch (err) {
-            if (!isMountedRef.current) return
-            console.error('[useBetQuote] Failed to fetch quote:', err)
-            setError('Failed to fetch quote')
-            setQuote(null)
-        } finally {
-            if (isMountedRef.current) {
-                setLoading(false)
-            }
-        }
-    }, [cellId, assetId, stake, authenticated])
-
-    // Reset quote when cell changes
-    useEffect(() => {
-        setQuote(null)
-        setError(null)
-    }, [cellId])
-
-    // Debounced fetch when inputs change
-    useEffect(() => {
-        isMountedRef.current = true
-
-        if (!cellId || !assetId || stake <= 0 || !authenticated) {
-            setQuote(null)
-            return
-        }
-
-        // Clear any pending debounce
-        if (debounceTimeoutRef.current) {
-            clearTimeout(debounceTimeoutRef.current)
-        }
-
-        // Debounce the API call
-        debounceTimeoutRef.current = setTimeout(() => {
-            fetchQuote()
-        }, debounceMs)
-
-        return () => {
-            isMountedRef.current = false
-            if (debounceTimeoutRef.current) {
-                clearTimeout(debounceTimeoutRef.current)
-            }
-        }
-    }, [cellId, assetId, stake, authenticated, debounceMs, fetchQuote])
+    }, [cellKey, stake, windowTotals, cellStakes])
 
     return {
         quote,
-        loading,
-        error,
-        refresh: fetchQuote,
+        loading: false,
+        error: null,
+        refresh: () => undefined,
     }
 }

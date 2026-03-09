@@ -18,8 +18,6 @@ export function NetworkStatus({
   const [connectionState, setConnectionState] = useState<ConnectionState>(
     navigator.onLine ? 'online' : 'offline'
   )
-  const [wsConnected, setWsConnected] = useState(true)
-
   // Monitor browser online/offline status
   useEffect(() => {
     const handleOnline = () => {
@@ -41,23 +39,6 @@ export function NetworkStatus({
     }
   }, [])
 
-  // Listen for WebSocket status events (dispatched from useGridSocket, etc.)
-  useEffect(() => {
-    const handleWsStatus = (event: CustomEvent<{ connected: boolean }>) => {
-      setWsConnected(event.detail.connected)
-      if (!event.detail.connected && connectionState === 'online') {
-        setConnectionState('reconnecting')
-      } else if (event.detail.connected && connectionState === 'reconnecting') {
-        setConnectionState('online')
-      }
-    }
-
-    window.addEventListener('ws-status' as keyof WindowEventMap, handleWsStatus as EventListener)
-
-    return () => {
-      window.removeEventListener('ws-status' as keyof WindowEventMap, handleWsStatus as EventListener)
-    }
-  }, [connectionState])
 
   const getStatusConfig = () => {
     switch (connectionState) {
@@ -95,7 +76,7 @@ export function NetworkStatus({
   const Icon = config.icon
 
   // Don't show anything when online and connected (unless explicitly showing)
-  if (connectionState === 'online' && wsConnected && !showLabel) {
+  if (connectionState === 'online' && !showLabel) {
     return null
   }
 
@@ -196,14 +177,5 @@ export function useOnlineStatus() {
   return isOnline
 }
 
-/**
- * Helper to dispatch WebSocket status events
- * Call this from your WebSocket hooks when connection state changes
- */
-export function dispatchWsStatus(connected: boolean) {
-  window.dispatchEvent(
-    new CustomEvent('ws-status', { detail: { connected } })
-  )
-}
 
 export default NetworkStatus

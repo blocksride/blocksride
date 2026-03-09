@@ -1,5 +1,6 @@
 import React from 'react'
 import { Cell, Position } from '../../types/grid'
+import { normalizeSlotKey } from '../../lib/gridSlots'
 import { History, TrendingUp, TrendingDown } from 'lucide-react'
 
 interface BetHistoryProps {
@@ -35,10 +36,10 @@ export const BetHistory: React.FC<BetHistoryProps> = ({
 
             <div className="flex-1 flex flex-col">
                 {completedBets.map((cellId) => {
-                    const cell = cells.find((c) => c.cell_id === cellId)
+                    const cell = cells.find((c) => normalizeSlotKey(c.cell_id, cells) === cellId || c.cell_id === cellId)
                     if (!cell) return null
 
-                    const position = positions.find((p) => p.cell_id === cellId)
+                    const position = positions.find((p) => normalizeSlotKey(p.cell_id, cells) === cellId || p.cell_id === cellId)
                     if (!position) return null
 
                     const result = betResults[cellId]

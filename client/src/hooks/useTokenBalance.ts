@@ -1,6 +1,7 @@
 import { useReadContracts } from 'wagmi'
 import { useWallets } from '@privy-io/react-auth'
 import { formatUnits } from 'viem'
+import { useAuth } from '@/contexts/AuthContext'
 
 const erc20Abi = [
     {
@@ -20,13 +21,12 @@ const erc20Abi = [
 ] as const
 
 export function useTokenBalance() {
-    // Use Privy's wallet instead of wagmi's useAccount
+    // Prefer the authenticated wallet from AuthContext, then fall back to the embedded Privy wallet.
     const { wallets } = useWallets()
-    const embeddedWallet = wallets.find((w) =>
-        (w.walletClientType || '').toLowerCase().includes('privy'),
-    )
+    const { walletAddress } = useAuth()
+    const embeddedWallet = wallets.find(w => w.walletClientType === 'privy')
     const activeWallet = embeddedWallet || wallets[0]
-    const address = activeWallet?.address as `0x${string}` | undefined
+    const address = (walletAddress || activeWallet?.address) as `0x${string}` | undefined
     const isConnected = !!address
 
     // USDC on Base Mainnet
@@ -48,7 +48,7 @@ export function useTokenBalance() {
         ],
         query: {
             enabled: !!address && isConnected,
-            refetchInterval: 30000, // Poll every 30s for auto-deposit detection (reduced from 5s)
+            refetchInterval: 30000,
         },
     })
 

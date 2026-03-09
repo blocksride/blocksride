@@ -89,8 +89,8 @@ contract DeployPariHook is Script {
 
         // Display contract state
         console.log("Contract State:");
-        console.log("  PoolManager:", address(pariHook.poolManager()));
-        console.log("  Pyth Oracle:", address(pariHook.pythOracle()));
+        console.log("  PoolManager:", address(pariHook.POOL_MANAGER()));
+        console.log("  Pyth Oracle:", address(pariHook.PYTH_ORACLE()));
         console.log("  DOMAIN_SEPARATOR:", vm.toString(pariHook.DOMAIN_SEPARATOR()));
         console.log("  Paused:", pariHook.paused());
         console.log("");

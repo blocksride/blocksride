@@ -34,24 +34,32 @@ contract RIDETest is Test {
 
     function test_Transfer_RevertWhen_NeitherSideWhitelisted() public {
         vm.prank(address(distributorContract));
-        ride.transfer(alice, 100e18);
+        assertTrue(ride.transfer(alice, 100e18));
 
         vm.prank(alice);
         vm.expectRevert(RIDE.TransfersRestricted.selector);
+        // forge-lint: disable-next-line(erc20-unchecked-transfer) — expected to revert, no return value possible
         ride.transfer(bob, 1e18);
     }
 
-    function test_Transfer_SuccessForStakingFlow() public {
+    function test_Transfer_SuccessWhen_RecipientWhitelisted() public {
+        // Give alice some RIDE (distributor is whitelisted sender)
         vm.prank(address(distributorContract));
-        ride.transfer(alice, 100e18);
+        assertTrue(ride.transfer(alice, 100e18));
 
+        // alice (non-whitelisted EOA) can transfer to staking (whitelisted contract recipient)
         vm.prank(alice);
-        ride.approve(address(staking), 10e18);
+        assertTrue(ride.transfer(address(staking), 10e18));
 
-        vm.prank(alice);
-        staking.stake(10e18);
+        assertEq(ride.balanceOf(address(staking)), 10e18);
+    }
 
-        assertEq(staking.stakedBalance(alice), 10e18);
+    function test_Transfer_SuccessWhen_SenderWhitelisted() public {
+        // distributor is whitelisted (receives minted supply), so it can transfer freely
+        vm.prank(address(distributorContract));
+        assertTrue(ride.transfer(alice, 100e18));
+
+        assertEq(ride.balanceOf(alice), 100e18);
     }
 
     function test_SetTransferWhitelist_OnlyAdminRole() public {

@@ -35,7 +35,7 @@ export function ContestHub() {
         refreshContests
     } = useContest()
 
-    const { refetch: refetchTokenBalance, formatted: onchainUsdcBalance } = useTokenBalance()
+    const { formatted: walletBalance } = useTokenBalance()
 
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
     const [leaderboardLoading, setLeaderboardLoading] = useState(false)
@@ -64,8 +64,7 @@ export function ContestHub() {
     }, [activeContest])
 
     const handleJoinContest = async (contest: Contest) => {
-        await refetchTokenBalance()
-        const hasBalance = Number(onchainUsdcBalance ?? 0) > 0
+        const hasBalance = Number(walletBalance || '0') > 0
 
         if (hasBalance) {
             // Skip requirements modal and enter contest directly
@@ -197,9 +196,9 @@ export function ContestHub() {
                             />
                         </div>
 
-                        {/* Upcoming Contests */}
+                        {/* Upcoming Rides */}
                         <TerminalPanel
-                            title="SCHEDULED CONTESTS"
+                            title="SCHEDULED RIDES"
                             icon={<Clock className="w-4 h-4" />}
                             badge={`${upcomingContests.length} QUEUED`}
                             headerAction={
@@ -245,7 +244,7 @@ export function ContestHub() {
                             {!activeContest ? (
                                 <div className="p-6 text-center text-zinc-600">
                                     <Activity className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                                    <p className="text-sm">No active contest</p>
+                                    <p className="text-sm">No active ride</p>
                                 </div>
                             ) : leaderboardLoading ? (
                                 <div className="p-4 space-y-2">

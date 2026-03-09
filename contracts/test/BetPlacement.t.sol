@@ -8,6 +8,7 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
@@ -384,7 +385,7 @@ contract BetPlacementTest is Test {
         assertEq(nextWindow, currentWindow + 1);
     }
 
-    function test_GetBettableWindows() public {
+    function test_GetBettableWindows() public view {
         (uint256 start, uint256 end) = hook.getBettableWindows(testKey);
 
         uint256 currentWindow = hook.getCurrentWindow(testKey);
@@ -408,7 +409,7 @@ contract BetPlacementTest is Test {
         assertEq(endAfter, endBefore + 1);
     }
 
-    function test_GetUserStake_BeforeBet() public {
+    function test_GetUserStake_BeforeBet() public view {
         uint256 cellId = 1500;
         (uint256 bettableStart,) = hook.getBettableWindows(testKey);
 
@@ -417,7 +418,7 @@ contract BetPlacementTest is Test {
         assertEq(stake, 0);
     }
 
-    function test_GetCellStake_BeforeBet() public {
+    function test_GetCellStake_BeforeBet() public view {
         uint256 cellId = 1500;
         (uint256 bettableStart,) = hook.getBettableWindows(testKey);
 
@@ -526,8 +527,20 @@ contract MockERC20 is IERC20 {
 }
 
 /**
- * @notice Mock PoolManager for testing
+ * @notice Mock PoolManager for testing — implements unlock/callback/take pattern
  */
 contract MockPoolManager {
-// Minimal implementation for testing
+    function unlock(bytes calldata data) external returns (bytes memory) {
+        return IUnlockCallback(msg.sender).unlockCallback(data);
+    }
+
+    function sync(Currency) external {}
+
+    function settle() external payable returns (uint256) {
+        return 0;
+    }
+
+    function take(Currency currency, address to, uint256 amount) external {
+        require(IERC20(Currency.unwrap(currency)).transfer(to, amount), "MockPM: take failed");
+    }
 }

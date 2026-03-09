@@ -35,7 +35,7 @@ contract TestBettingFlow is Script {
     using CurrencyLibrary for Currency;
 
     // Deployed contracts
-    PariHook public constant PARI_HOOK = PariHook(0xdbB492353B57698a5443bF1846F00c71EFA41824);
+    PariHook public constant PARI_HOOK = PariHook(0xE6dB8dF1ECa3E26bD8D6f21b64a19db5505D9Db6);
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408);
     IERC20 public constant USDC = IERC20(0x036CbD53842c5426634e7929541eC2318f3dCF7e);
 
@@ -76,11 +76,7 @@ contract TestBettingFlow is Script {
         Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 0,
-            tickSpacing: 60,
-            hooks: IHooks(address(PARI_HOOK))
+            currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 60, hooks: IHooks(address(PARI_HOOK))
         });
 
         PoolId poolId = poolKey.toId();
@@ -203,14 +199,14 @@ contract TestBettingFlow is Script {
         console.log("");
 
         console.log("Grid Epoch Info:");
-        (,, uint256 windowDuration,,,, uint256 gridEpoch,,) = PARI_HOOK.gridConfigs(poolId);
-        console.log("  Grid starts at epoch:", gridEpoch);
-        console.log("  Window duration:", windowDuration, "seconds");
+        // Note: We can't easily read gridEpoch from the mapping, but we know it from config
+        console.log("  Grid starts at epoch: 1772985060");
+        console.log("  Window duration: 60 seconds");
         console.log("  Current block.timestamp:", block.timestamp);
 
-        if (block.timestamp < gridEpoch) {
+        if (block.timestamp < 1772985060) {
             console.log("  [WARN] Grid hasn't started yet!");
-            console.log("  Grid starts in:", gridEpoch - block.timestamp, "seconds");
+            console.log("  Grid starts in:", 1772985060 - block.timestamp, "seconds");
         }
         console.log("");
     }

@@ -1,14 +1,46 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPublicClient, http, parseAbiItem } from 'viem'
+import { useReadContracts } from 'wagmi'
 import { api } from '../services/apiService'
 import type { Grid, Cell, Position } from '../types/grid'
+import { normalizeSlotKey, getWindowEndMs } from '../lib/gridSlots'
 import { useAuth } from '../contexts/AuthContext'
 import { betService } from '../services/betService'
+import type { Pool } from '../services/betService'
 import { activeChain } from '@/providers/Web3Provider'
 
 const BET_PLACED_EVENT = parseAbiItem(
     'event BetPlaced(bytes32 indexed poolId, uint256 indexed windowId, uint256 indexed cellId, address user, uint256 amount)',
 )
+
+const GET_WINDOW_ABI = [
+    {
+        type: 'function',
+        name: 'getWindow',
+        stateMutability: 'view',
+        inputs: [
+            {
+                name: 'poolKey',
+                type: 'tuple',
+                components: [
+                    { name: 'currency0', type: 'address' },
+                    { name: 'currency1', type: 'address' },
+                    { name: 'fee', type: 'uint24' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'hooks', type: 'address' },
+                ],
+            },
+            { name: 'windowId', type: 'uint256' },
+        ],
+        outputs: [
+            { name: 'totalPool', type: 'uint256' },
+            { name: 'settled', type: 'bool' },
+            { name: 'voided', type: 'bool' },
+            { name: 'winningCell', type: 'uint256' },
+            { name: 'redemptionRate', type: 'uint256' },
+        ],
+    },
+] as const
 
 const estimateFromBlock = (latestBlock: bigint, grid: Grid | null) => {
     if (!grid) {
@@ -35,6 +67,7 @@ export function useGridPositions(
     >({})
     const [selectedCells, setSelectedCells] = useState<string[]>([])
     const [totalActiveStake, setTotalActiveStake] = useState(0)
+    const [activePool, setActivePool] = useState<Pool | null>(null)
     const { authenticated, walletAddress } = useAuth()
 
     // Use ref to always have latest cells without triggering dependency
@@ -71,6 +104,8 @@ export function useGridPositions(
                     const pools = await betService.getPools()
                     const pool = pools.find(p => p.assetId === selectedAsset)
                     if (!pool) return
+
+                    if (isMounted) setActivePool(pool)
 
                     const publicClient = createPublicClient({
                         chain: activeChain,
@@ -125,27 +160,28 @@ export function useGridPositions(
                 const placedCellIds: string[] = []
 
                 data.forEach((p) => {
-                    placedCellIds.push(p.cell_id)
+                    const slotKey = normalizeSlotKey(p.cell_id, currentCells)
+                    placedCellIds.push(slotKey)
 
                     const cell = currentCells.find(c => c.cell_id === p.cell_id)
 
                     if (cell && cell.result) {
 
-                        results[p.cell_id] = cell.result === 'WIN' ? 'won' : 'lost'
+                        results[slotKey] = cell.result === 'WIN' ? 'won' : 'lost'
                     } else if (p.result) {
 
-                        results[p.cell_id] = p.result === 'WIN' ? 'won' : 'lost'
+                        results[slotKey] = p.result === 'WIN' ? 'won' : 'lost'
                     } else if (p.state === 'RESOLVED') {
 
 
 
                         if (p.payout && p.payout > 0) {
-                            results[p.cell_id] = 'won'
+                            results[slotKey] = 'won'
                         } else {
-                            results[p.cell_id] = 'lost'
+                            results[slotKey] = 'lost'
                         }
                     } else {
-                        results[p.cell_id] = 'pending'
+                        results[slotKey] = 'pending'
                     }
                 })
 
@@ -229,7 +265,8 @@ export function useGridPositions(
                 if (currentStatus === 'won' || currentStatus === 'lost')
                     return
 
-                const cell = cells.find((c) => c.cell_id === cellId)
+                const canonicalCellId = normalizeSlotKey(cellId, cells)
+                const cell = cells.find((c) => normalizeSlotKey(c.cell_id, cells) === canonicalCellId || c.cell_id === cellId)
                 if (!cell) return
 
                 const tStart = new Date(cell.t_start).getTime()
@@ -248,9 +285,9 @@ export function useGridPositions(
                         currentPrice <= cell.p_high
                     ) {
                         // Price touched the cell - mark as touched and winning
-                        touchedCellsRef.current.add(cellId)
+                        touchedCellsRef.current.add(canonicalCellId)
                         newStatus = 'winning'
-                    } else if (touchedCellsRef.current.has(cellId)) {
+                    } else if (touchedCellsRef.current.has(canonicalCellId)) {
                         // Price exited but cell was touched - STAY winning (sticky)
                         newStatus = 'winning'
                     } else {
@@ -261,7 +298,7 @@ export function useGridPositions(
 
                 // After window ends - resolve instantly based on whether cell was touched
                 if (now > tEnd) {
-                    if (touchedCellsRef.current.has(cellId)) {
+                    if (touchedCellsRef.current.has(canonicalCellId)) {
                         newStatus = 'won'
                     } else {
                         newStatus = 'lost'
@@ -270,7 +307,7 @@ export function useGridPositions(
 
                 // Only add to updates if status actually changed
                 if (newStatus !== null && newStatus !== currentStatus) {
-                    updates[cellId] = newStatus
+                    updates[canonicalCellId] = newStatus
                 }
             })
 
@@ -281,6 +318,84 @@ export function useGridPositions(
         }, 500)
         return () => clearInterval(interval)
     }, [selectedCells, cells, grid, currentPrice, betResults])
+
+    // Derive unique windowIds whose close time has passed (needs on-chain settlement check)
+    const windowIdsToCheck = useMemo(() => {
+        if (!activePool || !grid || isPracticeMode || positions.length === 0) return []
+        const now = Date.now()
+        const seen = new Set<number>()
+        const result: number[] = []
+        for (const p of positions) {
+            const underscoreIdx = p.cell_id.indexOf('_')
+            if (underscoreIdx < 0) continue
+            const windowId = parseInt(p.cell_id.slice(0, underscoreIdx))
+            if (isNaN(windowId)) continue
+            const windowEndMs = getWindowEndMs(windowId, activePool, grid)
+            if (now > windowEndMs && !seen.has(windowId)) {
+                seen.add(windowId)
+                result.push(windowId)
+            }
+        }
+        return result
+    }, [positions, activePool, grid, isPracticeMode])
+
+    // Build multicall for getWindow reads
+    const getWindowContracts = useMemo(() => {
+        if (!activePool || windowIdsToCheck.length === 0) return []
+        const pk = {
+            currency0: activePool.poolKey.currency0 as `0x${string}`,
+            currency1: activePool.poolKey.currency1 as `0x${string}`,
+            fee: activePool.poolKey.fee,
+            tickSpacing: activePool.poolKey.tickSpacing,
+            hooks: activePool.poolKey.hooks as `0x${string}`,
+        }
+        return windowIdsToCheck.map(windowId => ({
+            address: activePool.poolKey.hooks as `0x${string}`,
+            abi: GET_WINDOW_ABI,
+            functionName: 'getWindow' as const,
+            args: [pk, BigInt(windowId)] as const,
+        }))
+    }, [activePool, windowIdsToCheck])
+
+    type WindowResult = { status: 'success' | 'failure'; result?: unknown }
+    const { data: rawWindowData } = useReadContracts({
+        contracts: getWindowContracts,
+        query: {
+            enabled: getWindowContracts.length > 0,
+            refetchInterval: 5_000,
+        },
+    })
+    const windowData = rawWindowData as ReadonlyArray<WindowResult> | undefined
+
+    // Override betResults with on-chain settlement outcomes
+    useEffect(() => {
+        if (!windowData || windowIdsToCheck.length === 0 || positions.length === 0) return
+
+        const updates: Record<string, 'won' | 'lost'> = {}
+
+        windowData.forEach((wr, idx) => {
+            if (wr.status !== 'success' || wr.result == null) return
+            const r = wr.result as { settled: boolean; voided: boolean; winningCell: bigint }
+            if (!r.settled && !r.voided) return
+
+            const windowId = windowIdsToCheck[idx]
+            for (const p of positions) {
+                const underscoreIdx = p.cell_id.indexOf('_')
+                if (underscoreIdx < 0) continue
+                if (parseInt(p.cell_id.slice(0, underscoreIdx)) !== windowId) continue
+
+                const userCellId = parseInt(p.cell_id.slice(underscoreIdx + 1))
+                const slotKey = normalizeSlotKey(p.cell_id, cellsRef.current)
+                updates[slotKey] = (r.settled && !r.voided && Number(r.winningCell) === userCellId)
+                    ? 'won'
+                    : 'lost'
+            }
+        })
+
+        if (Object.keys(updates).length > 0) {
+            setBetResults(prev => ({ ...prev, ...updates }))
+        }
+    }, [windowData, windowIdsToCheck, positions])
 
     const addOptimisticCell = useCallback((cellId: string) => {
         setSelectedCells(prev => {

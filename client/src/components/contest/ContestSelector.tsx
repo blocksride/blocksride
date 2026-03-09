@@ -52,7 +52,7 @@ export function ContestSelector() {
                         </div>
                     </div>
 
-                    {/* Contests Section */}
+                    {/* Rides Section */}
                     {allContests.length === 0 ? (
                         <div className="p-6 rounded-xl border border-border bg-card">
                             <div className="flex items-center gap-3 mb-4">
@@ -60,12 +60,12 @@ export function ContestSelector() {
                                     <Trophy className="w-5 h-5 text-muted-foreground" />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-foreground">Contests</h2>
-                                    <p className="text-sm text-muted-foreground">No contests available</p>
+                                    <h2 className="text-xl font-bold text-foreground">Rides</h2>
+                                    <p className="text-sm text-muted-foreground">No rides available</p>
                                 </div>
                             </div>
                             <p className="text-sm text-muted-foreground mb-4">
-                                There are no active or upcoming contests at the moment. Check back later!
+                                There are no active or upcoming rides at the moment. Check back later!
                             </p>
                             <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); refreshContests(); }}>
                                 Refresh
@@ -75,7 +75,7 @@ export function ContestSelector() {
                         <div className="space-y-4">
                             <h2 className="text-lg font-semibold flex items-center gap-2">
                                 <Trophy className="w-5 h-5 text-primary" />
-                                Available Contests
+                                Available Rides
                             </h2>
                             {allContests.map((contest) => (
                                 <ContestCard
@@ -159,7 +159,7 @@ function ContestCard({ contest, onSelect }: ContestCardProps) {
             <div className={`flex items-center text-sm font-medium group-hover:translate-x-1 transition-transform ${
                 isActive ? 'text-green-600 dark:text-green-400' : 'text-primary'
             }`}>
-                {isActive ? 'Join Contest' : 'View Contest'} <ArrowRight className="w-4 h-4 ml-1" />
+                {isActive ? 'Join Ride' : 'View Ride'} <ArrowRight className="w-4 h-4 ml-1" />
             </div>
         </div>
     )

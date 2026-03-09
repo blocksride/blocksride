@@ -2,16 +2,17 @@
 pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
-import {console} from "forge-std/console.sol";
 
 import {PariHook} from "../src/PariHook.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "@uniswap/v4-core/src/interfaces/callback/IUnlockCallback.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 /**
  * @title SettlementTest
@@ -159,9 +160,11 @@ contract SettlementTest is Test {
         int32 exponentAdjustment = -pythExpo - 6;
 
         if (exponentAdjustment >= 0) {
-            return int64(uint64(usdcPrice * (10 ** uint32(exponentAdjustment))));
+            uint256 adj = SafeCast.toUint256(int256(exponentAdjustment));
+            return SafeCast.toInt64(SafeCast.toInt256(usdcPrice * (10 ** adj)));
         } else {
-            return int64(uint64(usdcPrice / (10 ** uint32(-exponentAdjustment))));
+            uint256 adj = SafeCast.toUint256(int256(-exponentAdjustment));
+            return SafeCast.toInt64(SafeCast.toInt256(usdcPrice / (10 ** adj)));
         }
     }
 
@@ -191,7 +194,7 @@ contract SettlementTest is Test {
 
         // Setup mock Pyth price: $3001.50 → lands in cell 1500
         uint256 closingPrice = 3_001_500_000; // $3001.50 in USDC 6-decimal
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, SafeCast.toUint64(windowEnd));
 
         // Settle the window
         vm.expectEmit(true, true, true, true);
@@ -234,7 +237,7 @@ contract SettlementTest is Test {
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(betPrice, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(betPrice, -8), -8, SafeCast.toUint64(windowEnd));
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
@@ -266,7 +269,7 @@ contract SettlementTest is Test {
 
         // Price lands on cell 1502 (no stakes)
         uint256 closingPrice = 3_004_000_000; // cell 1502 in USDC 6-decimal
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, SafeCast.toUint64(windowEnd));
 
         // Expect rollover event
         vm.expectEmit(true, true, true, true);
@@ -298,7 +301,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         uint256 keeperBalanceBefore = keeper.balance;
 
@@ -336,7 +341,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         uint256 keeperBalanceBefore = keeper.balance;
 
@@ -361,14 +368,18 @@ contract SettlementTest is Test {
 
         uint256 firstWindowEnd = GRID_EPOCH + ((firstWindowId + 1) * WINDOW_DURATION);
         vm.warp(firstWindowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, uint64(firstWindowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(firstWindowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, firstWindowId, hex"01");
 
         uint256 secondWindowEnd = GRID_EPOCH + ((secondWindowId + 1) * WINDOW_DURATION);
         vm.warp(secondWindowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, uint64(secondWindowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(secondWindowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, secondWindowId, hex"01");
@@ -424,7 +435,9 @@ contract SettlementTest is Test {
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.expectEmit(true, true, false, true);
         emit WindowVoided(poolId, windowId, 500_000);
@@ -463,7 +476,9 @@ contract SettlementTest is Test {
         // Settle window first
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
@@ -492,10 +507,10 @@ contract SettlementTest is Test {
         int64 pythPrice = 30;
         int32 expo = 2;
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, SafeCast.toUint64(block.timestamp));
 
         uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
-            hex"01", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+            hex"01", PRICE_FEED_ID, SafeCast.toUint64(block.timestamp), SafeCast.toUint64(block.timestamp + 10)
         );
 
         // Expected: 30 * 10^(2+6) = 30 * 10^8 = 3_000_000_000
@@ -508,10 +523,10 @@ contract SettlementTest is Test {
         int64 pythPrice = 300000000000;
         int32 expo = -8;
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, SafeCast.toUint64(block.timestamp));
 
         uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
-            hex"01", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+            hex"01", PRICE_FEED_ID, SafeCast.toUint64(block.timestamp), SafeCast.toUint64(block.timestamp + 10)
         );
 
         // Expected: 300000000000 * 10^(-8+6) = 300000000000 * 10^-2 = 3_000_000_000
@@ -522,10 +537,10 @@ contract SettlementTest is Test {
         int64 pythPrice = 3000;
         int32 expo = 0;
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, uint64(block.timestamp));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, pythPrice, expo, SafeCast.toUint64(block.timestamp));
 
         uint256 converted = hook._parsePythPrice{value: 0.01 ether}(
-            hex"01", PRICE_FEED_ID, uint64(block.timestamp), uint64(block.timestamp + 10)
+            hex"01", PRICE_FEED_ID, SafeCast.toUint64(block.timestamp), SafeCast.toUint64(block.timestamp + 10)
         );
 
         // Expected: 3000 * 10^(0+6) = 3000 * 10^6 = 3_000_000_000
@@ -556,7 +571,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
@@ -589,7 +606,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.expectRevert("Insufficient Pyth update fee");
         vm.prank(keeper);
@@ -608,7 +627,9 @@ contract SettlementTest is Test {
 
         uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
         vm.warp(windowEnd);
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, uint64(windowEnd));
+        pythOracle.setPriceAtTime(
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+        );
 
         vm.expectRevert(bytes4(keccak256("InvalidUpdateData()")));
         vm.prank(keeper);
@@ -769,4 +790,18 @@ contract MockERC20 is IERC20 {
     }
 }
 
-contract MockPoolManager {}
+contract MockPoolManager {
+    function unlock(bytes calldata data) external returns (bytes memory) {
+        return IUnlockCallback(msg.sender).unlockCallback(data);
+    }
+
+    function sync(Currency) external {}
+
+    function settle() external payable returns (uint256) {
+        return 0;
+    }
+
+    function take(Currency currency, address to, uint256 amount) external {
+        require(IERC20(Currency.unwrap(currency)).transfer(to, amount), "MockPM: take failed");
+    }
+}

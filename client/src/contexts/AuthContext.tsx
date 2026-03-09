@@ -8,7 +8,7 @@ interface AuthContextType {
     loading: boolean
     authenticated: boolean
     walletAddress: string | null
-    signIn: () => Promise<void>
+    signIn: () => void
     signOut: () => void
     refreshUser: () => Promise<void>
 }
@@ -109,15 +109,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }, [activeWallet?.address])
 
     // Sign in with Privy
-    const signIn = useCallback(async () => {
-        try {
-            // Open Privy login modal
-            login()
-            // Auth sync happens automatically via useEffect when privyAuthenticated changes
-        } catch (error) {
-            console.error('Sign in failed:', error)
-            throw error
-        }
+    const signIn = useCallback(() => {
+        // DO NOT call setLoading(true) here.
+        // If the user opens then dismisses the Privy modal, privyAuthenticated
+        // stays false and none of the syncAuth deps change, so the effect never
+        // re-fires — loading would be permanently stuck at true, freezing the UI.
+        // The syncAuth effect sets loading=true itself when backend sync begins.
+        login()
     }, [login])
 
     // Sign out

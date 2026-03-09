@@ -1,21 +1,14 @@
 import { useState, useEffect } from 'react'
 import { api } from '../services/apiService'
 import type { Grid, Cell } from '../types/grid'
-import { useAuth } from '../contexts/AuthContext'
 
 export function useGridState(selectedAsset: string, selectedTimeframe: number) {
     const [grid, setGrid] = useState<Grid | null>(null)
     const [cells, setCells] = useState<Cell[]>([])
-    const { authenticated } = useAuth()
-
-
-
     useEffect(() => {
         let isMounted = true
 
         const fetchActiveGrid = async () => {
-            if (!authenticated) return
-
             try {
                 const { data: grids } = await api.getActiveGrids(
                     selectedAsset,
@@ -23,30 +16,37 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
                 )
                 if (!isMounted) return
 
+                const loadCells = async (gridId: string) => {
+                    try {
+                        const { data: cellsData } = await api.getCells(gridId)
+                        return cellsData
+                    } catch {
+                        return []
+                    }
+                }
+
                 if (grids && grids.length > 0) {
                     setGrid(grids[0])
-                    const { data: cellsData } = await api.getCells(grids[0].grid_id)
+                    const cellsData = await loadCells(grids[0].grid_id)
                     if (isMounted) {
                         setCells(cellsData)
-                        // Dispatch event to signal cells are ready for position loading
                         window.dispatchEvent(new CustomEvent('cells_refreshed'))
                     }
                 } else {
-                    await api.generateGrid(selectedAsset, selectedTimeframe)
+                    try { await api.generateGrid(selectedAsset, selectedTimeframe) } catch { /* no-op */ }
                     if (!isMounted) return
 
-                    const { data: grids } = await api.getActiveGrids(
+                    const { data: grids2 } = await api.getActiveGrids(
                         selectedAsset,
                         selectedTimeframe
                     )
                     if (!isMounted) return
 
-                    if (grids && grids.length > 0) {
-                        setGrid(grids[0])
-                        const { data: cellsData } = await api.getCells(grids[0].grid_id)
+                    if (grids2 && grids2.length > 0) {
+                        setGrid(grids2[0])
+                        const cellsData = await loadCells(grids2[0].grid_id)
                         if (isMounted) {
                             setCells(cellsData)
-                            // Dispatch event to signal cells are ready for position loading
                             window.dispatchEvent(new CustomEvent('cells_refreshed'))
                         }
                     }
@@ -56,11 +56,6 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
             }
         }
 
-        if (!authenticated) {
-            setGrid(null)
-            setCells([])
-            return
-        }
         setGrid(null)
         setCells([])
         fetchActiveGrid()
@@ -68,10 +63,10 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
         return () => {
             isMounted = false
         }
-    }, [selectedAsset, selectedTimeframe, authenticated])
+    }, [selectedAsset, selectedTimeframe])
 
     useEffect(() => {
-        if (!grid || !authenticated) return
+        if (!grid) return
 
         let isMounted = true
 
@@ -103,7 +98,7 @@ export function useGridState(selectedAsset: string, selectedTimeframe: number) {
             window.removeEventListener('cell_resolved', handleCellResolved)
             window.removeEventListener('position_updated', handlePositionUpdated)
         }
-    }, [grid, authenticated])
+    }, [grid])
 
     return { grid, cells }
 }
