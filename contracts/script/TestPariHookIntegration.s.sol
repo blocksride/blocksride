@@ -140,11 +140,7 @@ contract TestPariHookIntegration is Script {
         Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
-            currency0: currency0,
-            currency1: currency1,
-            fee: 0, 
-            tickSpacing: 60, 
-            hooks: IHooks(address(PARI_HOOK))
+            currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 60, hooks: IHooks(address(PARI_HOOK))
         });
         PoolId poolId = poolKey.toId();
 
@@ -195,11 +191,7 @@ contract TestPariHookIntegration is Script {
         Currency currency1 = Currency.wrap(address(0));
 
         PoolKey memory poolKey = PoolKey({
-            currency0: currency0, 
-            currency1: currency1, 
-            fee: 0, 
-            tickSpacing: 60, 
-            hooks: IHooks(address(PARI_HOOK))
+            currency0: currency0, currency1: currency1, fee: 0, tickSpacing: 60, hooks: IHooks(address(PARI_HOOK))
         });
 
         console.log("Testing view functions...");

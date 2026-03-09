@@ -1445,7 +1445,7 @@ contract CompMockPythWithFee is IPyth {
     function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
         revert();
     }
-    
+
     function updatePriceFeeds(bytes[] calldata) external payable {}
     function updatePriceFeedsIfNecessary(bytes[] calldata, bytes32[] calldata, uint64[] calldata) external payable {}
 
