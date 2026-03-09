@@ -328,10 +328,20 @@ export const Landing = () => {
                         )}
                     </div>
 
+                    {/* Demo CTA */}
+                    <Button
+                        size="lg"
+                        onClick={() => navigate('/demo')}
+                        className="mt-6 h-12 px-8 text-sm font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_24px_hsl(var(--primary)/0.45)] hover:shadow-[0_0_36px_hsl(var(--primary)/0.6)] transition-all"
+                    >
+                        Watch Live Demo
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+
                     {/* Scroll cue */}
                     <button
                         onClick={() => howRef.current?.scrollIntoView({ behavior: 'smooth' })}
-                        className="mt-16 flex flex-col items-center gap-1 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                        className="mt-10 flex flex-col items-center gap-1 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
                         aria-label="Scroll to how it works"
                     >
                         <span className="text-[10px] font-mono uppercase tracking-widest">How it works</span>
