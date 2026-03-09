@@ -284,7 +284,16 @@ contract PariHookCoverageTest is Test {
         poolId = poolKey.toId();
 
         hook.configureGrid(
-            poolKey, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, GRID_EPOCH, address(usdc)
+            poolKey,
+            PYTH_FEED,
+            BAND_WIDTH,
+            WIN_DURATION,
+            FROZEN,
+            MAX_STAKE,
+            FEE_BPS,
+            MIN_THRESH,
+            GRID_EPOCH,
+            address(usdc)
         );
 
         // Warp to 1 second past epoch so the grid is live
@@ -428,7 +437,9 @@ contract PariHookCoverageTest is Test {
 
         // permit() in CovMockERC20 just sets allowance — v/r/s are ignored
         vm.prank(alice);
-        hook.permitAndPlaceBet(poolKey, cellId, targetWindow, amount, permitAmount, block.timestamp + 60, 27, bytes32(0), bytes32(0));
+        hook.permitAndPlaceBet(
+            poolKey, cellId, targetWindow, amount, permitAmount, block.timestamp + 60, 27, bytes32(0), bytes32(0)
+        );
 
         assertEq(usdc.balanceOf(address(hook)) - balBefore, amount, "Hook should have received USDC via permit flow");
         assertEq(hook.getUserStake(poolKey, targetWindow, cellId, alice), amount);
@@ -442,9 +453,8 @@ contract PariHookCoverageTest is Test {
     function test_CurrentWindowId_BeforeEpoch_ReturnsZero() public {
         // Deploy a fresh hook with a far-future epoch so block.timestamp < gridEpoch
         CovMockERC20 usdc2 = new CovMockERC20("USDC2", "USDC2", 6);
-        PariHook hook2 = new PariHook(
-            IPoolManager(address(mockPoolManager)), IPyth(address(mockPyth)), admin, treasury, relayer
-        );
+        PariHook hook2 =
+            new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(mockPyth)), admin, treasury, relayer);
 
         PoolKey memory key2 = PoolKey({
             currency0: Currency.wrap(address(usdc2)),
@@ -457,7 +467,18 @@ contract PariHookCoverageTest is Test {
         uint256 futureEpoch = block.timestamp + 3600; // 1 hour from now, ensure minute-aligned
         futureEpoch = (futureEpoch / 60) * 60;
 
-        hook2.configureGrid(key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, futureEpoch, address(usdc2));
+        hook2.configureGrid(
+            key2,
+            PYTH_FEED,
+            BAND_WIDTH,
+            WIN_DURATION,
+            FROZEN,
+            MAX_STAKE,
+            FEE_BPS,
+            MIN_THRESH,
+            futureEpoch,
+            address(usdc2)
+        );
 
         // block.timestamp < futureEpoch → should return 0
         assertEq(hook2.currentWindowId(key2), 0, "currentWindowId before epoch must be 0");
@@ -656,7 +677,7 @@ contract PariHookCoverageTest is Test {
         vm.warp(windowEnd + 5);
         hook.settle{value: 0}(poolKey, targetWindow, bytes("X"));
 
-        (,, , uint256 winningCell,) = hook.getWindow(poolKey, targetWindow);
+        (,,, uint256 winningCell,) = hook.getWindow(poolKey, targetWindow);
         assertEq(winningCell, expectedCell, "Upper boundary price should fall in next cell");
     }
 
@@ -668,9 +689,8 @@ contract PariHookCoverageTest is Test {
     /// _isNoPriceInRangeError returns false → _bubbleRevert propagates the reason.
     function test_Settle_BubblesShortPythRevert() public {
         CovMockPythShortRevert shortPyth = new CovMockPythShortRevert();
-        PariHook hook2 = new PariHook(
-            IPoolManager(address(mockPoolManager)), IPyth(address(shortPyth)), admin, treasury, relayer
-        );
+        PariHook hook2 =
+            new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(shortPyth)), admin, treasury, relayer);
 
         CovMockERC20 usdc2 = new CovMockERC20("USDC2", "USDC2", 6);
         PoolKey memory key2 = PoolKey({
@@ -683,7 +703,9 @@ contract PariHookCoverageTest is Test {
 
         // Use a fresh epoch that is strictly in the future relative to current warp
         uint256 epoch2 = ((block.timestamp + 120) / 60) * 60;
-        hook2.configureGrid(key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, epoch2, address(usdc2));
+        hook2.configureGrid(
+            key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, epoch2, address(usdc2)
+        );
 
         vm.warp(epoch2 + 1);
 
@@ -709,9 +731,8 @@ contract PariHookCoverageTest is Test {
 
     function test_Settle_EmptyPythRevert_SaysParserFailed() public {
         CovMockPythEmptyRevert emptyPyth = new CovMockPythEmptyRevert();
-        PariHook hook2 = new PariHook(
-            IPoolManager(address(mockPoolManager)), IPyth(address(emptyPyth)), admin, treasury, relayer
-        );
+        PariHook hook2 =
+            new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(emptyPyth)), admin, treasury, relayer);
 
         CovMockERC20 usdc2 = new CovMockERC20("USDC2", "USDC2", 6);
         PoolKey memory key2 = PoolKey({
@@ -723,7 +744,9 @@ contract PariHookCoverageTest is Test {
         });
 
         uint256 epoch2 = ((block.timestamp + 120) / 60) * 60;
-        hook2.configureGrid(key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, epoch2, address(usdc2));
+        hook2.configureGrid(
+            key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, epoch2, address(usdc2)
+        );
 
         vm.warp(epoch2 + 1);
 
@@ -758,9 +781,8 @@ contract PariHookCoverageTest is Test {
 
     function test_ConfigureGrid_RevertWhen_EpochInPast() public {
         CovMockERC20 usdc2 = new CovMockERC20("USDC3", "USDC3", 6);
-        PariHook hook2 = new PariHook(
-            IPoolManager(address(mockPoolManager)), IPyth(address(mockPyth)), admin, treasury, relayer
-        );
+        PariHook hook2 =
+            new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(mockPyth)), admin, treasury, relayer);
 
         PoolKey memory key2 = PoolKey({
             currency0: Currency.wrap(address(usdc2)),
@@ -773,7 +795,16 @@ contract PariHookCoverageTest is Test {
         // block.timestamp is GRID_EPOCH+1 (set in setUp), so GRID_EPOCH is in the past
         vm.expectRevert("gridEpoch must be in the future");
         hook2.configureGrid(
-            key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, GRID_EPOCH, address(usdc2)
+            key2,
+            PYTH_FEED,
+            BAND_WIDTH,
+            WIN_DURATION,
+            FROZEN,
+            MAX_STAKE,
+            FEE_BPS,
+            MIN_THRESH,
+            GRID_EPOCH,
+            address(usdc2)
         );
     }
 
@@ -784,9 +815,8 @@ contract PariHookCoverageTest is Test {
 
     function test_Settle_AutoVoids_OnNoPriceInRange() public {
         CovMockPythNoPriceInRange noPricePyth = new CovMockPythNoPriceInRange();
-        PariHook hook2 = new PariHook(
-            IPoolManager(address(mockPoolManager)), IPyth(address(noPricePyth)), admin, treasury, relayer
-        );
+        PariHook hook2 =
+            new PariHook(IPoolManager(address(mockPoolManager)), IPyth(address(noPricePyth)), admin, treasury, relayer);
 
         CovMockERC20 usdc2 = new CovMockERC20("USDC4", "USDC4", 6);
         PoolKey memory key2 = PoolKey({
@@ -798,7 +828,9 @@ contract PariHookCoverageTest is Test {
         });
 
         uint256 epoch2 = ((block.timestamp + 120) / 60) * 60;
-        hook2.configureGrid(key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, epoch2, address(usdc2));
+        hook2.configureGrid(
+            key2, PYTH_FEED, BAND_WIDTH, WIN_DURATION, FROZEN, MAX_STAKE, FEE_BPS, MIN_THRESH, epoch2, address(usdc2)
+        );
 
         vm.warp(epoch2 + 1);
 
@@ -816,7 +848,7 @@ contract PariHookCoverageTest is Test {
         // Should auto-void (no revert)
         hook2.settle{value: 0}(key2, tw, bytes("X"));
 
-        (, , bool voided,,) = hook2.getWindow(key2, tw);
+        (,, bool voided,,) = hook2.getWindow(key2, tw);
         assertTrue(voided, "Window should be auto-voided on PriceFeedNotFoundWithinRange");
     }
 }
