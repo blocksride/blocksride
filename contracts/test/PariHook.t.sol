@@ -173,7 +173,8 @@ contract PariHookTest is Test {
             uint256 frozen,
             uint256 maxStake,
             uint256 fee,
-            uint256 epoch,,
+            uint256 epoch,
+            ,
             uint256 threshold
         ) = hook.gridConfigs(testPoolId);
 

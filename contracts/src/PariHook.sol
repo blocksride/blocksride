@@ -610,8 +610,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         uint256 excessEth = msg.value - updateFee;
 
         uint256 closingPrice;
-        try this._parsePythPrice{value: updateFee}(
-            pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime
+        try this._parsePythPrice{value: updateFee}(pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime
         ) returns (
             uint256 price
         ) {
@@ -1053,7 +1052,11 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
      * @param cellId Cell ID
      * @return Multiplier in 1e18 precision (e.g., 1.5e18 = 1.5x)
      */
-    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) external view returns (uint256) {
+    function getLiveMultiplier(PoolKey calldata key, uint256 windowId, uint256 cellId) 
+        external 
+        view 
+        returns (uint256) 
+        {
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
         Window storage w = windows[poolId][windowId];

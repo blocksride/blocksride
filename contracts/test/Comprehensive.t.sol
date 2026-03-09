@@ -22,7 +22,6 @@ pragma solidity ^0.8.26;
  *  11. View Functions            – non-existent windows, zero-stake cells
  *  12. Multi-user / Proportional – correct proportional payouts, independent windows
  */
-
 import {Test} from "forge-std/Test.sol";
 
 import {PariHook} from "../src/PariHook.sol";
@@ -137,6 +136,7 @@ contract CompMockPyth is IPyth {
     function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
         revert();
     }
+
     function updatePriceFeeds(bytes[] calldata) external payable {}
     function updatePriceFeedsIfNecessary(bytes[] calldata, bytes32[] calldata, uint64[] calldata) external payable {}
 
@@ -158,6 +158,7 @@ contract CompMockPoolManager {
     function unlock(bytes calldata data) external returns (bytes memory) {
         return IUnlockCallback(msg.sender).unlockCallback(data);
     }
+
     function sync(Currency) external {}
 
     function settle() external payable returns (uint256) {
@@ -1444,6 +1445,7 @@ contract CompMockPythWithFee is IPyth {
     function getEmaPriceNoOlderThan(bytes32, uint256) external pure returns (PythStructs.Price memory) {
         revert();
     }
+    
     function updatePriceFeeds(bytes[] calldata) external payable {}
     function updatePriceFeedsIfNecessary(bytes[] calldata, bytes32[] calldata, uint64[] calldata) external payable {}
 
