@@ -30,7 +30,6 @@ import {
 
 import { useBetQuote } from '../hooks/useBetQuote'
 import { usePoolMultipliers } from '../hooks/usePoolMultipliers'
-import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
@@ -265,7 +264,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [])
 
     const { user, refreshUser, authenticated, walletAddress } = useAuth()
-    const { formatted: onchainUsdcBalance } = useTokenBalance()
     const { wallets } = useWallets()
     const walletsRef = useRef(wallets)
     walletsRef.current = wallets

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { api } from '@/services/apiService'
 import type { PricePoint } from '@/types/grid'
 
 type AssetConfig = {
