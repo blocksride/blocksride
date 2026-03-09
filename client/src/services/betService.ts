@@ -107,8 +107,8 @@ const signTypedDataWithProvider = async (
     const request = walletClient.transport.request
     if (!request) {
         return walletClient.signTypedData({
-            account,
             ...(typedData as Parameters<typeof walletClient.signTypedData>[0]),
+            account,
         })
     }
 
@@ -257,7 +257,7 @@ export const betService = {
         return {
             permitAmount,
             permitDeadline,
-            permitV: parsed.v,
+            permitV: Number(parsed.v ?? 27),
             permitR: parsed.r,
             permitS: parsed.s,
         }
