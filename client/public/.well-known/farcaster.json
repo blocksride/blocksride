@@ -1,9 +1,9 @@
 {
   "accountAssociation": {
-    "header": "REPLACE_WITH_HEADER",
-    "payload": "REPLACE_WITH_PAYLOAD",
-    "signature": "REPLACE_WITH_SIGNATURE"
-  },
+    "header": "eyJmaWQiOjk4ODIxMCwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDczMjFDQzIwNDI3YzVkYUY3YThBMTgwNDI1OWVDM0E3MkFkNzhiMzQifQ",
+    "payload": "eyJkb21haW4iOiJibG9ja3NyaWRlLnh5eiJ9",
+    "signature": "1EljW13BjsHEvsixXmpB7Fm3D3JnFm9pBe0eHF1kKvg9dbzyzpyeoUxCF8qUsWOo0GDHxRSBx4HDQldbU7oWSBs="
+},
   "miniapp": {
     "version": "1",
     "name": "BlocksRide",
