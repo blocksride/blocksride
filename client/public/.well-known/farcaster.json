@@ -17,6 +17,8 @@
     "tags": ["prediction", "crypto", "markets", "ai-agents"],
     "heroImageUrl": "https://blocksride.xyz/logo/blocksride-logo-color.png",
     "tagline": "60 seconds prediction market",
+    "buttonTitle": "Start Trading",
+    "screenshotUrls": ["https://blocksride.xyz/logo/screenshot-blocksride.jpg"],
     "ogTitle": "BlocksRide",
     "ogDescription": "60-second prediction markets on crypto prices.",
     "ogImageUrl": "https://blocksride.xyz/logo/blocksride-logo-color.png",
