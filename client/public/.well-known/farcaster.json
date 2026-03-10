@@ -14,7 +14,7 @@
     "subtitle": "60 seconds prediction market",
     "description": "Trade 60-second prediction markets on crypto prices.",
     "primaryCategory": "finance",
-    "tags": ["prediction", "crypto", "markets"],
+    "tags": ["prediction", "crypto", "markets", "ai-agents"],
     "heroImageUrl": "https://blocksride.xyz/logo/blocksride-logo-color.png",
     "tagline": "60 seconds prediction market",
     "ogTitle": "BlocksRide",
