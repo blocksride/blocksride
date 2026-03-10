@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { useAuth } from '@/contexts/AuthContext'
 import { useWriteContract, useWaitForTransactionReceipt, useReadContract, type BaseError } from 'wagmi'
 import { parseUnits } from 'viem'
+import { BUILDER_CODE_SUFFIX } from '@/lib/builderCode'
 import { toast } from 'sonner'
 import { Loader2, Copy, CheckCircle2, Info } from 'lucide-react'
 import { networkName } from '@/providers/Web3Provider'
@@ -94,6 +95,7 @@ export function WalletDeposit() {
             abi: erc20Abi,
             functionName: 'transfer',
             args: [TREASURY_ADDRESS as `0x${string}`, parseUnits(amount, safeDecimals)],
+            dataSuffix: BUILDER_CODE_SUFFIX,
         })
     }
 
