@@ -3,403 +3,378 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useOnboarding } from '@/contexts/OnboardingContext'
 import {
-    Target,
-    MousePointerClick,
-    Coins,
-    Trophy,
-    Zap,
+    Crosshair,
+    Shield,
+    Megaphone,
+    Rocket,
+    Activity,
     Terminal,
     ArrowRight,
+    Zap,
+    CheckCircle2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// Terminal-style grid visualization
-const TerminalGrid = () => {
-    const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null)
-    const [priceY, setPriceY] = useState(50)
-    const [priceHistory, setPriceHistory] = useState<number[]>([50, 52, 48, 51, 49, 53, 50])
-    const [clickedCell] = useState<{ row: number; col: number } | null>({ row: 1, col: 3 })
+// ── Agent definitions (mirrors Demo page) ─────────────────────────────────────
+const AGENTS = [
+    {
+        id: 'sniper',
+        name: 'Sniper',
+        emoji: '🎯',
+        color: '#06b6d4',
+        colorBg: 'rgba(6,182,212,0.15)',
+        colorBorder: 'rgba(6,182,212,0.35)',
+        Icon: Crosshair,
+        deposit: 30,
+        tp: 15,
+        sl: 10,
+    },
+    {
+        id: 'khamenei',
+        name: 'Khamenei',
+        emoji: '🧓',
+        color: '#a855f7',
+        colorBg: 'rgba(168,85,247,0.15)',
+        colorBorder: 'rgba(168,85,247,0.35)',
+        Icon: Shield,
+        deposit: 50,
+        tp: 25,
+        sl: 15,
+    },
+    {
+        id: 'trump',
+        name: 'Trump',
+        emoji: '🍊',
+        color: '#f97316',
+        colorBg: 'rgba(249,115,22,0.15)',
+        colorBorder: 'rgba(249,115,22,0.35)',
+        Icon: Megaphone,
+        deposit: 20,
+        tp: 40,
+        sl: 20,
+    },
+] as const
 
-    const cols = 5
-    const rows = 4
-    const cellWidth = 48
-    const cellHeight = 36
-    const width = cols * cellWidth
-    const height = rows * cellHeight
+// ── Step 1: Configure Agent ────────────────────────────────────────────────────
+const ConfigureAgentVisual = () => {
+    const [selectedIndex, setSelectedIndex] = useState(0)
 
     useEffect(() => {
-        const priceInterval = setInterval(() => {
-            setPriceY(prev => {
-                const change = (Math.random() - 0.5) * 12
-                const newY = Math.max(10, Math.min(height - 10, prev + change))
-                setPriceHistory(h => [...h.slice(-6), newY])
-                return newY
-            })
-        }, 500)
+        const id = setInterval(() => {
+            setSelectedIndex(prev => (prev + 1) % AGENTS.length)
+        }, 1600)
+        return () => clearInterval(id)
+    }, [])
 
-        const cellInterval = setInterval(() => {
-            const row = Math.floor(Math.random() * rows)
-            const col = 2 + Math.floor(Math.random() * (cols - 2))
-            setActiveCell({ row, col })
-        }, 1200)
-
-        return () => {
-            clearInterval(priceInterval)
-            clearInterval(cellInterval)
-        }
-    }, [height])
-
-    const pricePath = priceHistory.map((y, i) => {
-        const x = (i / (priceHistory.length - 1)) * width * 0.6
-        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`
-    }).join(' ')
+    const selected = AGENTS[selectedIndex]
 
     return (
-        <div className="relative mx-auto" style={{ width: width + 50, height: height + 40 }}>
-            {/* Scan line overlay */}
-            <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(255,255,255,0.1)_2px,rgba(255,255,255,0.1)_4px)]" />
+        <div className="w-full space-y-3">
+            {/* Agent selector cards */}
+            <div className="flex gap-2 justify-center">
+                {AGENTS.map((agent, i) => {
+                    const AgentIcon = agent.Icon
+                    const isActive = i === selectedIndex
+                    return (
+                        <div
+                            key={agent.id}
+                            className="flex-1 p-2.5 rounded border transition-all duration-300"
+                            style={{
+                                borderColor: isActive ? agent.colorBorder : 'rgb(39,39,42)',
+                                backgroundColor: isActive ? agent.colorBg : 'transparent',
+                            }}
+                        >
+                            <div className="text-center text-lg mb-1">{agent.emoji}</div>
+                            <div
+                                className="text-[9px] font-mono font-bold text-center uppercase tracking-wider mb-1.5"
+                                style={{ color: isActive ? agent.color : 'rgb(113,113,122)' }}
+                            >
+                                {agent.name}
+                            </div>
+                            <div className="flex justify-center">
+                                <AgentIcon
+                                    className="w-3 h-3 transition-colors duration-300"
+                                    style={{ color: isActive ? agent.color : 'rgb(63,63,70)' }}
+                                />
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
 
-            <svg
-                width={width + 50}
-                height={height + 40}
-                className="relative"
+            {/* Config panel for selected agent */}
+            <div
+                className="px-3 py-2.5 rounded border transition-all duration-300"
+                style={{
+                    borderColor: selected.colorBorder,
+                    backgroundColor: selected.colorBg,
+                }}
             >
-                {/* Grid background */}
-                <rect
-                    x={20}
-                    y={8}
-                    width={width}
-                    height={height}
-                    fill="transparent"
-                    stroke="rgb(39, 39, 42)"
-                    strokeWidth={1}
-                />
+                <div
+                    className="text-[9px] font-mono uppercase tracking-wider mb-2"
+                    style={{ color: selected.color }}
+                >
+                    {selected.name} · strategy config
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                    {[
+                        { label: 'DEPOSIT', value: `$${selected.deposit}` },
+                        { label: 'TAKE PROFIT', value: `${selected.tp}%` },
+                        { label: 'STOP LOSS', value: `${selected.sl}%` },
+                    ].map(item => (
+                        <div key={item.label}>
+                            <div className="text-[8px] font-mono text-zinc-500 uppercase mb-0.5">{item.label}</div>
+                            <div className="text-sm font-mono font-bold text-white">{item.value}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    )
+}
 
-                {/* Grid lines */}
+// ── Step 2: Deploy ─────────────────────────────────────────────────────────────
+const DEPLOY_LINES = [
+    'Connecting to Base Sepolia',
+    'Approving USDC allowance',
+    'Deploying agent contract',
+    'Setting strategy parameters',
+    'Agent live on-chain ✓',
+]
+
+const DeployVisual = () => {
+    // frame advances every 500ms; drives all derived state
+    const [frame, setFrame] = useState(0)
+    const total = DEPLOY_LINES.length
+
+    useEffect(() => {
+        const id = setInterval(() => {
+            setFrame(f => (f + 1 > total + 5 ? 0 : f + 1))
+        }, 500)
+        return () => clearInterval(id)
+    }, [total])
+
+    const visibleLines = Math.min(frame, total)
+    const isDone = frame >= total + 1
+
+    return (
+        <div className="w-full font-mono space-y-2">
+            <div className="bg-zinc-900 border border-zinc-800 rounded p-3 min-h-[110px] space-y-1.5">
+                {DEPLOY_LINES.slice(0, visibleLines).map((line, i) => {
+                    const isCurrent = i === visibleLines - 1 && !isDone
+                    const isSuccess = i === total - 1 && isDone
+                    return (
+                        <div key={i} className="text-[10px] flex items-center gap-1.5">
+                            {isCurrent
+                                ? <span className="inline-block w-1.5 h-3 bg-primary animate-pulse flex-shrink-0" />
+                                : <span className="text-primary flex-shrink-0">{'>'}</span>
+                            }
+                            <span className={cn(
+                                'transition-colors duration-300',
+                                isSuccess ? 'text-primary font-bold' : 'text-zinc-400'
+                            )}>
+                                {line}
+                            </span>
+                        </div>
+                    )
+                })}
+            </div>
+            <div className={cn(
+                'flex items-center justify-center gap-2 py-1 transition-opacity duration-500',
+                isDone ? 'opacity-100' : 'opacity-0'
+            )}>
+                <CheckCircle2 className="w-4 h-4 text-primary" />
+                <span className="text-xs font-mono text-primary font-bold">Deployment successful</span>
+            </div>
+        </div>
+    )
+}
+
+// ── Step 3: Watch It Trade ─────────────────────────────────────────────────────
+const AGENT_COLORS = ['#06b6d4', '#a855f7', '#f97316']
+
+const WatchTradeVisual = () => {
+    const cols = 5
+    const rows = 3
+    const cellW = 50
+    const cellH = 34
+    const svgW = cols * cellW
+    const svgH = rows * cellH
+
+    const [bets, setBets] = useState<{ row: number; col: number; color: string; amount: number }[]>([])
+    const [priceY, setPriceY] = useState(svgH / 2)
+    const [pnl, setPnl] = useState(0)
+
+    useEffect(() => {
+        const priceId = setInterval(() => {
+            setPriceY(prev => Math.max(8, Math.min(svgH - 8, prev + (Math.random() - 0.5) * 14)))
+        }, 600)
+
+        const betId = setInterval(() => {
+            const col = 2 + Math.floor(Math.random() * (cols - 2))
+            const row = Math.floor(Math.random() * rows)
+            const color = AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)]
+            const amount = [5, 10, 15, 20][Math.floor(Math.random() * 4)]
+            setBets(prev => {
+                const next = [...prev, { row, col, color, amount }]
+                return next.length > 7 ? next.slice(-7) : next
+            })
+            setPnl(prev => +(prev + (Math.random() > 0.38 ? amount * 0.9 : -amount * 0.6)).toFixed(2))
+        }, 900)
+
+        return () => { clearInterval(priceId); clearInterval(betId) }
+    }, [svgH])
+
+    return (
+        <div className="w-full space-y-2">
+            <svg width={svgW + 40} height={svgH + 28} className="mx-auto block">
+                {/* Grid border */}
+                <rect x={20} y={4} width={svgW} height={svgH} fill="transparent" stroke="rgb(39,39,42)" strokeWidth={1} />
+                {/* Vertical lines */}
                 {Array.from({ length: cols + 1 }).map((_, i) => (
-                    <line
-                        key={`v-${i}`}
-                        x1={20 + i * cellWidth}
-                        y1={8}
-                        x2={20 + i * cellWidth}
-                        y2={8 + height}
-                        stroke="rgb(39, 39, 42)"
-                        strokeWidth={0.5}
-                    />
+                    <line key={`v-${i}`}
+                        x1={20 + i * cellW} y1={4}
+                        x2={20 + i * cellW} y2={4 + svgH}
+                        stroke="rgb(39,39,42)" strokeWidth={0.5} />
                 ))}
+                {/* Horizontal lines */}
                 {Array.from({ length: rows + 1 }).map((_, i) => (
-                    <line
-                        key={`h-${i}`}
-                        x1={20}
-                        y1={8 + i * cellHeight}
-                        x2={20 + width}
-                        y2={8 + i * cellHeight}
-                        stroke="rgb(39, 39, 42)"
-                        strokeWidth={0.5}
-                    />
+                    <line key={`h-${i}`}
+                        x1={20} y1={4 + i * cellH}
+                        x2={20 + svgW} y2={4 + i * cellH}
+                        stroke="rgb(39,39,42)" strokeWidth={0.5} />
                 ))}
-
-                {/* Past cells (locked) */}
+                {/* Past columns (locked) */}
                 {Array.from({ length: rows }).map((_, row) =>
-                    Array.from({ length: 2 }).map((_, col) => (
-                        <rect
-                            key={`past-${row}-${col}`}
-                            x={21 + col * cellWidth}
-                            y={9 + row * cellHeight}
-                            width={cellWidth - 2}
-                            height={cellHeight - 2}
-                            fill="rgb(39, 39, 42)"
-                            fillOpacity={0.5}
-                        />
+                    [0, 1].map(col => (
+                        <rect key={`lock-${row}-${col}`}
+                            x={21 + col * cellW} y={5 + row * cellH}
+                            width={cellW - 2} height={cellH - 2}
+                            fill="rgb(39,39,42)" fillOpacity={0.5} />
                     ))
                 )}
-
-                {/* Interactive cells */}
-                {Array.from({ length: rows }).map((_, row) =>
-                    Array.from({ length: cols - 2 }).map((_, col) => {
-                        const actualCol = col + 2
-                        const isClicked = clickedCell?.row === row && clickedCell?.col === actualCol
-                        const isHovered = activeCell?.row === row && activeCell?.col === actualCol
-
-                        return (
-                            <g key={`cell-${row}-${actualCol}`}>
-                                <rect
-                                    x={21 + actualCol * cellWidth}
-                                    y={9 + row * cellHeight}
-                                    width={cellWidth - 2}
-                                    height={cellHeight - 2}
-                                    fill={isClicked
-                                        ? 'rgb(34, 197, 94)'
-                                        : isHovered
-                                            ? 'rgba(34, 197, 94, 0.15)'
-                                            : 'transparent'
-                                    }
-                                    fillOpacity={isClicked ? 0.3 : 1}
-                                    stroke={isClicked || isHovered ? 'rgb(34, 197, 94)' : 'transparent'}
-                                    strokeWidth={isClicked ? 2 : 1}
-                                    className="transition-all duration-150"
-                                />
-                                {isClicked && (
-                                    <text
-                                        x={21 + actualCol * cellWidth + cellWidth / 2}
-                                        y={9 + row * cellHeight + cellHeight / 2}
-                                        textAnchor="middle"
-                                        dominantBaseline="middle"
-                                        className="text-[9px] font-mono font-bold"
-                                        fill="rgb(34, 197, 94)"
-                                    >
-                                        $10
-                                    </text>
-                                )}
-                            </g>
-                        )
-                    })
-                )}
-
-                {/* Price line */}
-                <path
-                    d={pricePath}
-                    fill="none"
-                    stroke="rgb(34, 197, 94)"
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    transform="translate(20, 8)"
+                {/* Active bets */}
+                {bets.map((bet, i) => (
+                    <g key={i}>
+                        <rect
+                            x={21 + bet.col * cellW} y={5 + bet.row * cellH}
+                            width={cellW - 2} height={cellH - 2}
+                            fill={bet.color} fillOpacity={0.2}
+                            stroke={bet.color} strokeWidth={1}
+                        />
+                        <text
+                            x={20 + bet.col * cellW + cellW / 2}
+                            y={4 + bet.row * cellH + cellH / 2}
+                            textAnchor="middle" dominantBaseline="middle"
+                            fill={bet.color} fontSize={8}
+                            fontFamily="monospace" fontWeight="bold"
+                        >
+                            ${bet.amount}
+                        </text>
+                    </g>
+                ))}
+                {/* Live price line */}
+                <line
+                    x1={20} y1={4 + priceY}
+                    x2={20 + svgW} y2={4 + priceY}
+                    stroke="hsl(38,92%,45%)" strokeWidth={1} strokeDasharray="3 2"
                 />
-
-                {/* Current price indicator */}
                 <circle
-                    cx={20 + width * 0.6}
-                    cy={8 + priceY}
-                    r={3}
-                    fill="rgb(34, 197, 94)"
+                    cx={20 + svgW} cy={4 + priceY} r={3}
+                    fill="hsl(38,92%,45%)"
                     className="animate-pulse"
                 />
-                <line
-                    x1={20 + width * 0.6}
-                    y1={8 + priceY}
-                    x2={20 + width}
-                    y2={8 + priceY}
-                    stroke="rgb(34, 197, 94)"
-                    strokeWidth={1}
-                    strokeDasharray="3 2"
-                    strokeOpacity={0.4}
-                />
-
                 {/* Time labels */}
                 {['PAST', '', 'NOW', '+1M', '+2M'].map((label, i) => (
-                    <text
-                        key={`time-${i}`}
-                        x={20 + i * cellWidth + cellWidth / 2}
-                        y={height + 24}
+                    <text key={i}
+                        x={20 + i * cellW + cellW / 2} y={svgH + 20}
                         textAnchor="middle"
-                        className="text-[8px] font-mono uppercase tracking-wider"
-                        fill="rgb(113, 113, 122)"
+                        fill="rgb(113,113,122)" fontSize={7} fontFamily="monospace"
                     >
                         {label}
                     </text>
                 ))}
-
-                {/* Cursor on hovered cell */}
-                {activeCell && activeCell.col >= 2 && (
-                    <g transform={`translate(${20 + activeCell.col * cellWidth + cellWidth / 2}, ${8 + activeCell.row * cellHeight + cellHeight / 2})`}>
-                        <MousePointerClick className="w-4 h-4 -translate-x-2 -translate-y-2 text-green-500 animate-bounce" />
-                    </g>
-                )}
             </svg>
-        </div>
-    )
-}
 
-// Stake selector visualization
-const StakeSelector = () => {
-    const [selectedIndex, setSelectedIndex] = useState(1)
-    const stakes = [5, 10, 25, 50]
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setSelectedIndex(prev => (prev + 1) % 4)
-        }, 800)
-        return () => clearInterval(interval)
-    }, [])
-
-    return (
-        <div className="space-y-6">
-            {/* Stake buttons */}
-            <div className="flex gap-2 justify-center">
-                {stakes.map((stake, i) => (
-                    <div
-                        key={stake}
-                        className={cn(
-                            "w-14 h-12 rounded border flex flex-col items-center justify-center transition-all duration-200 font-mono",
-                            selectedIndex === i
-                                ? 'bg-green-500/20 border-green-500 text-green-400 scale-105 -translate-y-1 shadow-lg shadow-green-500/20'
-                                : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                        )}
-                    >
-                        <span className="text-sm font-bold">${stake}</span>
-                    </div>
-                ))}
-            </div>
-
-            {/* Balance display */}
-            <div className="mx-auto w-fit">
-                <div className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded">
-                    <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-0.5">Balance</div>
-                    <div className="text-xl font-mono font-bold text-white tabular-nums">$1,000.00</div>
+            {/* Live stats */}
+            <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded">
+                    <Activity className="w-3 h-3 text-primary" />
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">P&amp;L</span>
+                    <span className={cn(
+                        'text-xs font-mono font-bold tabular-nums',
+                        pnl >= 0 ? 'text-primary' : 'text-red-400'
+                    )}>
+                        {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
+                    </span>
+                </div>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded">
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Bets</span>
+                    <span className="text-xs font-mono font-bold text-white tabular-nums">{bets.length}</span>
                 </div>
             </div>
         </div>
     )
 }
 
-// Win animation
-const WinAnimation = () => {
-    const [phase, setPhase] = useState<'bet' | 'wait' | 'win'>('bet')
-
-    useEffect(() => {
-        const cycle = () => {
-            setPhase('bet')
-            setTimeout(() => setPhase('wait'), 1200)
-            setTimeout(() => setPhase('win'), 2400)
-        }
-        cycle()
-        const interval = setInterval(cycle, 4000)
-        return () => clearInterval(interval)
-    }, [])
-
-    return (
-        <div className="relative h-44 flex items-center justify-center">
-            {/* Win particles */}
-            {phase === 'win' && (
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                    {[...Array(8)].map((_, i) => (
-                        <div
-                            key={i}
-                            className="absolute w-1.5 h-1.5 rounded-full bg-green-500 animate-ping"
-                            style={{
-                                left: `${25 + Math.random() * 50}%`,
-                                top: `${25 + Math.random() * 50}%`,
-                                animationDelay: `${i * 0.08}s`,
-                                animationDuration: '0.8s'
-                            }}
-                        />
-                    ))}
-                </div>
-            )}
-
-            {/* Main display */}
-            <div className="relative">
-                {/* Outer ring */}
-                <div className={cn(
-                    "absolute -inset-6 rounded-lg border transition-all duration-300",
-                    phase === 'win'
-                        ? 'border-green-500/50 bg-green-500/5'
-                        : 'border-zinc-800'
-                )} />
-
-                {/* Center box */}
-                <div className={cn(
-                    "relative w-20 h-20 rounded-lg flex flex-col items-center justify-center transition-all duration-200 border",
-                    phase === 'win'
-                        ? 'bg-green-500/20 border-green-500'
-                        : phase === 'wait'
-                            ? 'bg-zinc-800 border-zinc-700'
-                            : 'bg-zinc-900 border-zinc-800'
-                )}>
-                    {phase === 'bet' && (
-                        <>
-                            <MousePointerClick className="w-6 h-6 text-zinc-500 mb-1" />
-                            <span className="text-[10px] font-mono text-zinc-500">BET</span>
-                        </>
-                    )}
-                    {phase === 'wait' && (
-                        <>
-                            <div className="w-5 h-5 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin mb-1" />
-                            <span className="text-[10px] font-mono text-zinc-500">WAIT</span>
-                        </>
-                    )}
-                    {phase === 'win' && (
-                        <>
-                            <Trophy className="w-6 h-6 text-green-500 mb-1" />
-                            <span className="text-[10px] font-mono text-green-500">WIN!</span>
-                        </>
-                    )}
-                </div>
-
-                {/* Payout */}
-                {phase === 'win' && (
-                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                        <span className="text-lg font-mono font-bold text-green-500">+$25.00</span>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-
+// ── Step definitions ───────────────────────────────────────────────────────────
 interface OnboardingStep {
     id: string
     title: string
     subtitle: string
     visual: React.ReactNode
     command: string
+    Icon: React.ComponentType<{ className?: string }>
 }
 
 const ONBOARDING_STEPS: OnboardingStep[] = [
     {
-        id: 'grid',
-        title: 'SELECT CELL',
-        subtitle: 'Pick a time + price range',
-        visual: <TerminalGrid />,
-        command: 'Click any future cell to predict where price will be'
+        id: 'configure',
+        title: 'CONFIGURE AGENT',
+        subtitle: 'Pick a strategy and set parameters',
+        visual: <ConfigureAgentVisual />,
+        command: 'Choose Sniper for precision, Khamenei for patience, or Trump for big swings',
+        Icon: Crosshair,
     },
     {
-        id: 'stake',
-        title: 'SET STAKE',
-        subtitle: 'Choose your position size',
-        visual: <StakeSelector />,
-        command: 'Start small with Practice Mode - zero risk to learn'
+        id: 'deploy',
+        title: 'DEPLOY',
+        subtitle: 'Go live on Base blockchain',
+        visual: <DeployVisual />,
+        command: 'Your agent is deployed on-chain — transparent, trustless, and unstoppable',
+        Icon: Rocket,
     },
     {
-        id: 'win',
-        title: 'COLLECT WINS',
-        subtitle: 'Price in cell = payout',
-        visual: <WinAnimation />,
-        command: 'More stake in a cell = bigger potential returns'
-    }
+        id: 'watch',
+        title: 'WATCH IT TRADE',
+        subtitle: 'Agent places bets automatically',
+        visual: <WatchTradeVisual />,
+        command: 'Monitor live P&L as your agent captures price movements around the clock',
+        Icon: Activity,
+    },
 ]
 
+// ── Main component ─────────────────────────────────────────────────────────────
 export function BettingOnboarding() {
-    const {
-        isOnboardingActive,
-        skipOnboarding,
-        completeOnboarding
-    } = useOnboarding()
+    const { isOnboardingActive, skipOnboarding, completeOnboarding } = useOnboarding()
 
     const [currentStep, setCurrentStep] = useState(0)
     const totalSteps = ONBOARDING_STEPS.length
 
     useEffect(() => {
-        if (isOnboardingActive) {
-            setCurrentStep(0)
-        }
+        if (isOnboardingActive) setCurrentStep(0)
     }, [isOnboardingActive])
 
     const step = ONBOARDING_STEPS[currentStep]
     const isLastStep = currentStep === totalSteps - 1
+    const StepIcon = step.Icon
 
     const handleNext = useCallback(() => {
-        if (isLastStep) {
-            completeOnboarding()
-        } else {
-            setCurrentStep(prev => prev + 1)
-        }
+        if (isLastStep) completeOnboarding()
+        else setCurrentStep(prev => prev + 1)
     }, [isLastStep, completeOnboarding])
 
-    const handleSkip = useCallback(() => {
-        skipOnboarding()
-    }, [skipOnboarding])
+    const handleSkip = useCallback(() => skipOnboarding(), [skipOnboarding])
 
     // Keyboard navigation
     useEffect(() => {
@@ -409,9 +384,7 @@ export function BettingOnboarding() {
                 e.preventDefault()
                 handleNext()
             }
-            if (e.key === 'Escape') {
-                handleSkip()
-            }
+            if (e.key === 'Escape') handleSkip()
         }
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
@@ -427,15 +400,15 @@ export function BettingOnboarding() {
                 onEscapeKeyDown={(e) => e.preventDefault()}
                 aria-describedby={undefined}
             >
-                <DialogTitle className="sr-only">Trading Tutorial</DialogTitle>
+                <DialogTitle className="sr-only">Agent Setup</DialogTitle>
 
-                {/* Terminal Header */}
+                {/* Terminal header */}
                 <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <Terminal className="w-4 h-4 text-green-500" />
+                            <Terminal className="w-4 h-4 text-primary" />
                             <span className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider">
-                                Quick Start
+                                Agent Setup
                             </span>
                             <span className="text-[10px] font-mono text-zinc-600">
                                 [{currentStep + 1}/{totalSteps}]
@@ -448,11 +421,10 @@ export function BettingOnboarding() {
                             [ESC] Skip
                         </button>
                     </div>
-
                     {/* Progress bar */}
                     <div className="mt-3 h-1 bg-zinc-800 rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-green-500 transition-all duration-300"
+                            className="h-full bg-primary transition-all duration-300"
                             style={{ width: `${((currentStep + 1) / totalSteps) * 100}%` }}
                         />
                     </div>
@@ -460,12 +432,10 @@ export function BettingOnboarding() {
 
                 {/* Content */}
                 <div className="px-4 py-5">
-                    {/* Step indicator */}
+                    {/* Step header */}
                     <div className="flex items-center gap-3 mb-4">
-                        <div className="w-8 h-8 rounded bg-green-500/10 border border-green-500/30 flex items-center justify-center">
-                            {step.id === 'grid' && <Target className="w-4 h-4 text-green-500" />}
-                            {step.id === 'stake' && <Coins className="w-4 h-4 text-green-500" />}
-                            {step.id === 'win' && <Zap className="w-4 h-4 text-green-500" />}
+                        <div className="w-8 h-8 rounded bg-primary/10 border border-primary/30 flex items-center justify-center flex-shrink-0">
+                            <StepIcon className="w-4 h-4 text-primary" />
                         </div>
                         <div>
                             <h2 className="text-base font-mono font-bold text-white uppercase tracking-wide">
@@ -475,7 +445,7 @@ export function BettingOnboarding() {
                         </div>
                     </div>
 
-                    {/* Visual */}
+                    {/* Visual area */}
                     <div className="min-h-[200px] flex items-center justify-center py-2">
                         {step.visual}
                     </div>
@@ -483,10 +453,8 @@ export function BettingOnboarding() {
                     {/* Command hint */}
                     <div className="mt-4 px-3 py-2 bg-zinc-900 border border-zinc-800 rounded">
                         <div className="flex items-start gap-2">
-                            <span className="text-green-500 font-mono text-xs">$</span>
-                            <p className="text-xs font-mono text-zinc-400 leading-relaxed">
-                                {step.command}
-                            </p>
+                            <span className="text-primary font-mono text-xs flex-shrink-0">$</span>
+                            <p className="text-xs font-mono text-zinc-400 leading-relaxed">{step.command}</p>
                         </div>
                     </div>
                 </div>
@@ -495,16 +463,16 @@ export function BettingOnboarding() {
                 <div className="px-4 pb-4 pt-1">
                     <Button
                         className={cn(
-                            "w-full h-11 font-mono font-bold uppercase tracking-wider text-sm gap-2 rounded",
-                            "bg-green-500 hover:bg-green-400 text-zinc-950",
-                            "transition-all hover:shadow-lg hover:shadow-green-500/20"
+                            'w-full h-11 font-mono font-bold uppercase tracking-wider text-sm gap-2 rounded',
+                            'bg-primary hover:bg-primary/90 text-primary-foreground',
+                            'transition-all hover:shadow-lg hover:shadow-primary/20'
                         )}
                         onClick={handleNext}
                     >
                         {isLastStep ? (
                             <>
                                 <Zap className="w-4 h-4" />
-                                Start Trading
+                                Launch Agent
                             </>
                         ) : (
                             <>
@@ -514,7 +482,8 @@ export function BettingOnboarding() {
                         )}
                     </Button>
                     <p className="text-center mt-2 text-[10px] font-mono text-zinc-600">
-                        Press <span className="text-zinc-500">[ENTER]</span> or <span className="text-zinc-500">[SPACE]</span> to continue
+                        Press <span className="text-zinc-500">[ENTER]</span> or{' '}
+                        <span className="text-zinc-500">[SPACE]</span> to continue
                     </p>
                 </div>
             </DialogContent>
