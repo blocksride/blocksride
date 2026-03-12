@@ -7,6 +7,7 @@ import {
 import { BlocksrideLogo } from '@/components/BlocksrideLogo'
 import { GridCanvas } from '@/components/grid/GridCanvas'
 import { useGridViewport } from '@/hooks/useGridViewport'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { Grid, Cell, PricePoint } from '@/types/grid'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -96,6 +97,7 @@ interface AgentBet {
 // ── Demo Page ─────────────────────────────────────────────────────────────────
 export const Demo = () => {
     const navigate = useNavigate()
+    const isMobile = useMediaQuery('(max-width: 1023px)')
 
     // ── Price state ───────────────────────────────────────────────────────────
     const [price, setPrice] = useState(0)
@@ -668,8 +670,8 @@ export const Demo = () => {
         <div className="h-screen bg-background text-foreground flex flex-col dark overflow-hidden">
 
             {/* ── Header ─────────────────────────────────────────────────────── */}
-            <header className="h-12 flex items-center justify-between px-5 border-b border-border/60 bg-background/95 backdrop-blur-md shrink-0">
-                <div className="flex items-center gap-3">
+            <header className="min-h-12 flex items-center justify-between gap-3 px-3 py-2 sm:px-5 border-b border-border/60 bg-background/95 backdrop-blur-md shrink-0">
+                <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                     <BlocksrideLogo size={24} wordmark />
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30">
                         <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
@@ -677,8 +679,8 @@ export const Demo = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="hidden sm:flex items-center gap-2 text-sm font-mono">
+                <div className="flex items-center gap-2 sm:gap-4">
+                    <div className="hidden md:flex items-center gap-2 text-sm font-mono">
                         <span className="text-muted-foreground text-xs">ETH</span>
                         <span className="font-bold">${price.toFixed(2)}</span>
                         <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${priceChange >= 0 ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'}`}>
@@ -687,7 +689,7 @@ export const Demo = () => {
                     </div>
                     <button
                         onClick={() => navigate('/terminal')}
-                        className="h-8 px-4 rounded-md text-xs font-mono font-bold uppercase tracking-wide bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 transition-colors"
+                        className="h-8 px-3 sm:px-4 rounded-md text-[11px] sm:text-xs font-mono font-bold uppercase tracking-wide bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 transition-colors"
                     >
                         Launch App <ArrowRight className="w-3 h-3" />
                     </button>
@@ -695,22 +697,22 @@ export const Demo = () => {
             </header>
 
             {/* ── Body ───────────────────────────────────────────────────────── */}
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 min-h-0 flex-col lg:flex-row overflow-hidden">
 
                 {/* ── Grid Panel (left) ─────────────────────────────────────── */}
-                <div className="flex-1 flex flex-col overflow-hidden border-r border-border/30">
+                <div className="flex min-h-[52vh] flex-1 flex-col overflow-hidden border-b border-border/30 lg:min-h-0 lg:border-b-0 lg:border-r">
 
                     {/* Grid toolbar */}
-                    <div className="h-9 flex items-center justify-between px-4 border-b border-border/30 shrink-0">
-                        <div className="flex items-center gap-3 text-[11px] font-mono">
+                    <div className="min-h-9 flex items-center justify-between gap-2 px-3 sm:px-4 py-2 border-b border-border/30 shrink-0">
+                        <div className="flex min-w-0 items-center gap-2 sm:gap-3 text-[11px] font-mono">
                             <span className="font-bold text-foreground">ETH/USD</span>
-                            <span className="text-muted-foreground/50">·</span>
+                            <span className="hidden sm:inline text-muted-foreground/50">·</span>
                             <span className="text-muted-foreground">60s windows</span>
-                            <span className="text-muted-foreground/50">·</span>
+                            <span className="hidden sm:inline text-muted-foreground/50">·</span>
                             <span className="text-primary">{timeStr}</span>
                         </div>
                         {anyDeployed && (
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
+                            <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground">
                                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                                 Session {fmtTime(sessionSec)}
                             </div>
@@ -758,7 +760,7 @@ export const Demo = () => {
                             ))}
                         </div>
 
-                        <div className="w-16 border-l border-border bg-card/60 flex flex-col justify-between px-2 py-3 text-[10px] font-mono">
+                        <div className="w-12 sm:w-16 border-l border-border bg-card/60 flex flex-col justify-between px-1.5 sm:px-2 py-3 text-[9px] sm:text-[10px] font-mono">
                             {priceLabels.map((p, idx) => (
                                 <div
                                     key={`${p}-${idx}`}
@@ -775,14 +777,14 @@ export const Demo = () => {
                     </div>
 
                     <div className="flex h-7 border-t border-border bg-card/60 items-center">
-                        <div className="flex-1 flex items-center justify-between px-3 text-[10px] font-mono text-muted-foreground">
+                        <div className="flex-1 flex items-center justify-between px-3 text-[9px] sm:text-[10px] font-mono text-muted-foreground">
                             <span className="uppercase tracking-[0.2em]">Local time</span>
                             <span className="text-foreground">
                                 {timeStr}
                                 {timeZoneLabel ? ` ${timeZoneLabel}` : ''}
                             </span>
                         </div>
-                        <div className="w-16 border-l border-border" />
+                        <div className="w-12 sm:w-16 border-l border-border" />
                     </div>
 
                     {/* Deploy all CTA bar */}
@@ -800,7 +802,7 @@ export const Demo = () => {
                 </div>
 
                 {/* ── Agent Sidebar (right) ─────────────────────────────────── */}
-                <div className="w-[280px] flex flex-col overflow-hidden bg-background shrink-0">
+                <div className="w-full lg:w-[280px] max-h-[42vh] lg:max-h-none flex flex-col overflow-hidden bg-background shrink-0">
 
                     {/* Sidebar header */}
                     <div className="h-9 flex items-center justify-between px-4 border-b border-border/30 shrink-0">
@@ -836,7 +838,7 @@ export const Demo = () => {
                                             <span className="text-[11px] font-mono font-bold flex-1 truncate" style={{ color: agent.def.color }}>
                                                 {agent.def.name}
                                             </span>
-                                            <span className="text-[9px] font-mono text-muted-foreground/70">
+                                            <span className="hidden sm:inline text-[9px] font-mono text-muted-foreground/70">
                                                 ${agent.betUnit.toFixed(2)} · {agent.wins}/{agent.wins + agent.losses}
                                             </span>
                                             <span className={`text-[11px] font-mono font-bold ${(agent.balance - agent.deposit) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -859,7 +861,7 @@ export const Demo = () => {
                         )}
 
                         {/* Agent cards */}
-                        <div className="p-3 space-y-2.5">
+                        <div className={`p-3 ${isMobile ? 'grid grid-cols-1 sm:grid-cols-2 gap-2.5' : 'space-y-2.5'}`}>
                             {agents.map(agent => {
                                 const def = AGENT_DEFS.find(d => d.id === agent.id)!
 

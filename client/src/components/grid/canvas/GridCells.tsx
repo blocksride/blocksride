@@ -360,14 +360,24 @@ export const GridCells: React.FC<GridCellsProps> = ({
 
                 return (
                     <g key={slot.id}>
+                        {/* Visual rect — exact cell size, no overflow */}
+                        <rect
+                            x={rectX}
+                            y={rectY}
+                            width={rectW}
+                            height={rectH}
+                            className={className}
+                            strokeWidth={isSelected || isResolving ? 2 : 1}
+                            style={style}
+                        />
+                        {/* Touch target — expanded hit area for mobile, transparent */}
                         <rect
                             x={rectX - touchPadding}
                             y={rectY - touchPadding}
                             width={rectW + touchPadding * 2}
                             height={rectH + touchPadding * 2}
-                            className={className}
-                            strokeWidth={isSelected || isResolving ? 2 : 1}
-                            style={style}
+                            fill="transparent"
+                            stroke="none"
                             onClick={() => {
                                 // Haptic feedback on mobile
                                 if (isMobile && 'vibrate' in navigator && isPlayable) {
