@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useReadContracts } from 'wagmi'
 import { api } from '../services/apiService'
+import type { BetRecord } from '../services/apiService'
 import type { Grid, Cell, Position } from '../types/grid'
 import { normalizeSlotKey, getWindowEndMs } from '../lib/gridSlots'
 import { useAuth } from '../contexts/AuthContext'
@@ -196,6 +197,114 @@ export function useGridPositions(
         }
     }, [selectedAsset, grid, authenticated, isPracticeMode])
 
+    // ── Real mode: server-side bet records (primary source) ──────────────────
+    useEffect(() => {
+        if (isPracticeMode || !authenticated || !walletAddress || !activePool) return
+        let isMounted = true
+
+        const loadBets = async () => {
+            try {
+                const response = await api.getBets(walletAddress)
+                if (!isMounted) return
+                const records: BetRecord[] = response.data
+
+                if (records.length === 0) return
+
+                const priceInterval = grid?.price_interval ?? 2
+                const newPositions: Position[] = []
+                const placedCellIds: string[] = []
+                const resultUpdates: Record<string, 'won' | 'lost' | 'pending' | 'winning'> = {}
+
+                for (const r of records) {
+                    // Only include bets for this asset's pool
+                    if (r.pool_id.toLowerCase() !== activePool.poolId.toLowerCase()) continue
+                    if (r.state === 'pending') continue // not yet on-chain
+
+                    const cellKey = `${r.window_id}_${r.cell_id}`
+                    const windowId = Number(r.window_id)
+                    const cellIdNum = Number(r.cell_id)
+                    const tStartSec = windowId * activePool.windowDurationSec
+                    const tEndSec = tStartSec + activePool.windowDurationSec
+                    const pLow = cellIdNum * priceInterval
+                    const pHigh = pLow + priceInterval
+
+                    placedCellIds.push(cellKey)
+
+                    const stakeUsdc = Number(r.amount) / 1_000_000
+                    const payoutUsdc = r.payout ? Number(r.payout) / 1_000_000 : undefined
+
+                    const state = r.state === 'won' || r.state === 'lost' || r.state === 'voided' ? 'RESOLVED' : 'ACTIVE'
+                    const result = r.state === 'won' ? 'WIN' : r.state === 'lost' ? 'LOSS' : undefined
+
+                    newPositions.push({
+                        position_id: `bet-${r.intent_id}`,
+                        user_id: walletAddress,
+                        asset_id: selectedAsset,
+                        cell_id: cellKey,
+                        stake: stakeUsdc,
+                        state,
+                        result,
+                        payout: payoutUsdc,
+                        is_practice: false,
+                    } as Position)
+
+                    // Inject synthetic cell if not in current cells array
+                    if (!cellsRef.current.find(c => c.cell_id === cellKey)) {
+                        cellsRef.current = [...cellsRef.current, {
+                            cell_id: cellKey,
+                            grid_id: grid?.grid_id ?? `${selectedAsset}-live`,
+                            asset_id: selectedAsset,
+                            window_index: windowId,
+                            price_band_index: cellIdNum,
+                            p_low: pLow,
+                            p_high: pHigh,
+                            t_start: new Date(tStartSec * 1000).toISOString(),
+                            t_end: new Date(tEndSec * 1000).toISOString(),
+                        }]
+                    }
+
+                    if (r.state === 'won') {
+                        resultUpdates[cellKey] = 'won'
+                    } else if (r.state === 'lost' || r.state === 'voided') {
+                        resultUpdates[cellKey] = 'lost'
+                    } else {
+                        resultUpdates[cellKey] = 'pending'
+                    }
+                }
+
+                if (newPositions.length > 0) {
+                    setPositions(prev => {
+                        // Merge: keep on-chain positions not covered by DB records
+                        const dbIds = new Set(newPositions.map(p => p.cell_id))
+                        const onchainOnly = prev.filter(p => !dbIds.has(p.cell_id) && !p.position_id.startsWith('bet-'))
+                        return [...newPositions, ...onchainOnly]
+                    })
+                    setTotalActiveStake(newPositions
+                        .filter(p => p.state === 'ACTIVE')
+                        .reduce((s, p) => s + p.stake, 0)
+                    )
+                    setBetResults(prev => ({ ...prev, ...resultUpdates }))
+                    setSelectedCells(prev => {
+                        const placed = new Set(placedCellIds)
+                        const kept = prev.filter(id => placed.has(id) || id.startsWith('future_'))
+                        placedCellIds.forEach(id => { if (!kept.includes(id)) kept.push(id) })
+                        return Array.from(new Set(kept))
+                    })
+                }
+            } catch {
+                // Fallback to on-chain scan (already running below)
+            }
+        }
+
+        loadBets()
+        const interval = setInterval(() => { if (isMounted) void loadBets() }, 15_000)
+
+        return () => {
+            isMounted = false
+            clearInterval(interval)
+        }
+    }, [isPracticeMode, authenticated, walletAddress, activePool, selectedAsset, grid])
+
     // ── Real mode: Step 1 — scan past windows for user stake ─────────────────
     const poolKey = useMemo(() => {
         if (!activePool) return null
@@ -322,6 +431,9 @@ export function useGridPositions(
                     const syntheticCell: Cell = {
                         cell_id: cellKey,
                         grid_id: grid?.grid_id ?? `${selectedAsset}-live`,
+                        asset_id: selectedAsset,
+                        window_index: windowId,
+                        price_band_index: cellIdNum,
                         p_low: pLow,
                         p_high: pHigh,
                         t_start: new Date(tStartSec * 1000).toISOString(),

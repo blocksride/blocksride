@@ -82,6 +82,23 @@ export const api = {
 
     logMiniAppContext: (payload: MiniAppContextPayload) =>
         axiosInstance.post(`/analytics/miniapp`, payload),
+
+    getBets: (wallet: string) =>
+        axiosInstance.get<BetRecord[]>(`/bets?wallet=${encodeURIComponent(wallet)}`),
+}
+
+export interface BetRecord {
+    intent_id: string
+    wallet_address: string
+    pool_id: string
+    window_id: string
+    cell_id: string
+    amount: string
+    state: 'pending' | 'confirmed' | 'won' | 'lost' | 'voided'
+    tx_hash?: string | null
+    payout?: string | null
+    created_at?: string
+    updated_at?: string
 }
 
 export interface LeaderboardEntry {
