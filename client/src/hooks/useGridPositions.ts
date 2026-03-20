@@ -88,7 +88,11 @@ export function useGridPositions(
 
         const loadPositions = async () => {
             try {
-                if (!grid || !authenticated) return
+                if (!grid) return
+                // For real mode, we only need walletAddress (on-chain read, no backend auth required)
+                // For practice mode, we need backend auth
+                if (isPracticeMode && !authenticated) return
+                if (!isPracticeMode && !walletAddress) return
 
                 const currentCells = cellsRef.current
 
@@ -367,33 +371,48 @@ export function useGridPositions(
     })
     const windowData = rawWindowData as ReadonlyArray<WindowResult> | undefined
 
-    // Override betResults with on-chain settlement outcomes
+    // Override betResults AND positions with on-chain settlement outcomes
     useEffect(() => {
         if (!windowData || windowIdsToCheck.length === 0 || positions.length === 0) return
 
-        const updates: Record<string, 'won' | 'lost'> = {}
+        const betUpdates: Record<string, 'won' | 'lost'> = {}
+        let positionsChanged = false
+        const updatedPositions = positions.map(p => ({ ...p }))
 
         windowData.forEach((wr, idx) => {
             if (wr.status !== 'success' || wr.result == null) return
-            const r = wr.result as { settled: boolean; voided: boolean; winningCell: bigint }
+            const r = wr.result as { settled: boolean; voided: boolean; winningCell: bigint; redemptionRate: bigint }
             if (!r.settled && !r.voided) return
 
             const windowId = windowIdsToCheck[idx]
-            for (const p of positions) {
-                const underscoreIdx = p.cell_id.indexOf('_')
+            for (const pos of updatedPositions) {
+                const underscoreIdx = pos.cell_id.indexOf('_')
                 if (underscoreIdx < 0) continue
-                if (parseInt(p.cell_id.slice(0, underscoreIdx)) !== windowId) continue
+                if (parseInt(pos.cell_id.slice(0, underscoreIdx)) !== windowId) continue
 
-                const userCellId = parseInt(p.cell_id.slice(underscoreIdx + 1))
-                const slotKey = normalizeSlotKey(p.cell_id, cellsRef.current)
-                updates[slotKey] = (r.settled && !r.voided && Number(r.winningCell) === userCellId)
-                    ? 'won'
-                    : 'lost'
+                const userCellId = parseInt(pos.cell_id.slice(underscoreIdx + 1))
+                const slotKey = normalizeSlotKey(pos.cell_id, cellsRef.current)
+                const won = r.settled && !r.voided && Number(r.winningCell) === userCellId
+
+                betUpdates[slotKey] = won ? 'won' : 'lost'
+
+                if (pos.state !== 'RESOLVED') {
+                    pos.state = 'RESOLVED'
+                    pos.result = won ? 'WIN' : 'LOSS'
+                    // redemptionRate is scaled by 1e18: payout = stake * rate / 1e18
+                    pos.payout = won
+                        ? Math.round(pos.stake * Number(r.redemptionRate) / 1e18 * 100) / 100
+                        : 0
+                    positionsChanged = true
+                }
             }
         })
 
-        if (Object.keys(updates).length > 0) {
-            setBetResults(prev => ({ ...prev, ...updates }))
+        if (Object.keys(betUpdates).length > 0) {
+            setBetResults(prev => ({ ...prev, ...betUpdates }))
+        }
+        if (positionsChanged) {
+            setPositions(updatedPositions)
         }
     }, [windowData, windowIdsToCheck, positions])
 

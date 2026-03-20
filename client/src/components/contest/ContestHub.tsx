@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
     Trophy,
-    Target,
     TrendingUp,
     TrendingDown,
     Zap,
@@ -12,7 +11,6 @@ import {
     Activity,
     Flame,
     RefreshCw,
-    Play,
     Clock,
     Terminal,
     Crown,
@@ -30,7 +28,6 @@ export function ContestHub() {
         activeContest,
         upcomingContests,
         loading,
-        enterPracticeMode,
         selectContest,
         refreshContests
     } = useContest()
@@ -45,7 +42,6 @@ export function ContestHub() {
     const [currentTime, setCurrentTime] = useState(new Date())
     const [activeContestTimeRemaining, setActiveContestTimeRemaining] = useState<number>(0)
 
-    // Single consolidated timer for both current time and contest countdown
     useEffect(() => {
         const updateTimers = () => {
             setCurrentTime(new Date())
@@ -58,7 +54,7 @@ export function ContestHub() {
             }
         }
 
-        updateTimers() // Run immediately
+        updateTimers()
         const timer = setInterval(updateTimers, 1000)
         return () => clearInterval(timer)
     }, [activeContest])
@@ -112,13 +108,14 @@ export function ContestHub() {
         return (
             <div className="min-h-screen bg-zinc-950 dark">
                 <TerminalHeader />
-                <div className="max-w-7xl mx-auto p-4">
-                    <div className="grid gap-4 lg:grid-cols-4">
-                        <div className="lg:col-span-3 space-y-4">
-                            <Skeleton className="h-48 w-full bg-zinc-900" />
-                            <Skeleton className="h-32 w-full bg-zinc-900" />
+                <div className="max-w-7xl mx-auto p-4 space-y-4">
+                    <Skeleton className="h-10 w-full bg-zinc-900" />
+                    <Skeleton className="h-48 w-full bg-zinc-900" />
+                    <div className="grid gap-4 lg:grid-cols-3">
+                        <div className="lg:col-span-2">
+                            <Skeleton className="h-64 w-full bg-zinc-900" />
                         </div>
-                        <Skeleton className="h-96 w-full bg-zinc-900" />
+                        <Skeleton className="h-64 w-full bg-zinc-900" />
                     </div>
                 </div>
             </div>
@@ -131,25 +128,21 @@ export function ContestHub() {
 
             <div className="relative max-w-7xl mx-auto p-3 md:p-4 space-y-3 md:space-y-4">
                 {/* Status Bar */}
-                <div className="flex items-center justify-between px-2 md:px-4 py-2 bg-zinc-900/80 border border-zinc-800 rounded text-[10px] md:text-xs overflow-x-auto">
-                    <div className="flex items-center gap-3 md:gap-6">
-                        <StatusIndicator
-                            label="SYS"
-                            value="ON"
-                            color="green"
-                        />
+                <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/80 border border-zinc-800 rounded text-[10px] md:text-xs overflow-x-auto">
+                    <div className="flex items-center gap-4 md:gap-6">
+                        <StatusIndicator label="SYS" value="ON" color="green" />
                         <StatusIndicator
                             label="LIVE"
                             value={activeContest ? "YES" : "NO"}
                             color={activeContest ? "green" : "yellow"}
                         />
                         <StatusIndicator
-                            label="Q"
+                            label="QUEUED"
                             value={`${upcomingContests.length}`}
                             color="cyan"
                         />
                     </div>
-                    <div className="flex items-center gap-2 md:gap-4 text-zinc-500">
+                    <div className="flex items-center gap-3 text-zinc-500">
                         <span className="hidden sm:flex items-center gap-1.5">
                             <Wifi className="w-3 h-3 text-green-500" />
                             <span>CONNECTED</span>
@@ -159,43 +152,22 @@ export function ContestHub() {
                     </div>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-4">
-                    {/* Main Panel */}
-                    <div className="lg:col-span-3 space-y-4">
-                        {/* Active Contest / Welcome Panel */}
-                        {activeContest ? (
-                            <ActiveContestPanel
-                                contest={activeContest}
-                                timeRemaining={activeContestTimeRemaining}
-                                onJoin={() => handleJoinContest(activeContest)}
-                                participantCount={leaderboard.length}
-                            />
-                        ) : (
-                            <WelcomePanel onPractice={enterPracticeMode} />
-                        )}
+                {/* Hero: Active Contest or Waiting State */}
+                {activeContest ? (
+                    <ActiveContestPanel
+                        contest={activeContest}
+                        timeRemaining={activeContestTimeRemaining}
+                        onJoin={() => handleJoinContest(activeContest)}
+                        participantCount={leaderboard.length}
+                    />
+                ) : (
+                    <WaitingPanel upcomingCount={upcomingContests.length} />
+                )}
 
-                        {/* Quick Actions */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                            <ActionCard
-                                icon={<Target className="w-5 h-5" />}
-                                title="PRACTICE MODE"
-                                subtitle="Simulated trading environment"
-                                status="AVAILABLE"
-                                statusColor="cyan"
-                                onClick={enterPracticeMode}
-                            />
-                            <ActionCard
-                                icon={<Trophy className="w-5 h-5" />}
-                                title="LIVE CONTEST"
-                                subtitle={activeContest ? `${formatTimeRemaining(activeContestTimeRemaining)} remaining` : "No active session"}
-                                status={activeContest ? "ACTIVE" : "OFFLINE"}
-                                statusColor={activeContest ? "green" : "zinc"}
-                                onClick={activeContest ? () => handleJoinContest(activeContest) : undefined}
-                                disabled={!activeContest}
-                            />
-                        </div>
-
-                        {/* Upcoming Rides */}
+                {/* Content Grid */}
+                <div className="grid gap-4 lg:grid-cols-3">
+                    {/* Scheduled Rides */}
+                    <div className="lg:col-span-2">
                         <TerminalPanel
                             title="SCHEDULED RIDES"
                             icon={<Clock className="w-4 h-4" />}
@@ -211,10 +183,10 @@ export function ContestHub() {
                             }
                         >
                             {upcomingContests.length === 0 ? (
-                                <div className="p-8 text-center text-zinc-600">
+                                <div className="p-10 text-center text-zinc-600">
                                     <Clock className="w-8 h-8 mx-auto mb-3 opacity-30" />
-                                    <p className="text-sm">No scheduled contests</p>
-                                    <p className="text-xs mt-1">Check back later for new events</p>
+                                    <p className="text-sm">No scheduled rides</p>
+                                    <p className="text-xs mt-1 text-zinc-700">Check back soon</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-zinc-800/50">
@@ -231,8 +203,8 @@ export function ContestHub() {
                         </TerminalPanel>
                     </div>
 
-                    {/* Sidebar - Leaderboard */}
-                    <div className="lg:col-span-1">
+                    {/* Leaderboard */}
+                    <div>
                         <TerminalPanel
                             title="LEADERBOARD"
                             icon={<Activity className="w-4 h-4" />}
@@ -241,8 +213,8 @@ export function ContestHub() {
                             className="sticky top-20"
                         >
                             {!activeContest ? (
-                                <div className="p-6 text-center text-zinc-600">
-                                    <Activity className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                                <div className="p-8 text-center text-zinc-600">
+                                    <Trophy className="w-8 h-8 mx-auto mb-3 opacity-20" />
                                     <p className="text-sm">No active ride</p>
                                 </div>
                             ) : leaderboardLoading ? (
@@ -252,8 +224,8 @@ export function ContestHub() {
                                     ))}
                                 </div>
                             ) : leaderboard.length === 0 ? (
-                                <div className="p-6 text-center">
-                                    <Crown className="w-8 h-8 mx-auto mb-3 text-yellow-500/50" />
+                                <div className="p-8 text-center">
+                                    <Crown className="w-8 h-8 mx-auto mb-3 text-yellow-500/40" />
                                     <p className="text-sm text-zinc-400">No participants yet</p>
                                     <Button
                                         size="sm"
@@ -279,7 +251,7 @@ export function ContestHub() {
                                         onClick={() => handleJoinContest(activeContest)}
                                     >
                                         <Flame className="w-4 h-4 mr-2" />
-                                        ENTER CONTEST
+                                        ENTER RIDE
                                     </Button>
                                 </div>
                             )}
@@ -288,7 +260,6 @@ export function ContestHub() {
                 </div>
             </div>
 
-            {/* Contest Requirements Dialog */}
             {selectedContestForJoin && (
                 <ContestRequirements
                     isOpen={showRequirements}
@@ -378,13 +349,11 @@ function ActiveContestPanel({ contest, timeRemaining, onJoin, participantCount }
 
     return (
         <div className="relative bg-zinc-900/50 border border-green-500/30 rounded-lg overflow-hidden">
-            {/* Glow effect */}
             <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-cyan-500/5" />
             <div className="absolute top-0 right-0 w-64 h-64 bg-green-500/10 rounded-full blur-3xl" />
 
-            <div className="relative p-6">
+            <div className="relative p-5 md:p-6">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                    {/* Left side - Contest info */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-3">
                             <span className="flex items-center gap-2 px-3 py-1 bg-green-500/20 border border-green-500/30 rounded text-xs font-bold text-green-400">
@@ -395,27 +364,26 @@ function ActiveContestPanel({ contest, timeRemaining, onJoin, participantCount }
                                 LIVE SESSION
                             </span>
                             <span className="text-xs text-zinc-500">
-                                {participantCount} ACTIVE TRADER{participantCount !== 1 ? 'S' : ''}
+                                {participantCount} TRADER{participantCount !== 1 ? 'S' : ''}
                             </span>
                         </div>
 
                         <div>
-                            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight">{contest.name}</h1>
+                            <h1 className="text-xl md:text-2xl font-bold text-zinc-100 tracking-tight">{contest.name}</h1>
                             {contest.description && (
                                 <p className="text-sm text-zinc-500 mt-1">{contest.description}</p>
                             )}
                         </div>
 
-                        <div className="flex flex-wrap gap-3">
+                        <div className="flex flex-wrap gap-2">
                             <DataBadge label="ASSET" value={contest.asset_id} />
                             <DataBadge label="INTERVAL" value={`$${contest.price_interval.toFixed(2)}`} />
                             <DataBadge label="WINDOW" value={`${contest.timeframe_sec}s`} />
                         </div>
                     </div>
 
-                    {/* Right side - Timer and CTA */}
-                    <div className="flex flex-col items-center lg:items-end gap-4">
-                        <div className="text-center lg:text-right">
+                    <div className="flex flex-col items-start lg:items-end gap-4">
+                        <div className="lg:text-right">
                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-2">SESSION ENDS IN</p>
                             <div className="flex items-center gap-1 font-mono">
                                 <TimeUnit value={hours} label="HRS" />
@@ -462,87 +430,38 @@ function DataBadge({ label, value }: { label: string; value: string }) {
     )
 }
 
-function WelcomePanel({ onPractice }: { onPractice: () => void }) {
+function WaitingPanel({ upcomingCount }: { upcomingCount: number }) {
     return (
-        <div className="relative bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden p-6">
+        <div className="relative bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden p-5 md:p-6">
             <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-purple-500/5" />
 
-            <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                <div className="space-y-3">
+            <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <Terminal className="w-5 h-5 text-cyan-500" />
-                        <span className="text-xs font-bold text-cyan-400 tracking-wider">SYSTEM READY</span>
+                        <Terminal className="w-4 h-4 text-cyan-500" />
+                        <span className="text-xs font-bold text-cyan-400 tracking-wider">AWAITING SESSION</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-zinc-100">
-                        No Active Contest Session
+                    <h1 className="text-xl md:text-2xl font-bold text-zinc-100">
+                        No Active Ride
                     </h1>
-                    <p className="text-sm text-zinc-500 max-w-md">
-                        Initialize practice mode to test your strategies or wait for the next scheduled contest.
+                    <p className="text-sm text-zinc-500">
+                        {upcomingCount > 0
+                            ? `${upcomingCount} ride${upcomingCount !== 1 ? 's' : ''} scheduled — check the queue below.`
+                            : 'Check back soon for the next scheduled ride.'}
                     </p>
                 </div>
 
-                <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={onPractice}
-                    className="border-cyan-500/50 text-cyan-400 hover:bg-cyan-500/10 font-bold"
-                >
-                    <Play className="w-4 h-4 mr-2" />
-                    START SIMULATION
-                </Button>
+                <div className="flex items-center gap-3 px-4 py-3 bg-zinc-800/50 border border-zinc-700 rounded-lg">
+                    <Clock className="w-5 h-5 text-zinc-500 flex-shrink-0" />
+                    <div>
+                        <p className="text-[10px] text-zinc-600 uppercase tracking-wider">NEXT RIDE</p>
+                        <p className="text-sm font-bold text-zinc-300">
+                            {upcomingCount > 0 ? 'See schedule below' : 'TBD'}
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
-    )
-}
-
-interface ActionCardProps {
-    icon: React.ReactNode
-    title: string
-    subtitle: string
-    status: string
-    statusColor: 'green' | 'cyan' | 'yellow' | 'zinc'
-    onClick?: () => void
-    disabled?: boolean
-}
-
-function ActionCard({ icon, title, subtitle, status, statusColor, onClick, disabled }: ActionCardProps) {
-    const statusColors = {
-        green: 'text-green-500 bg-green-500/10 border-green-500/30',
-        cyan: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/30',
-        yellow: 'text-yellow-500 bg-yellow-500/10 border-yellow-500/30',
-        zinc: 'text-zinc-500 bg-zinc-800 border-zinc-700',
-    }
-
-    return (
-        <button
-            onClick={onClick}
-            disabled={disabled}
-            className={`group p-4 bg-zinc-900/50 border border-zinc-800 rounded-lg text-left transition-all ${
-                disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-zinc-600 hover:bg-zinc-800/50'
-            }`}
-        >
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-10 h-10 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center flex-shrink-0 transition-colors ${
-                        disabled ? 'text-zinc-600' : 'text-zinc-400 group-hover:text-zinc-200 group-hover:border-zinc-600'
-                    }`}>
-                        {icon}
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-zinc-200 tracking-wide">{title}</h3>
-                        <p className="text-xs text-zinc-500 mt-0.5 truncate">{subtitle}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded border ${statusColors[statusColor]}`}>
-                        {status}
-                    </span>
-                    {!disabled && (
-                        <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 group-hover:translate-x-0.5 transition-all" />
-                    )}
-                </div>
-            </div>
-        </button>
     )
 }
 
