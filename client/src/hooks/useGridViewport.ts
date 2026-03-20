@@ -17,7 +17,8 @@ export function useGridViewport(
     interactive: boolean = true,
     priceInterval: number = 5, // Grid's price interval for cell sizing
     anchorPrice: number | null = null, // Grid's anchor price for fixed centering
-    timeBoundary: TimeBoundary | null = null // Contest time boundaries (null = no restriction, e.g., practice mode)
+    timeBoundary: TimeBoundary | null = null, // Contest time boundaries (null = no restriction, e.g., practice mode)
+    initialTimeOffsetMs: number = 0 // Shift initial viewport center into the future (ms)
 ) {
     const [viewportTimeRange, setViewportTimeRange] = useState(10 * 60 * 1000) // 10 minutes default
     const [viewportCenterTime, setViewportCenterTime] = useState<number | null>(
@@ -54,7 +55,7 @@ export function useGridViewport(
     }, [])
 
     const now = nowTick
-    const centerTime = viewportCenterTime ?? now
+    const centerTime = viewportCenterTime ?? (now + initialTimeOffsetMs)
     // Use current price for initial centering so the chart is visible, fall back to anchor price
     const centerPrice = viewportCenterPrice ?? (currentPrice || anchorPrice || 3000)
 

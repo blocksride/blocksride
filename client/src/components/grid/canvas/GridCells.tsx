@@ -39,7 +39,7 @@ export const GridCells: React.FC<GridCellsProps> = ({
     cellStakes,
     multipliers,
     recentCellIds,
-    frozenWindows = 2,
+    frozenWindows = 3,
     activeCellId,
     getX,
     getY,

@@ -228,6 +228,12 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [exitToSelection])
 
     const containerRef = useRef<HTMLDivElement>(null)
+    // Shift initial view so bettable windows (frozen+1 onwards) appear in the centre.
+    // With frozenWindows=3 and 60s windows: first bettable is at +4min, offset by +3min
+    // puts the bettable zone roughly centred in the 10-minute viewport.
+    const frozenWindowsCount = 3
+    const initialTimeOffsetMs = (frozenWindowsCount - 1) * selectedTimeframe * 1000
+
     const viewport = useGridViewport(
         currentPrice,
         selectedTimeframe,
@@ -235,7 +241,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         true,
         grid?.price_interval || 5,
         grid?.anchor_price || null,
-        timeBoundary
+        timeBoundary,
+        initialTimeOffsetMs
     )
 
     const priceLabels = useMemo(() => {

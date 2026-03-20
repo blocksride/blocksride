@@ -58,7 +58,7 @@ const GridCanvasInner: React.FC<GridCanvasProps> = ({
     const viewportDuration = viewportEnd - viewportStart
     const visiblePriceDiff = visibleMaxPrice - visibleMinPrice
     const now = Date.now()
-    const frozenWindows = 2
+    const frozenWindows = 3
 
     const getX = (t: number) => {
         return ((t - viewportStart) / viewportDuration) * width
