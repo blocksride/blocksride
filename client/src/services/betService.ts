@@ -32,6 +32,12 @@ export interface ScheduledBet {
     submitAfter: number  // unix timestamp when relay submits the tx
 }
 
+export type BetStatus =
+    | { state: 'pending'; submitAfter: number }
+    | { state: 'submitting' }
+    | { state: 'confirmed'; betTxHash: string; permitTxHash?: string }
+    | { state: 'failed'; error: string }
+
 export interface SubmittedClaim {
     txHash: string
 }
@@ -204,6 +210,8 @@ export const betService = {
             chainId: string
             spenderAddress?: `0x${string}`
             hookAddress?: `0x${string}`
+            domainName?: string
+            domainVersion?: string
         }>(`/wallet/permit-info?address=${address}`)
 
         const spenderAddress = res.data.spenderAddress ?? res.data.hookAddress
@@ -211,6 +219,8 @@ export const betService = {
             nonce: BigInt(res.data.nonce),
             tokenAddress: res.data.tokenAddress,
             chainId: Number(res.data.chainId),
+            domainName: res.data.domainName ?? 'USD Coin',
+            domainVersion: res.data.domainVersion ?? '2',
             ...(spenderAddress ? { spenderAddress } : {}),
         }
     },
@@ -222,7 +232,7 @@ export const betService = {
         hookAddress: `0x${string}`,
         chainId: number,
     ): Promise<PermitPayload> => {
-        const { nonce, spenderAddress } = await betService.getPermitInfo(userAddress)
+        const { nonce, spenderAddress, domainName, domainVersion } = await betService.getPermitInfo(userAddress)
         const permitSpender = spenderAddress ?? hookAddress
 
         if (spenderAddress && spenderAddress.toLowerCase() !== hookAddress.toLowerCase()) {
@@ -234,8 +244,8 @@ export const betService = {
 
         const signature = await signTypedDataWithProvider(walletClient, userAddress, {
             domain: {
-                name: 'USD Coin',
-                version: '2',
+                name: domainName,
+                version: domainVersion,
                 chainId,
                 verifyingContract: tokenAddress,
             },
@@ -360,6 +370,37 @@ export const betService = {
     // DELETE /api/relay/bet/:intentId — cancel within undo window
     cancelBet: async (intentId: string): Promise<void> => {
         await axiosInstance.delete(`/relay/bet/${intentId}`)
+    },
+
+    // GET /api/relay/bet/:intentId — poll until confirmed or failed
+    getBetStatus: async (intentId: string): Promise<BetStatus> => {
+        const res = await axiosInstance.get<BetStatus>(`/relay/bet/${intentId}`)
+        return res.data
+    },
+
+    // Poll until state is confirmed or failed (max ~30s)
+    pollBetStatus: (intentId: string, onResult: (status: BetStatus) => void): (() => void) => {
+        let stopped = false
+        let attempts = 0
+        const maxAttempts = 30
+
+        const poll = async () => {
+            if (stopped || attempts >= maxAttempts) return
+            attempts++
+            try {
+                const status = await betService.getBetStatus(intentId)
+                if (status.state === 'confirmed' || status.state === 'failed') {
+                    onResult(status)
+                    return
+                }
+            } catch {
+                // ignore transient errors, keep polling
+            }
+            if (!stopped) setTimeout(poll, 1000)
+        }
+
+        setTimeout(poll, 1000)
+        return () => { stopped = true }
     },
 
     // GET /api/relay/claim-nonce — on-chain nonce from PariHook.claimNonces(user)

@@ -35,7 +35,7 @@ import { useTokenBalance } from '../hooks/useTokenBalance'
 import { useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
-import { betService, type Pool } from '../services/betService'
+import { betService, type BetStatus, type Pool } from '../services/betService'
 import { getCellPriceRange, getSlotKey, getWindowEndMs, getWindowStartMs, normalizeSlotKey } from '../lib/gridSlots'
 
 const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
@@ -565,15 +565,41 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 setPendingBetInfo(null)
                 setQuoteCellId(null)
 
+                let cancelled = false
                 setUndoToast({
                     amount: stake,
                     priceLabel,
                     undoFn: () => {
+                        cancelled = true
                         betService.cancelBet(intentId).catch(() => {})
                         removeOptimisticCell(slotKey)
                         placedCellsRef.current.delete(slotKey)
                         setPendingStake(prev => Math.max(0, prev - stake))
                     },
+                })
+
+                const network = import.meta.env.VITE_NETWORK || 'mainnet'
+                const basescanBase = network === 'sepolia'
+                    ? 'https://sepolia.basescan.org/tx'
+                    : 'https://basescan.org/tx'
+
+                betService.pollBetStatus(intentId, (status: BetStatus) => {
+                    if (cancelled) return
+                    if (status.state === 'confirmed') {
+                        toast.success('Bet confirmed on-chain', {
+                            description: `$${stake} on ${priceLabel}`,
+                            action: {
+                                label: 'View tx',
+                                onClick: () => window.open(`${basescanBase}/${status.betTxHash}`, '_blank'),
+                            },
+                        })
+                    } else if (status.state === 'failed') {
+                        toast.error('Bet failed', {
+                            description: status.error || 'Transaction reverted.',
+                        })
+                        removeOptimisticCell(slotKey)
+                        placedCellsRef.current.delete(slotKey)
+                    }
                 })
             }
         } catch (err) {
