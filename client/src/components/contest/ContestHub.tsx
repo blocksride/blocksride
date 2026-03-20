@@ -67,13 +67,12 @@ export function ContestHub() {
         const hasBalance = Number(walletBalance || '0') > 0
 
         if (hasBalance) {
-            // Skip requirements modal and enter contest directly
             selectContest(contest)
-        } else {
-            // Show requirements modal
-            setSelectedContestForJoin(contest)
-            setShowRequirements(true)
+            return
         }
+
+        setSelectedContestForJoin(contest)
+        setShowRequirements(true)
     }
 
     const handleRequirementsMet = () => {
@@ -295,6 +294,9 @@ export function ContestHub() {
                     isOpen={showRequirements}
                     onClose={() => {
                         setShowRequirements(false)
+                        if (selectedContestForJoin) {
+                            selectContest(selectedContestForJoin)
+                        }
                         setSelectedContestForJoin(null)
                     }}
                     contest={selectedContestForJoin}

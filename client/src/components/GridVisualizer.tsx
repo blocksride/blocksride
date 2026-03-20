@@ -5,6 +5,7 @@ import { GridSkeleton } from './grid/GridSkeleton'
 import { PositionSummary } from './grid/PositionSummary'
 import { BetHistory } from './grid/BetHistory'
 import { TradeControls } from './grid/TradeControls'
+import { ContestRequirements } from './contest/ContestRequirements'
 import { UndoToast } from './grid/UndoToast'
 import { Confetti, useConfetti } from '@/components/ui/confetti'
 import { BetConfirmation } from '@/components/ConfirmationDialog'
@@ -30,6 +31,7 @@ import {
 
 import { useBetQuote } from '../hooks/useBetQuote'
 import { usePoolMultipliers } from '../hooks/usePoolMultipliers'
+import { useTokenBalance } from '../hooks/useTokenBalance'
 import { useWallets } from '@privy-io/react-auth'
 import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
@@ -120,7 +122,9 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
     const selectedTimeframe = 60
     const { isPracticeMode, selectedContest, timeRemaining, exitToSelection } = useContest()
+    const { formatted: walletBalance } = useTokenBalance()
     const [showContestEnded, setShowContestEnded] = useState(false)
+    const [showRequirements, setShowRequirements] = useState(false)
 
     const timeBoundary = useMemo(() => {
         if (isPracticeMode || !selectedContest) return null
@@ -301,8 +305,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         cellStakes: onChainCellStakes,
     })
     const practiceBalance = user?.practice_balance ?? 1000
-    const platformBalance = user?.balance ?? 0
-    const userBalance = isPracticeMode ? practiceBalance : platformBalance
+    const liveWalletBalance = Number(walletBalance || '0')
+    const userBalance = isPracticeMode ? practiceBalance : liveWalletBalance
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
     const claimItems = useMemo(() => {
@@ -647,6 +651,11 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
+        if (!isPracticeMode && Number(walletBalance || '0') <= 0) {
+            setShowRequirements(true)
+            return
+        }
+
         if (currentStake > availableBalance) {
             toast.error('Insufficient Balance', {
                 description: `You only have $${availableBalance.toFixed(2)} available`,
@@ -673,7 +682,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [
         viewport.dragStart.hasMoved, isPracticeMode, authenticated,
         selectedCells, currentStake, availableBalance, activePool, grid,
-        betConfirmationEnabled, executeBet,
+        betConfirmationEnabled, executeBet, walletBalance,
     ])
 
     const handleBetConfirm = useCallback(() => {
@@ -723,6 +732,15 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                         toast.success('Bet undone')
                     }}
                     onExpire={() => setUndoToast(null)}
+                />
+            )}
+
+            {selectedContest && (
+                <ContestRequirements
+                    isOpen={showRequirements}
+                    onClose={() => setShowRequirements(false)}
+                    contest={selectedContest}
+                    onRequirementsMet={() => setShowRequirements(false)}
                 />
             )}
 
