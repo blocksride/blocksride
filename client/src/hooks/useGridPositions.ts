@@ -102,6 +102,7 @@ export function useGridPositions(
     const [selectedCells, setSelectedCells] = useState<string[]>([])
     const [totalActiveStake, setTotalActiveStake] = useState(0)
     const [activePool, setActivePool] = useState<Pool | null>(null)
+    const [extraCells, setExtraCells] = useState<Cell[]>([])
     const { authenticated, walletAddress } = useAuth()
 
     const cellsRef = useRef<Cell[]>(cells)
@@ -250,7 +251,7 @@ export function useGridPositions(
 
                     // Inject synthetic cell if not in current cells array
                     if (!cellsRef.current.find(c => c.cell_id === cellKey)) {
-                        cellsRef.current = [...cellsRef.current, {
+                        const syntheticCell: Cell = {
                             cell_id: cellKey,
                             grid_id: grid?.grid_id ?? `${selectedAsset}-live`,
                             asset_id: selectedAsset,
@@ -260,7 +261,9 @@ export function useGridPositions(
                             p_high: pHigh,
                             t_start: new Date(tStartSec * 1000).toISOString(),
                             t_end: new Date(tEndSec * 1000).toISOString(),
-                        }]
+                        }
+                        cellsRef.current = [...cellsRef.current, syntheticCell]
+                        setExtraCells(prev => prev.find(c => c.cell_id === cellKey) ? prev : [...prev, syntheticCell])
                     }
 
                     if (r.state === 'won') {
@@ -440,6 +443,7 @@ export function useGridPositions(
                         t_end: new Date(tEndSec * 1000).toISOString(),
                     }
                     cellsRef.current = [...cellsRef.current.filter(c => c.cell_id !== cellKey), syntheticCell]
+                    setExtraCells(prev => prev.find(c => c.cell_id === cellKey) ? prev : [...prev, syntheticCell])
                 }
             })
         })
@@ -623,6 +627,7 @@ export function useGridPositions(
         selectedCells,
         setSelectedCells,
         totalActiveStake,
+        extraCells,
         addOptimisticCell,
         removeOptimisticCell,
         updateCellId,

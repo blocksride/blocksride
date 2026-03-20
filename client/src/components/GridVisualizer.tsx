@@ -137,9 +137,16 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     const { grid, cells } = useGridState(selectedAsset, selectedTimeframe)
     const { prices, currentPrice } = useGridPrices(selectedAsset, grid)
     const {
-        positions, betResults, selectedCells, totalActiveStake,
+        positions, betResults, selectedCells, totalActiveStake, extraCells,
         addOptimisticCell, removeOptimisticCell, updateCellId,
     } = useGridPositions(selectedAsset, grid, cells, currentPrice, isPracticeMode)
+
+    // Merge grid cells with synthetic cells for historical windows
+    const allCells = useMemo(() => {
+        if (extraCells.length === 0) return cells
+        const ids = new Set(cells.map(c => c.cell_id))
+        return [...cells, ...extraCells.filter(c => !ids.has(c.cell_id))]
+    }, [cells, extraCells])
 
     const { showConfetti, trigger: triggerConfetti, reset: resetConfetti } = useConfetti()
 
@@ -1137,13 +1144,13 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                 selectedCells={selectedCells}
                                 betResults={betResults}
                                 positions={positions}
-                                cells={cells}
+                                cells={allCells}
                             />
 
                             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                                 <BetHistory
                                     betResults={betResults}
-                                    cells={cells}
+                                    cells={allCells}
                                     positions={positions}
                                 />
                             </div>
@@ -1233,7 +1240,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                 <div className="flex-1 min-h-0 overflow-y-auto">
                                     <BetHistory
                                         betResults={betResults}
-                                        cells={cells}
+                                        cells={allCells}
                                         positions={positions}
                                     />
                                 </div>
