@@ -625,18 +625,31 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                     ? (err as { response?: { data?: string } }).response?.data
                     : null
             const msg = responseMessage || (err instanceof Error ? err.message : '')
+
+            // Detect user-initiated rejection (Privy dismissed, MetaMask rejected, etc.)
+            const isUserRejection = /user (rejected|denied|cancelled|canceled)/i.test(msg) ||
+                msg.includes('User rejected') ||
+                msg.includes('user rejected') ||
+                msg === 'window-closing'
+
             if (msg === 'no-wallet') {
                 toast.error('Embedded wallet not ready', {
                     description: 'Sign in with Privy to use the embedded wallet for betting.',
                 })
-            } else if (msg !== 'no-pool') {
+            } else if (!isUserRejection && msg !== 'no-pool') {
                 toast.error('Failed to place bet', {
                     description: msg || 'Unexpected error while scheduling bet.',
                 })
             }
+
+            // Clean up all state so the cell is fully deselected
             removeOptimisticCell(slotKey)
             placedCellsRef.current.delete(slotKey)
             setPendingStake(prev => Math.max(0, prev - stake))
+            setQuoteCellId(null)
+            setShowBetConfirmation(false)
+            setPendingBetCellId(null)
+            setPendingBetInfo(null)
         } finally {
             isPlacingBetRef.current = false
             setIsBetLoading(false)
