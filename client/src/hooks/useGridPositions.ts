@@ -7,10 +7,27 @@ import { useAuth } from '../contexts/AuthContext'
 import { betService } from '../services/betService'
 import type { Pool } from '../services/betService'
 
-const GET_USER_STAKE_ABI = [
+// userWindowStake(bytes32 poolId, uint256 windowId, address user) → uint256
+// Auto-generated getter for the public mapping
+const USER_WINDOW_STAKE_ABI = [
     {
         type: 'function',
-        name: 'getUserStake',
+        name: 'userWindowStake',
+        stateMutability: 'view',
+        inputs: [
+            { name: 'poolId', type: 'bytes32' },
+            { name: 'windowId', type: 'uint256' },
+            { name: 'user', type: 'address' },
+        ],
+        outputs: [{ name: '', type: 'uint256' }],
+    },
+] as const
+
+// getUserStakes(PoolKey, windowId, user, cellIds[]) → uint256[]
+const GET_USER_STAKES_ABI = [
+    {
+        type: 'function',
+        name: 'getUserStakes',
         stateMutability: 'view',
         inputs: [
             {
@@ -25,10 +42,10 @@ const GET_USER_STAKE_ABI = [
                 ],
             },
             { name: 'windowId', type: 'uint256' },
-            { name: 'cellId', type: 'uint256' },
             { name: 'user', type: 'address' },
+            { name: 'cellIds', type: 'uint256[]' },
         ],
-        outputs: [{ name: '', type: 'uint256' }],
+        outputs: [{ name: 'stakes', type: 'uint256[]' }],
     },
 ] as const
 
@@ -61,6 +78,15 @@ const GET_WINDOW_ABI = [
     },
 ] as const
 
+// Price bands to scan per window when looking for user cells.
+// ETH at $2/band: covers $1,000 → $6,000 price range.
+const CELL_SCAN_MIN = 500
+const CELL_SCAN_MAX = 3000
+const CELL_SCAN_IDS = Array.from(
+    { length: CELL_SCAN_MAX - CELL_SCAN_MIN + 1 },
+    (_, i) => BigInt(CELL_SCAN_MIN + i),
+)
+
 export function useGridPositions(
     selectedAsset: string,
     grid: Grid | null,
@@ -89,7 +115,7 @@ export function useGridPositions(
         touchedCellsRef.current = new Set()
     }, [grid, authenticated])
 
-    // Load pool config for real mode
+    // Load pool config (needed for contract calls)
     useEffect(() => {
         if (isPracticeMode) return
         betService.getPools()
@@ -170,7 +196,7 @@ export function useGridPositions(
         }
     }, [selectedAsset, grid, authenticated, isPracticeMode])
 
-    // ── Real mode: getUserStake multicall for all visible cells ───────────────
+    // ── Real mode: Step 1 — scan past windows for user stake ─────────────────
     const poolKey = useMemo(() => {
         if (!activePool) return null
         return {
@@ -182,76 +208,134 @@ export function useGridPositions(
         }
     }, [activePool])
 
-    // Keep cells and contracts in the same order so rawStakeData[i] → stakeQueryCells[i]
-    const { getUserStakeContracts, stakeQueryCells } = useMemo(() => {
-        if (isPracticeMode || !activePool || !poolKey || !walletAddress || cells.length === 0) {
-            return { getUserStakeContracts: [], stakeQueryCells: [] }
+    // Window IDs to scan: last 200 windows + current + next 5
+    const scanWindowIds = useMemo(() => {
+        if (isPracticeMode || !activePool || !walletAddress) return []
+        const nowSec = Math.floor(Date.now() / 1000)
+        const currentWindowId = Math.floor(nowSec / activePool.windowDurationSec)
+        const ids: number[] = []
+        for (let i = -200; i <= 5; i++) {
+            const wid = currentWindowId + i
+            if (wid > 0) ids.push(wid)
         }
-        const contracts: {
-            address: `0x${string}`
-            abi: typeof GET_USER_STAKE_ABI
-            functionName: 'getUserStake'
-            args: readonly [typeof poolKey, bigint, bigint, `0x${string}`]
-        }[] = []
-        const validCells: Cell[] = []
-        for (const cell of cells) {
-            const parts = cell.cell_id.split('_')
-            if (parts.length !== 2) continue
-            const windowId = parseInt(parts[0], 10)
-            const cellId = parseInt(parts[1], 10)
-            if (isNaN(windowId) || isNaN(cellId)) continue
-            contracts.push({
-                address: activePool.poolKey.hooks as `0x${string}`,
-                abi: GET_USER_STAKE_ABI,
-                functionName: 'getUserStake' as const,
-                args: [poolKey, BigInt(windowId), BigInt(cellId), walletAddress as `0x${string}`] as const,
-            })
-            validCells.push(cell)
-        }
-        return { getUserStakeContracts: contracts, stakeQueryCells: validCells }
-    }, [isPracticeMode, activePool, poolKey, walletAddress, cells])
+        return ids
+    }, [isPracticeMode, activePool, walletAddress])
 
-    const { data: rawStakeData } = useReadContracts({
-        contracts: getUserStakeContracts,
+    const userWindowStakeContracts = useMemo(() => {
+        if (!activePool || !walletAddress || scanWindowIds.length === 0) return []
+        return scanWindowIds.map(windowId => ({
+            address: activePool.poolKey.hooks as `0x${string}`,
+            abi: USER_WINDOW_STAKE_ABI,
+            functionName: 'userWindowStake' as const,
+            args: [
+                activePool.poolId as `0x${string}`,
+                BigInt(windowId),
+                walletAddress as `0x${string}`,
+            ] as const,
+        }))
+    }, [activePool, walletAddress, scanWindowIds])
+
+    const { data: windowStakeData } = useReadContracts({
+        contracts: userWindowStakeContracts,
         query: {
-            enabled: getUserStakeContracts.length > 0,
+            enabled: userWindowStakeContracts.length > 0,
+            refetchInterval: 15_000,
+        },
+    })
+
+    // Windows where user has stake > 0
+    const bettedWindowIds = useMemo(() => {
+        if (!windowStakeData) return []
+        return scanWindowIds.filter((_, idx) => {
+            const r = windowStakeData[idx]
+            return r?.status === 'success' && (r.result as bigint) > 0n
+        })
+    }, [windowStakeData, scanWindowIds])
+
+    // ── Real mode: Step 2 — find cells within each betted window ─────────────
+    const getUserStakesContracts = useMemo(() => {
+        if (!activePool || !poolKey || !walletAddress || bettedWindowIds.length === 0) return []
+        return bettedWindowIds.map(windowId => ({
+            address: activePool.poolKey.hooks as `0x${string}`,
+            abi: GET_USER_STAKES_ABI,
+            functionName: 'getUserStakes' as const,
+            args: [
+                poolKey,
+                BigInt(windowId),
+                walletAddress as `0x${string}`,
+                CELL_SCAN_IDS,
+            ] as const,
+        }))
+    }, [activePool, poolKey, walletAddress, bettedWindowIds])
+
+    const { data: userStakesData } = useReadContracts({
+        contracts: getUserStakesContracts,
+        query: {
+            enabled: getUserStakesContracts.length > 0,
             refetchInterval: 10_000,
         },
     })
 
     // Derive positions from on-chain stake data
     useEffect(() => {
-        if (isPracticeMode || !rawStakeData || !walletAddress || cells.length === 0) return
+        if (isPracticeMode || !userStakesData || !walletAddress || !activePool) return
 
         const newPositions: Position[] = []
         const placedCellIds: string[] = []
+        const priceInterval = grid?.price_interval ?? 2
 
-        rawStakeData.forEach((result, idx) => {
-            if (result.status !== 'success') return
-            const stake = result.result as bigint
-            if (!stake || stake === 0n) return
+        userStakesData.forEach((result, windowIdx) => {
+            if (result.status !== 'success' || !result.result) return
+            const stakes = result.result as bigint[]
+            const windowId = bettedWindowIds[windowIdx]
+            if (windowId === undefined) return
 
-            const cell = stakeQueryCells[idx]
-            if (!cell) return
+            stakes.forEach((stake, cellIdx) => {
+                if (!stake || stake === 0n) return
 
-            const slotKey = normalizeSlotKey(cell.cell_id, cells)
-            placedCellIds.push(slotKey)
+                const cellIdNum = CELL_SCAN_MIN + cellIdx
+                const cellKey = `${windowId}_${cellIdNum}`
 
-            newPositions.push({
-                position_id: `onchain-${cell.cell_id}`,
-                user_id: walletAddress,
-                asset_id: selectedAsset,
-                cell_id: cell.cell_id,
-                stake: Number(stake) / 1_000_000,
-                state: 'ACTIVE',
-                is_practice: false,
-            } as Position)
+                // Check if there's a matching synthetic cell (for time/price info)
+                const matchingCell = cellsRef.current.find(c => c.cell_id === cellKey)
+                const tStartSec = windowId * activePool.windowDurationSec
+                const tEndSec = tStartSec + activePool.windowDurationSec
+                const pLow = cellIdNum * priceInterval
+                const pHigh = pLow + priceInterval
+
+                // Use synthetic cell data if available, else compute from on-chain facts
+                void matchingCell
+
+                placedCellIds.push(cellKey)
+                newPositions.push({
+                    position_id: `onchain-${cellKey}`,
+                    user_id: walletAddress,
+                    asset_id: selectedAsset,
+                    cell_id: cellKey,
+                    stake: Number(stake) / 1_000_000,
+                    state: 'ACTIVE',
+                    is_practice: false,
+                } as Position)
+
+                // Inject a synthetic cell entry if missing so time-based logic works
+                if (!matchingCell) {
+                    const syntheticCell: Cell = {
+                        cell_id: cellKey,
+                        grid_id: grid?.grid_id ?? `${selectedAsset}-live`,
+                        p_low: pLow,
+                        p_high: pHigh,
+                        t_start: new Date(tStartSec * 1000).toISOString(),
+                        t_end: new Date(tEndSec * 1000).toISOString(),
+                    }
+                    cellsRef.current = [...cellsRef.current.filter(c => c.cell_id !== cellKey), syntheticCell]
+                }
+            })
         })
 
         setPositions(newPositions)
         setTotalActiveStake(newPositions.reduce((sum, p) => sum + p.stake, 0))
 
-        // Set pending for cells not yet resolved
+        // Only set pending for cells not yet resolved
         setBetResults(prev => {
             const next = { ...prev }
             placedCellIds.forEach(id => {
@@ -266,7 +350,7 @@ export function useGridPositions(
             placedCellIds.forEach(id => { if (!kept.includes(id)) kept.push(id) })
             return Array.from(new Set(kept))
         })
-    }, [rawStakeData, isPracticeMode, walletAddress, stakeQueryCells, selectedAsset])
+    }, [userStakesData, isPracticeMode, walletAddress, activePool, bettedWindowIds, selectedAsset, grid])
 
     // ── Time-based winning state ──────────────────────────────────────────────
     useEffect(() => {
@@ -274,14 +358,15 @@ export function useGridPositions(
         const interval = setInterval(() => {
             const now = Date.now()
             const updates: Record<string, 'won' | 'lost' | 'pending' | 'winning'> = {}
+            const currentCells = cellsRef.current
 
             selectedCells.forEach(cellId => {
                 const currentStatus = betResults[cellId]
                 if (currentStatus === 'won' || currentStatus === 'lost') return
 
-                const canonicalCellId = normalizeSlotKey(cellId, cells)
-                const cell = cells.find(c =>
-                    normalizeSlotKey(c.cell_id, cells) === canonicalCellId || c.cell_id === cellId
+                const canonicalCellId = normalizeSlotKey(cellId, currentCells)
+                const cell = currentCells.find(c =>
+                    normalizeSlotKey(c.cell_id, currentCells) === canonicalCellId || c.cell_id === cellId
                 )
                 if (!cell) return
 
@@ -317,7 +402,7 @@ export function useGridPositions(
             }
         }, 500)
         return () => clearInterval(interval)
-    }, [selectedCells, cells, grid, currentPrice, betResults])
+    }, [selectedCells, grid, currentPrice, betResults])
 
     // ── On-chain settlement via getWindow multicall ───────────────────────────
     const windowIdsToCheck = useMemo(() => {
