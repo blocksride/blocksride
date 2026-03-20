@@ -36,70 +36,70 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const activeWallet = embeddedWallet || wallets[0]
 
     // Sync Privy auth state with backend
-    useEffect(() => {
-        const syncAuth = async () => {
-            if (!ready) {
-                return
-            }
+    const syncAuth = useCallback(async () => {
+        if (!ready) {
+            return
+        }
 
-            if (privyAuthenticated && privyUser && !authSynced) {
-                try {
-                    setLoading(true)
-                    // Get Privy access token
-                    const privyToken = await getAccessToken()
+        if (privyAuthenticated && privyUser && !authSynced) {
+            try {
+                setLoading(true)
+                // Get Privy access token
+                const privyToken = await getAccessToken()
 
-                    if (!privyToken) {
-                        throw new Error('Failed to get Privy access token')
-                    }
-
-                    // Exchange Privy token for platform JWT cookie
-                    const walletAddr = activeWallet?.address || ''
-                    const { user: userData } = await authService.verifyPrivy(privyToken, walletAddr)
-
-                    setUser(userData)
-                    setWalletAddress(walletAddr)
-                    setAuthenticated(true)
-                    setAuthSynced(true)
-                } catch (error) {
-                    console.error('Failed to sync Privy auth with backend:', error)
-                    // Try to get existing session
-                    try {
-                        const userData = await authService.getUser()
-                        setUser(userData)
-                        setAuthenticated(true)
-                        setAuthSynced(true)
-                        if (activeWallet?.address) {
-                            setWalletAddress(activeWallet.address)
-                        }
-                    } catch {
-                        // No valid session
-                        setUser(null)
-                        setAuthenticated(false)
-                        setAuthSynced(false)
-                    }
-                } finally {
-                    setLoading(false)
+                if (!privyToken) {
+                    throw new Error('Failed to get Privy access token')
                 }
-            } else if (!privyAuthenticated) {
-                // User is not authenticated with Privy
-                // Check for existing platform session
+
+                // Exchange Privy token for platform JWT cookie
+                const walletAddr = activeWallet?.address || ''
+                const { user: userData } = await authService.verifyPrivy(privyToken, walletAddr)
+
+                setUser(userData)
+                setWalletAddress(walletAddr)
+                setAuthenticated(true)
+                setAuthSynced(true)
+            } catch (error) {
+                console.error('Failed to sync Privy auth with backend:', error)
+                // Try to get existing session
                 try {
                     const userData = await authService.getUser()
                     setUser(userData)
                     setAuthenticated(true)
+                    setAuthSynced(true)
+                    if (activeWallet?.address) {
+                        setWalletAddress(activeWallet.address)
+                    }
                 } catch {
+                    // No valid session
                     setUser(null)
                     setAuthenticated(false)
+                    setAuthSynced(false)
                 }
-                setAuthSynced(false)
-                setLoading(false)
-            } else {
+            } finally {
                 setLoading(false)
             }
+        } else if (!privyAuthenticated) {
+            // User is not authenticated with Privy
+            // Check for existing platform session
+            try {
+                const userData = await authService.getUser()
+                setUser(userData)
+                setAuthenticated(true)
+            } catch {
+                setUser(null)
+                setAuthenticated(false)
+            }
+            setAuthSynced(false)
+            setLoading(false)
+        } else {
+            setLoading(false)
         }
-
-        syncAuth()
     }, [privyAuthenticated, privyUser, ready, getAccessToken, activeWallet?.address, authSynced])
+
+    useEffect(() => {
+        syncAuth()
+    }, [syncAuth])
 
     // Update wallet address when wallet changes
     useEffect(() => {
@@ -110,13 +110,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     // Sign in with Privy
     const signIn = useCallback(() => {
-        // DO NOT call setLoading(true) here.
-        // If the user opens then dismisses the Privy modal, privyAuthenticated
-        // stays false and none of the syncAuth deps change, so the effect never
-        // re-fires — loading would be permanently stuck at true, freezing the UI.
-        // The syncAuth effect sets loading=true itself when backend sync begins.
-        login()
-    }, [login])
+        if (privyAuthenticated) {
+            // Privy already has a session but backend sync failed — retry sync
+            // instead of calling login() again (which Privy would reject)
+            setAuthSynced(false)
+            syncAuth()
+        } else {
+            // DO NOT call setLoading(true) here.
+            // If the user opens then dismisses the Privy modal, privyAuthenticated
+            // stays false and none of the syncAuth deps change, so the effect never
+            // re-fires — loading would be permanently stuck at true, freezing the UI.
+            // The syncAuth effect sets loading=true itself when backend sync begins.
+            login()
+        }
+    }, [login, privyAuthenticated, syncAuth])
 
     // Sign out
     const signOut = useCallback(async () => {
