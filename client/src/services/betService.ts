@@ -202,11 +202,16 @@ export const betService = {
             nonce: string
             tokenAddress: `0x${string}`
             chainId: string
+            spenderAddress?: `0x${string}`
+            hookAddress?: `0x${string}`
         }>(`/wallet/permit-info?address=${address}`)
+
+        const spenderAddress = res.data.spenderAddress ?? res.data.hookAddress
         return {
             nonce: BigInt(res.data.nonce),
             tokenAddress: res.data.tokenAddress,
             chainId: Number(res.data.chainId),
+            ...(spenderAddress ? { spenderAddress } : {}),
         }
     },
 
@@ -217,7 +222,13 @@ export const betService = {
         hookAddress: `0x${string}`,
         chainId: number,
     ): Promise<PermitPayload> => {
-        const { nonce } = await betService.getPermitInfo(userAddress)
+        const { nonce, spenderAddress } = await betService.getPermitInfo(userAddress)
+        const permitSpender = spenderAddress ?? hookAddress
+
+        if (spenderAddress && spenderAddress.toLowerCase() !== hookAddress.toLowerCase()) {
+            throw new Error('Permit spender mismatch between backend and pool hook')
+        }
+
         const permitAmount = maxUint256
         const permitDeadline = BigInt(Math.floor(Date.now() / 1000) + 300)
 
@@ -246,7 +257,7 @@ export const betService = {
             primaryType: 'Permit',
             message: {
                 owner: userAddress,
-                spender: hookAddress,
+                spender: permitSpender,
                 value: permitAmount,
                 nonce,
                 deadline: permitDeadline,
