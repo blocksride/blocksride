@@ -3,291 +3,160 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useOnboarding } from '@/contexts/OnboardingContext'
 import {
-    Crosshair,
-    Shield,
-    Megaphone,
-    Rocket,
-    Activity,
-    Terminal,
-    ArrowRight,
+    Target,
+    LayoutGrid,
     Zap,
+    ArrowRight,
     CheckCircle2,
+    Terminal,
+    TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// ── Agent definitions (mirrors Demo page) ─────────────────────────────────────
-const AGENTS = [
-    {
-        id: 'sniper',
-        name: 'Sniper',
-        emoji: '🎯',
-        color: '#06b6d4',
-        colorBg: 'rgba(6,182,212,0.15)',
-        colorBorder: 'rgba(6,182,212,0.35)',
-        Icon: Crosshair,
-        deposit: 30,
-        tp: 15,
-        sl: 10,
-    },
-    {
-        id: 'khamenei',
-        name: 'Khamenei',
-        emoji: '🧓',
-        color: '#a855f7',
-        colorBg: 'rgba(168,85,247,0.15)',
-        colorBorder: 'rgba(168,85,247,0.35)',
-        Icon: Shield,
-        deposit: 50,
-        tp: 25,
-        sl: 15,
-    },
-    {
-        id: 'trump',
-        name: 'Trump',
-        emoji: '🍊',
-        color: '#f97316',
-        colorBg: 'rgba(249,115,22,0.15)',
-        colorBorder: 'rgba(249,115,22,0.35)',
-        Icon: Megaphone,
-        deposit: 20,
-        tp: 40,
-        sl: 20,
-    },
-] as const
+// ── Step 1: Pick a Price Range ─────────────────────────────────────────────────
+const PickPriceVisual = () => {
+    const [selectedRow, setSelectedRow] = useState(1)
 
-// ── Step 1: Configure Agent ────────────────────────────────────────────────────
-const ConfigureAgentVisual = () => {
-    const [selectedIndex, setSelectedIndex] = useState(0)
+    const rows = [
+        { label: '$3,850 – $3,900', prob: 18 },
+        { label: '$3,800 – $3,850', prob: 34 },
+        { label: '$3,750 – $3,800', prob: 27 },
+        { label: '$3,700 – $3,750', prob: 14 },
+        { label: '$3,650 – $3,700', prob: 7 },
+    ]
 
     useEffect(() => {
         const id = setInterval(() => {
-            setSelectedIndex(prev => (prev + 1) % AGENTS.length)
-        }, 1600)
+            setSelectedRow(prev => (prev + 1) % rows.length)
+        }, 1400)
         return () => clearInterval(id)
-    }, [])
-
-    const selected = AGENTS[selectedIndex]
+    }, [rows.length])
 
     return (
-        <div className="w-full space-y-3">
-            {/* Agent selector cards */}
-            <div className="flex gap-2 justify-center">
-                {AGENTS.map((agent, i) => {
-                    const AgentIcon = agent.Icon
-                    const isActive = i === selectedIndex
-                    return (
-                        <div
-                            key={agent.id}
-                            className="flex-1 p-2.5 rounded border transition-all duration-300"
-                            style={{
-                                borderColor: isActive ? agent.colorBorder : 'rgb(39,39,42)',
-                                backgroundColor: isActive ? agent.colorBg : 'transparent',
-                            }}
-                        >
-                            <div className="text-center text-lg mb-1">{agent.emoji}</div>
-                            <div
-                                className="text-[9px] font-mono font-bold text-center uppercase tracking-wider mb-1.5"
-                                style={{ color: isActive ? agent.color : 'rgb(113,113,122)' }}
-                            >
-                                {agent.name}
-                            </div>
-                            <div className="flex justify-center">
-                                <AgentIcon
-                                    className="w-3 h-3 transition-colors duration-300"
-                                    style={{ color: isActive ? agent.color : 'rgb(63,63,70)' }}
+        <div className="w-full space-y-1.5">
+            <div className="text-[9px] font-mono text-zinc-500 uppercase tracking-wider mb-2 flex justify-between px-1">
+                <span>Price Range</span>
+                <span>Pool Weight</span>
+            </div>
+            {rows.map((row, i) => {
+                const isSelected = i === selectedRow
+                return (
+                    <div
+                        key={i}
+                        className="flex items-center gap-2 px-2.5 py-2 rounded border transition-all duration-300"
+                        style={{
+                            borderColor: isSelected ? 'rgba(245,158,11,0.5)' : 'rgb(39,39,42)',
+                            backgroundColor: isSelected ? 'rgba(245,158,11,0.08)' : 'transparent',
+                        }}
+                    >
+                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors duration-300"
+                            style={{ backgroundColor: isSelected ? '#f59e0b' : 'rgb(63,63,70)' }} />
+                        <span className="text-[10px] font-mono flex-1"
+                            style={{ color: isSelected ? '#f5f5f4' : 'rgb(113,113,122)' }}>
+                            {row.label}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                            <div className="h-1 w-16 bg-zinc-800 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-all duration-300"
+                                    style={{
+                                        width: `${row.prob}%`,
+                                        backgroundColor: isSelected ? '#f59e0b' : 'rgb(63,63,70)',
+                                    }}
                                 />
                             </div>
-                        </div>
-                    )
-                })}
-            </div>
-
-            {/* Config panel for selected agent */}
-            <div
-                className="px-3 py-2.5 rounded border transition-all duration-300"
-                style={{
-                    borderColor: selected.colorBorder,
-                    backgroundColor: selected.colorBg,
-                }}
-            >
-                <div
-                    className="text-[9px] font-mono uppercase tracking-wider mb-2"
-                    style={{ color: selected.color }}
-                >
-                    {selected.name} · strategy config
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                    {[
-                        { label: 'DEPOSIT', value: `$${selected.deposit}` },
-                        { label: 'TAKE PROFIT', value: `${selected.tp}%` },
-                        { label: 'STOP LOSS', value: `${selected.sl}%` },
-                    ].map(item => (
-                        <div key={item.label}>
-                            <div className="text-[8px] font-mono text-zinc-500 uppercase mb-0.5">{item.label}</div>
-                            <div className="text-sm font-mono font-bold text-white">{item.value}</div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ── Step 2: Deploy ─────────────────────────────────────────────────────────────
-const DEPLOY_LINES = [
-    'Connecting to Base Sepolia',
-    'Approving USDC allowance',
-    'Deploying agent contract',
-    'Setting strategy parameters',
-    'Agent live on-chain ✓',
-]
-
-const DeployVisual = () => {
-    // frame advances every 500ms; drives all derived state
-    const [frame, setFrame] = useState(0)
-    const total = DEPLOY_LINES.length
-
-    useEffect(() => {
-        const id = setInterval(() => {
-            setFrame(f => (f + 1 > total + 5 ? 0 : f + 1))
-        }, 500)
-        return () => clearInterval(id)
-    }, [total])
-
-    const visibleLines = Math.min(frame, total)
-    const isDone = frame >= total + 1
-
-    return (
-        <div className="w-full font-mono space-y-2">
-            <div className="bg-zinc-900 border border-zinc-800 rounded p-3 min-h-[110px] space-y-1.5">
-                {DEPLOY_LINES.slice(0, visibleLines).map((line, i) => {
-                    const isCurrent = i === visibleLines - 1 && !isDone
-                    const isSuccess = i === total - 1 && isDone
-                    return (
-                        <div key={i} className="text-[10px] flex items-center gap-1.5">
-                            {isCurrent
-                                ? <span className="inline-block w-1.5 h-3 bg-primary animate-pulse flex-shrink-0" />
-                                : <span className="text-primary flex-shrink-0">{'>'}</span>
-                            }
-                            <span className={cn(
-                                'transition-colors duration-300',
-                                isSuccess ? 'text-primary font-bold' : 'text-zinc-400'
-                            )}>
-                                {line}
+                            <span className="text-[9px] font-mono w-6 text-right"
+                                style={{ color: isSelected ? '#f59e0b' : 'rgb(113,113,122)' }}>
+                                {row.prob}%
                             </span>
                         </div>
-                    )
-                })}
-            </div>
-            <div className={cn(
-                'flex items-center justify-center gap-2 py-1 transition-opacity duration-500',
-                isDone ? 'opacity-100' : 'opacity-0'
-            )}>
-                <CheckCircle2 className="w-4 h-4 text-primary" />
-                <span className="text-xs font-mono text-primary font-bold">Deployment successful</span>
-            </div>
+                    </div>
+                )
+            })}
         </div>
     )
 }
 
-// ── Step 3: Watch It Trade ─────────────────────────────────────────────────────
-const AGENT_COLORS = ['#06b6d4', '#a855f7', '#f97316']
-
-const WatchTradeVisual = () => {
+// ── Step 2: Select a Box ───────────────────────────────────────────────────────
+const SelectBoxVisual = () => {
     const cols = 5
-    const rows = 3
-    const cellW = 50
-    const cellH = 34
+    const rows = 4
+    const cellW = 46
+    const cellH = 30
     const svgW = cols * cellW
     const svgH = rows * cellH
 
-    const [bets, setBets] = useState<{ row: number; col: number; color: string; amount: number }[]>([])
-    const [priceY, setPriceY] = useState(svgH / 2)
-    const [pnl, setPnl] = useState(0)
+    const [selectedCell, setSelectedCell] = useState<{ r: number; c: number } | null>(null)
+    const [tick, setTick] = useState(0)
+
+    // highlight row 1 (middle price band) cycling through columns 2–4
+    useEffect(() => {
+        const id = setInterval(() => setTick(t => t + 1), 900)
+        return () => clearInterval(id)
+    }, [])
 
     useEffect(() => {
-        const priceId = setInterval(() => {
-            setPriceY(prev => Math.max(8, Math.min(svgH - 8, prev + (Math.random() - 0.5) * 14)))
-        }, 600)
+        const col = 2 + (tick % 3)
+        setSelectedCell({ r: 1, c: col })
+    }, [tick])
 
-        const betId = setInterval(() => {
-            const col = 2 + Math.floor(Math.random() * (cols - 2))
-            const row = Math.floor(Math.random() * rows)
-            const color = AGENT_COLORS[Math.floor(Math.random() * AGENT_COLORS.length)]
-            const amount = [5, 10, 15, 20][Math.floor(Math.random() * 4)]
-            setBets(prev => {
-                const next = [...prev, { row, col, color, amount }]
-                return next.length > 7 ? next.slice(-7) : next
-            })
-            setPnl(prev => +(prev + (Math.random() > 0.38 ? amount * 0.9 : -amount * 0.6)).toFixed(2))
-        }, 900)
-
-        return () => { clearInterval(priceId); clearInterval(betId) }
-    }, [svgH])
+    const priceLabels = ['$3,850', '$3,800', '$3,750', '$3,700']
+    const timeLabels = ['PAST', 'PAST', 'NOW', '+1M', '+2M']
 
     return (
-        <div className="w-full space-y-2">
-            <svg width={svgW + 40} height={svgH + 28} className="mx-auto block">
-                {/* Grid border */}
-                <rect x={20} y={4} width={svgW} height={svgH} fill="transparent" stroke="rgb(39,39,42)" strokeWidth={1} />
-                {/* Vertical lines */}
-                {Array.from({ length: cols + 1 }).map((_, i) => (
-                    <line key={`v-${i}`}
-                        x1={20 + i * cellW} y1={4}
-                        x2={20 + i * cellW} y2={4 + svgH}
-                        stroke="rgb(39,39,42)" strokeWidth={0.5} />
-                ))}
-                {/* Horizontal lines */}
-                {Array.from({ length: rows + 1 }).map((_, i) => (
-                    <line key={`h-${i}`}
-                        x1={20} y1={4 + i * cellH}
-                        x2={20 + svgW} y2={4 + i * cellH}
-                        stroke="rgb(39,39,42)" strokeWidth={0.5} />
-                ))}
-                {/* Past columns (locked) */}
-                {Array.from({ length: rows }).map((_, row) =>
-                    [0, 1].map(col => (
-                        <rect key={`lock-${row}-${col}`}
-                            x={21 + col * cellW} y={5 + row * cellH}
-                            width={cellW - 2} height={cellH - 2}
-                            fill="rgb(39,39,42)" fillOpacity={0.5} />
-                    ))
+        <div className="w-full">
+            <svg width={svgW + 52} height={svgH + 28} className="mx-auto block">
+                {/* Grid */}
+                {Array.from({ length: rows }).map((_, r) =>
+                    Array.from({ length: cols }).map((_, c) => {
+                        const isPast = c < 2
+                        const isSelected = selectedCell?.r === r && selectedCell?.c === c
+                        return (
+                            <rect
+                                key={`${r}-${c}`}
+                                x={50 + c * cellW + 1} y={r * cellH + 1}
+                                width={cellW - 2} height={cellH - 2}
+                                fill={
+                                    isSelected ? 'rgba(245,158,11,0.2)'
+                                    : isPast ? 'rgba(39,39,42,0.6)'
+                                    : 'transparent'
+                                }
+                                stroke={
+                                    isSelected ? 'rgba(245,158,11,0.7)'
+                                    : 'rgb(39,39,42)'
+                                }
+                                strokeWidth={isSelected ? 1.5 : 0.5}
+                            />
+                        )
+                    })
                 )}
-                {/* Active bets */}
-                {bets.map((bet, i) => (
-                    <g key={i}>
-                        <rect
-                            x={21 + bet.col * cellW} y={5 + bet.row * cellH}
-                            width={cellW - 2} height={cellH - 2}
-                            fill={bet.color} fillOpacity={0.2}
-                            stroke={bet.color} strokeWidth={1}
-                        />
-                        <text
-                            x={20 + bet.col * cellW + cellW / 2}
-                            y={4 + bet.row * cellH + cellH / 2}
-                            textAnchor="middle" dominantBaseline="middle"
-                            fill={bet.color} fontSize={8}
-                            fontFamily="monospace" fontWeight="bold"
-                        >
-                            ${bet.amount}
-                        </text>
-                    </g>
-                ))}
-                {/* Live price line */}
-                <line
-                    x1={20} y1={4 + priceY}
-                    x2={20 + svgW} y2={4 + priceY}
-                    stroke="hsl(38,92%,45%)" strokeWidth={1} strokeDasharray="3 2"
-                />
-                <circle
-                    cx={20 + svgW} cy={4 + priceY} r={3}
-                    fill="hsl(38,92%,45%)"
-                    className="animate-pulse"
-                />
-                {/* Time labels */}
-                {['PAST', '', 'NOW', '+1M', '+2M'].map((label, i) => (
+
+                {/* Selected cell pulse dot */}
+                {selectedCell && (
+                    <circle
+                        cx={50 + selectedCell.c * cellW + cellW / 2}
+                        cy={selectedCell.r * cellH + cellH / 2}
+                        r={4}
+                        fill="#f59e0b"
+                        className="animate-pulse"
+                    />
+                )}
+
+                {/* Price labels */}
+                {priceLabels.map((label, i) => (
                     <text key={i}
-                        x={20 + i * cellW + cellW / 2} y={svgH + 20}
+                        x={46} y={i * cellH + cellH / 2 + 1}
+                        textAnchor="end" dominantBaseline="middle"
+                        fill="rgb(113,113,122)" fontSize={7} fontFamily="monospace"
+                    >
+                        {label}
+                    </text>
+                ))}
+
+                {/* Time labels */}
+                {timeLabels.map((label, i) => (
+                    <text key={i}
+                        x={50 + i * cellW + cellW / 2} y={svgH + 16}
                         textAnchor="middle"
                         fill="rgb(113,113,122)" fontSize={7} fontFamily="monospace"
                     >
@@ -295,23 +164,85 @@ const WatchTradeVisual = () => {
                     </text>
                 ))}
             </svg>
+            <p className="text-center text-[10px] font-mono text-zinc-500 mt-1">
+                Tap any future box to select your window
+            </p>
+        </div>
+    )
+}
 
-            {/* Live stats */}
-            <div className="flex items-center justify-center gap-3">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded">
-                    <Activity className="w-3 h-3 text-primary" />
-                    <span className="text-[10px] font-mono text-zinc-500 uppercase">P&amp;L</span>
-                    <span className={cn(
-                        'text-xs font-mono font-bold tabular-nums',
-                        pnl >= 0 ? 'text-primary' : 'text-red-400'
-                    )}>
-                        {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)}
-                    </span>
+// ── Step 3: Place Your Bet ─────────────────────────────────────────────────────
+const PlaceBetVisual = () => {
+    const [amount, setAmount] = useState(0)
+    const [phase, setPhase] = useState<'input' | 'signing' | 'done'>('input')
+
+    useEffect(() => {
+        let t1: ReturnType<typeof setTimeout>
+        let t2: ReturnType<typeof setTimeout>
+        let t3: ReturnType<typeof setTimeout>
+
+        const run = () => {
+            setPhase('input')
+            setAmount(0)
+
+            // count up amount
+            let v = 0
+            const inc = setInterval(() => {
+                v += 5
+                setAmount(v)
+                if (v >= 20) clearInterval(inc)
+            }, 120)
+
+            t1 = setTimeout(() => setPhase('signing'), 1800)
+            t2 = setTimeout(() => setPhase('done'), 3000)
+            t3 = setTimeout(run, 5200)
+        }
+
+        run()
+        return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+    }, [])
+
+    return (
+        <div className="w-full space-y-3">
+            {/* Selected box summary */}
+            <div className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-between">
+                <div>
+                    <div className="text-[8px] font-mono text-zinc-500 uppercase">Selected Box</div>
+                    <div className="text-[11px] font-mono text-white mt-0.5">$3,800 – $3,850 · +1 min</div>
                 </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded">
-                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Bets</span>
-                    <span className="text-xs font-mono font-bold text-white tabular-nums">{bets.length}</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            </div>
+
+            {/* Amount */}
+            <div className="px-3 py-2.5 bg-zinc-900 border border-zinc-800 rounded">
+                <div className="text-[8px] font-mono text-zinc-500 uppercase mb-1.5">Bet Amount</div>
+                <div className="flex items-baseline gap-1">
+                    <span className="text-2xl font-mono font-bold text-white tabular-nums">${amount}</span>
+                    <span className="text-[10px] font-mono text-zinc-500">USDC</span>
                 </div>
+            </div>
+
+            {/* Action */}
+            <div className={cn(
+                'px-3 py-2.5 rounded border flex items-center gap-2 transition-all duration-300',
+                phase === 'input' && 'border-amber-500/40 bg-amber-500/10',
+                phase === 'signing' && 'border-blue-500/40 bg-blue-500/10',
+                phase === 'done' && 'border-emerald-500/40 bg-emerald-500/10',
+            )}>
+                {phase === 'done'
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    : <Zap className={cn('w-4 h-4 flex-shrink-0', phase === 'signing' ? 'text-blue-400 animate-pulse' : 'text-amber-400')} />
+                }
+                <span className={cn(
+                    'text-[10px] font-mono font-bold uppercase tracking-wider',
+                    phase === 'input' && 'text-amber-400',
+                    phase === 'signing' && 'text-blue-400',
+                    phase === 'done' && 'text-emerald-400',
+                )}>
+                    {phase === 'input' && 'Place Bet'}
+                    {phase === 'signing' && 'Signing…'}
+                    {phase === 'done' && 'Bet Live On-Chain ✓'}
+                </span>
             </div>
         </div>
     )
@@ -329,28 +260,28 @@ interface OnboardingStep {
 
 const ONBOARDING_STEPS: OnboardingStep[] = [
     {
-        id: 'configure',
-        title: 'CONFIGURE AGENT',
-        subtitle: 'Pick a strategy and set parameters',
-        visual: <ConfigureAgentVisual />,
-        command: 'Choose Sniper for precision, Khamenei for patience, or Trump for big swings',
-        Icon: Crosshair,
+        id: 'price',
+        title: 'PICK A PRICE RANGE',
+        subtitle: 'Choose where you think ETH will be',
+        visual: <PickPriceVisual />,
+        command: 'Each row is a price band. Pick the range you expect ETH to land in — higher pools mean bigger competition and bigger rewards.',
+        Icon: TrendingUp,
     },
     {
-        id: 'deploy',
-        title: 'DEPLOY',
-        subtitle: 'Go live on Base blockchain',
-        visual: <DeployVisual />,
-        command: 'Your agent is deployed on-chain — transparent, trustless, and unstoppable',
-        Icon: Rocket,
+        id: 'box',
+        title: 'SELECT A BOX',
+        subtitle: 'Choose your time window on the grid',
+        visual: <SelectBoxVisual />,
+        command: 'Each column is a 1-minute window. Tap a future box where your price range meets your target window.',
+        Icon: LayoutGrid,
     },
     {
-        id: 'watch',
-        title: 'WATCH IT TRADE',
-        subtitle: 'Agent places bets automatically',
-        visual: <WatchTradeVisual />,
-        command: 'Monitor live P&L as your agent captures price movements around the clock',
-        Icon: Activity,
+        id: 'bet',
+        title: 'PLACE YOUR BET',
+        subtitle: 'Set your amount and go on-chain',
+        visual: <PlaceBetVisual />,
+        command: 'Sign once with your embedded wallet — no gas needed. Win when price closes inside your box at settlement.',
+        Icon: Target,
     },
 ]
 
@@ -400,7 +331,7 @@ export function BettingOnboarding() {
                 onEscapeKeyDown={(e) => e.preventDefault()}
                 aria-describedby={undefined}
             >
-                <DialogTitle className="sr-only">Agent Setup</DialogTitle>
+                <DialogTitle className="sr-only">How to Bet</DialogTitle>
 
                 {/* Terminal header */}
                 <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
@@ -408,7 +339,7 @@ export function BettingOnboarding() {
                         <div className="flex items-center gap-2">
                             <Terminal className="w-4 h-4 text-primary" />
                             <span className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider">
-                                Agent Setup
+                                How to Bet
                             </span>
                             <span className="text-[10px] font-mono text-zinc-600">
                                 [{currentStep + 1}/{totalSteps}]
@@ -472,7 +403,7 @@ export function BettingOnboarding() {
                         {isLastStep ? (
                             <>
                                 <Zap className="w-4 h-4" />
-                                Launch Agent
+                                Start Trading
                             </>
                         ) : (
                             <>
