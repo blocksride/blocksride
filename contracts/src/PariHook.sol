@@ -567,6 +567,44 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         _placeBet(key.toId(), cellId, windowId, amount, msg.sender);
     }
 
+    /**
+     * @notice Seed a future window cell on behalf of the treasury/keeper.
+     * @dev Bypasses the upper betting zone limit — any window >= current + frozenWindows + 1 is allowed.
+     *      This lets the keeper pre-seed liquidity into windows before they enter the standard betting zone.
+     * @param key Pool key
+     * @param cellId Absolute cell ID to seed
+     * @param windowId Target window ID (must be >= current + frozenWindows + 1)
+     * @param amount USDC amount to seed
+     */
+    function seedWindow(PoolKey calldata key, uint256 cellId, uint256 windowId, uint256 amount)
+        external
+        nonReentrant
+        whenNotPaused
+        onlyRole(TREASURY_ROLE)
+    {
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        require(cfg.bandWidth != 0, "Grid not configured");
+        require(amount > 0, "Amount must be > 0");
+
+        uint256 current = block.timestamp < cfg.gridEpoch ? 0 : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+        uint256 seedableStart = current + cfg.frozenWindows + 1;
+        require(windowId >= seedableStart, "Window not seedable yet");
+
+        Window storage window = windows[poolId][windowId];
+        require(window.cellStakes[cellId] + amount <= cfg.maxStakePerCell, "Exceeds max stake per cell");
+
+        _transferIn(cfg.usdcToken, msg.sender, amount);
+
+        window.totalPool += amount;
+        window.organicPool += amount;
+        window.cellStakes[cellId] += amount;
+        window.userStakes[cellId][msg.sender] += amount;
+        userWindowStake[poolId][windowId][msg.sender] += amount;
+
+        emit BetPlaced(poolId, windowId, cellId, msg.sender, amount);
+    }
+
     // =============================================================
     //                        SETTLEMENT
     // =============================================================
