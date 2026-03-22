@@ -35,7 +35,7 @@ contract TestPariHookIntegration is Script {
     using PoolIdLibrary for PoolKey;
 
     // Deployed contract addresses
-    PariHook public constant PARI_HOOK = PariHook(0xE6dB8dF1ECa3E26bD8D6f21b64a19db5505D9Db6);
+    PariHook public constant PARI_HOOK = PariHook(0x89288d8D544cA16C3128Ce5202C49C2Ce8cf7AB4);
     IPoolManager public constant POOL_MANAGER = IPoolManager(0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408);
     IPyth public constant PYTH_ORACLE = IPyth(0xA2aa501b19aff244D90cc15a4Cf739D2725B5729);
     address public constant USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
