@@ -209,7 +209,7 @@ contract PariHookTest is Test {
 
         assertEq(current, 2);
         assertEq(start, 6);
-        assertEq(end, 8);
+        assertEq(end, type(uint256).max);
     }
 
     function test_AdminSetters_UpdateConfig() public {

@@ -500,13 +500,12 @@ contract ComprehensiveTest is Test {
         hook.placeBet(poolKey, winCell, targetWindow - 1, 5_000_000);
     }
 
-    function test_Bet_RevertWhen_WindowAboveBettableEnd() public {
-        // bettableEnd = current + frozenWindows + 3 = 6
+    function test_Bet_SucceedsWhenWindowAbovePreviousBettableEnd() public {
+        // end is now unbounded — any window >= bettableStart is valid
         (uint256 start, uint256 end) = hook.getBettableWindows(poolKey);
+        assertEq(end, type(uint256).max, "End is unbounded");
         vm.prank(alice);
-        vm.expectRevert("Window not in betting zone");
-        hook.placeBet(poolKey, winCell, end + 1, 5_000_000);
-        (start); // silence unused
+        hook.placeBet(poolKey, winCell, start + 10, 5_000_000);
     }
 
     function test_Bet_RevertWhen_ExceedsMaxStakePerCell() public {
@@ -754,7 +753,7 @@ contract ComprehensiveTest is Test {
 
     function test_Settle_RevertWhen_WindowNotEnded() public {
         // Do NOT warp past window end
-        vm.expectRevert("Window not ended");
+        vm.expectRevert("Window not started");
         hook.settle(poolKey, targetWindow, bytes("X"));
     }
 
@@ -1315,9 +1314,9 @@ contract ComprehensiveTest is Test {
 
     function test_GetBettableWindows_ReturnsCorrectRange() public view {
         (uint256 start, uint256 end) = hook.getBettableWindows(poolKey);
-        // At GRID_EPOCH+1 with frozenWindows=3: start=4, end=6
+        // At GRID_EPOCH+1 with frozenWindows=3: start=4, end=unbounded
         assertEq(start, 4, "bettableStart should be current + frozen + 1");
-        assertEq(end, 6, "bettableEnd should be current + frozen + 3");
+        assertEq(end, type(uint256).max, "End is unbounded");
     }
 
     function test_GetBettableWindows_AdvancesWithTime() public {
