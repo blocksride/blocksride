@@ -75,7 +75,7 @@ contract TestSettlement is Script {
         console.log("STEP 1: Check Window Status");
         console.log("--------------------------------------------\n");
 
-        (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate) =
+        (uint256 totalPool, bool settled, bool voided, bool unresolved, uint256 winningCell, uint256 redemptionRate) =
             PARI_HOOK.getWindow(poolKey, targetWindow);
 
         console.log("  Total Pool:", totalPool);
