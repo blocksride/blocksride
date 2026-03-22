@@ -207,7 +207,8 @@ contract TestPariHookIntegration is Script {
         // Test getBettableWindows
         try PARI_HOOK.getBettableWindows(poolKey) returns (uint256 start, uint256 end) {
             console.log("  Bettable Windows start:", start);
-            console.log("  Bettable Windows end:", end);
+            console.log("  Bettable Windows end: unbounded (type(uint256).max)");
+            (end); // suppress unused variable warning
             console.log("  [OK] getBettableWindows() works");
         } catch {
             console.log("  [WARN]  getBettableWindows() failed - grid may not be configured yet");

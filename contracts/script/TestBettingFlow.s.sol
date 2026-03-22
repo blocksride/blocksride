@@ -107,12 +107,12 @@ contract TestBettingFlow is Script {
         console.log("STEP 4: Check Bettable Windows");
         console.log("--------------------------------------------\n");
 
-        (uint256 startWindow, uint256 endWindow) = PARI_HOOK.getBettableWindows(poolKey);
+        (uint256 startWindow,) = PARI_HOOK.getBettableWindows(poolKey);
         uint256 currentWindow = PARI_HOOK.getCurrentWindow(poolKey);
 
         console.log("  Current Window:", currentWindow);
         console.log("  Bettable Start:", startWindow);
-        console.log("  Bettable End:", endWindow);
+        console.log("  Bettable End: unbounded (any window >= start is bettable)");
         console.log("");
 
         // Step 5: Calculate cell ID from current price
@@ -125,7 +125,7 @@ contract TestBettingFlow is Script {
         // For this test, let's bet on cell 1029 ($2,058-$2,060)
         uint256 targetCellId = 1029;
         uint256 betAmount = 100_000; // 0.1 USDC
-        uint256 targetWindow = endWindow; // Bet on LAST available window for buffer
+        uint256 targetWindow = startWindow + 2; // Bet on a near bettable window
 
         console.log("  Target Cell ID:", targetCellId);
         console.log("  Cell Price Low: $", targetCellId * 2);
@@ -162,7 +162,7 @@ contract TestBettingFlow is Script {
 
         uint256 userStake = PARI_HOOK.getUserStake(poolKey, targetWindow, targetCellId, user);
         uint256 cellStake = PARI_HOOK.getCellStake(poolKey, targetWindow, targetCellId);
-        (uint256 totalPool, bool settled, bool voided,,) = PARI_HOOK.getWindow(poolKey, targetWindow);
+        (uint256 totalPool, bool settled, bool voided,,,) = PARI_HOOK.getWindow(poolKey, targetWindow);
 
         console.log("  User Stake on Cell:", userStake);
         console.log("  Total Cell Stake:", cellStake);
