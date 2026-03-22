@@ -189,12 +189,12 @@ contract SettlementTest is Test {
         hook.placeBet(testKey, cellId + 1, windowId, 20_000_000);
 
         // Fast forward to window end
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
         // Setup mock Pyth price: $3001.50 → lands in cell 1500
         uint256 closingPrice = 3_001_500_000; // $3001.50 in USDC 6-decimal
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, SafeCast.toUint64(windowStart));
 
         // Settle the window
         vm.expectEmit(true, true, true, true);
@@ -208,7 +208,7 @@ contract SettlementTest is Test {
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Verify window state
-        (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate) =
+        (uint256 totalPool, bool settled, bool voided, , uint256 winningCell, uint256 redemptionRate) =
             hook.getWindow(testKey, windowId);
 
         assertEq(totalPool, 30_000_000, "Total pool should be $30");
@@ -234,16 +234,16 @@ contract SettlementTest is Test {
         hook.placeBet(testKey, cellId, windowId, 40_000_000); // $40
 
         // Fast forward and settle
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(betPrice, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(betPrice, -8), -8, SafeCast.toUint64(windowStart));
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
         // Verify redemption rate: ($50 - $1 fee) / $50 stakes = 0.98x
-        (,,,, uint256 redemptionRate) = hook.getWindow(testKey, windowId);
+        (,,,,, uint256 redemptionRate) = hook.getWindow(testKey, windowId);
         uint256 expectedRate = (50_000_000 - 1_000_000) * 1e18 / 50_000_000;
         assertEq(redemptionRate, expectedRate, "Redemption rate should be 0.98x");
     }
@@ -254,43 +254,37 @@ contract SettlementTest is Test {
 
     function test_Settlement_Rollover_NoStakesOnWinningCell() public {
         uint256 windowId = FROZEN_WINDOWS + 1;
+        // At windowStart, current = windowId, so rollover targets windowId + FROZEN_WINDOWS + 1
+        uint256 rolloverTarget = windowId + FROZEN_WINDOWS + 1;
 
-        // User1 bets on cell 1500
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
-
-        // User2 bets on cell 1501
         vm.prank(user2);
         hook.placeBet(testKey, 1501, windowId, 20_000_000);
 
-        // Fast forward
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
         // Price lands on cell 1502 (no stakes)
-        uint256 closingPrice = 3_004_000_000; // cell 1502 in USDC 6-decimal
-        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(closingPrice, -8), -8, SafeCast.toUint64(windowEnd));
+        pythOracle.setPriceAtTime(PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(windowStart));
 
-        // Expect rollover event
+        // Rollover targets first future bettable window, not windowId + 1 which is frozen
         vm.expectEmit(true, true, true, true);
-        emit WindowRolledOver(poolId, windowId, windowId + 1, 30_000_000);
+        emit WindowRolledOver(poolId, windowId, rolloverTarget, 30_000_000);
 
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
-        // Verify source window is settled
-        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,,) = hook.getWindow(testKey, windowId);
         assertTrue(settled, "Source window should be settled");
         assertFalse(voided, "Source window should not be voided");
 
-        // Verify next window has backstop
-        (uint256 nextTotalPool,,,,) = hook.getWindow(testKey, windowId + 1);
-        assertEq(nextTotalPool, 30_000_000, "Next window should have rolled over pool");
+        (uint256 nextTotalPool,,,,,) = hook.getWindow(testKey, rolloverTarget);
+        assertEq(nextTotalPool, 30_000_000, "Next bettable window should have rolled-over pool");
 
-        // Verify no fees collected on rollover
-        assertEq(hook.collectedFees(poolId), 0, "No fees should be collected on rollover");
-        assertEq(hook.rolloverBalances(poolId), 30_000_000, "Rollover balance should track full carry");
-        assertEq(hook.backstopBalances(poolId), 0, "Backstop balance should not include organic carry");
+        assertEq(hook.collectedFees(poolId), 0, "No fees on rollover");
+        assertEq(hook.rolloverBalances(poolId), 30_000_000, "Rollover balance should track carry");
+        assertEq(hook.backstopBalances(poolId), 0, "Backstop balance unchanged");
     }
 
     function test_Settlement_RefundsExcessEth_OnWinnerSettlement() public {
@@ -299,10 +293,10 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         uint256 keeperBalanceBefore = keeper.balance;
@@ -319,8 +313,8 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
         uint256 keeperBalanceBefore = keeper.balance;
 
@@ -339,10 +333,10 @@ contract SettlementTest is Test {
         vm.prank(user2);
         hook.placeBet(testKey, 1501, windowId, 20_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         uint256 keeperBalanceBefore = keeper.balance;
@@ -355,47 +349,51 @@ contract SettlementTest is Test {
 
     function test_Settlement_Rollover_CarryCountsInNextWindowSettlement() public {
         uint256 firstWindowId = FROZEN_WINDOWS + 1;
-        uint256 secondWindowId = firstWindowId + 1;
+        // Rollover from firstWindowId lands at firstWindowId + FROZEN_WINDOWS + 1.
+        // secondWindowId only enters the bettable zone when current = firstWindowId,
+        // i.e. after warping to firstWindowStart.
+        uint256 secondWindowId = firstWindowId + FROZEN_WINDOWS + 1;
 
         vm.prank(user1);
         hook.placeBet(testKey, 1500, firstWindowId, 10_000_000);
-
         vm.prank(user2);
         hook.placeBet(testKey, 1501, firstWindowId, 20_000_000);
+
+        // Warp to firstWindowStart so secondWindowId is now bettable
+        uint256 firstWindowStart = GRID_EPOCH + (firstWindowId * WINDOW_DURATION);
+        vm.warp(firstWindowStart);
 
         vm.prank(user1);
         hook.placeBet(testKey, 1502, secondWindowId, 10_000_000);
 
-        uint256 firstWindowEnd = GRID_EPOCH + ((firstWindowId + 1) * WINDOW_DURATION);
-        vm.warp(firstWindowEnd);
+        // Settle first window — price on cell 1502 (no stakes yet), rolls over to secondWindowId
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(firstWindowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(firstWindowStart)
         );
-
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, firstWindowId, hex"01");
 
-        uint256 secondWindowEnd = GRID_EPOCH + ((secondWindowId + 1) * WINDOW_DURATION);
-        vm.warp(secondWindowEnd);
+        // Settle second window — user1 wins on cell 1502; pool = rollover + user1 bet
+        uint256 secondWindowStart = GRID_EPOCH + (secondWindowId * WINDOW_DURATION);
+        vm.warp(secondWindowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(secondWindowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_004_000_000, -8), -8, SafeCast.toUint64(secondWindowStart)
         );
-
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, secondWindowId, hex"01");
 
-        (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate) =
+        (uint256 totalPool, bool settled, bool voided, , uint256 winningCell, uint256 redemptionRate) =
             hook.getWindow(testKey, secondWindowId);
 
-        uint256 expectedTotalPool = 40_000_000;
+        uint256 expectedTotalPool = 40_000_000; // 30M rollover + 10M user1
         uint256 expectedFee = (expectedTotalPool * FEE_BPS) / 10_000;
         uint256 expectedRate = (expectedTotalPool - expectedFee) * 1e18 / 10_000_000;
 
         assertEq(totalPool, expectedTotalPool, "Rollover carry should increase next window pool");
         assertTrue(settled, "Second window should be settled");
         assertFalse(voided, "Second window should not be voided");
-        assertEq(winningCell, 1502, "Winning cell should match the carried-into window bet");
-        assertEq(redemptionRate, expectedRate, "Next window payout should include carried rollover funds");
+        assertEq(winningCell, 1502, "Winning cell should match bet in rollover-target window");
+        assertEq(redemptionRate, expectedRate, "Payout should include rolled-over funds");
     }
 
     // =============================================================
@@ -408,21 +406,26 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
-        // Don't set any Pyth price → oracle will revert
-
-        vm.expectEmit(true, true, false, true);
-        emit WindowVoided(poolId, windowId, 10_000_000);
-
+        // No Pyth price set → before resolution deadline → window becomes unresolved, not voided
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
-        // Verify window is voided
-        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
-        assertFalse(settled, "Window should not be marked as settled");
-        assertTrue(voided, "Window should be voided");
+        (, bool settled, bool voided, bool unresolved,,) = hook.getWindow(testKey, windowId);
+        assertFalse(settled, "Window should not be settled");
+        assertFalse(voided, "Window should not be voided yet - deadline not passed");
+        assertTrue(unresolved, "Window should be marked unresolved for retry");
+
+        // After resolution deadline (windowStart + windowDuration), finalize as voided
+        vm.warp(windowStart + WINDOW_DURATION);
+        hook.finalizeUnresolved(testKey, windowId);
+
+        (, settled, voided, unresolved,,) = hook.getWindow(testKey, windowId);
+        assertFalse(settled, "Window should not be settled");
+        assertTrue(voided, "Window should be voided after deadline");
+        assertFalse(unresolved, "Unresolved flag should be cleared");
     }
 
     function test_Settlement_AutoVoid_OrganicPoolBelowThreshold() public {
@@ -432,11 +435,11 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 500_000); // $0.50
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         vm.expectEmit(true, true, false, true);
@@ -445,7 +448,7 @@ contract SettlementTest is Test {
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
 
-        (,, bool voided,,) = hook.getWindow(testKey, windowId);
+        (,, bool voided,,,) = hook.getWindow(testKey, windowId);
         assertTrue(voided, "Window should be auto-voided");
     }
 
@@ -462,7 +465,7 @@ contract SettlementTest is Test {
         vm.prank(admin);
         hook.voidWindow(testKey, windowId);
 
-        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,,) = hook.getWindow(testKey, windowId);
         assertFalse(settled, "Window should not be settled");
         assertTrue(voided, "Window should be voided");
     }
@@ -474,10 +477,10 @@ contract SettlementTest is Test {
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
         // Settle window first
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         vm.prank(keeper);
@@ -558,7 +561,7 @@ contract SettlementTest is Test {
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
         // Try to settle before window ends
-        vm.expectRevert("Window not ended");
+        vm.expectRevert("Window not started");
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"01");
     }
@@ -569,10 +572,10 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         vm.prank(keeper);
@@ -590,8 +593,8 @@ contract SettlementTest is Test {
         vm.prank(admin);
         hook.voidWindow(testKey, windowId);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
         vm.expectRevert("Already voided");
         vm.prank(keeper);
@@ -604,17 +607,17 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         vm.expectRevert("Insufficient Pyth update fee");
         vm.prank(keeper);
         hook.settle{value: 0.009 ether}(testKey, windowId, hex"01");
 
-        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,,) = hook.getWindow(testKey, windowId);
         assertFalse(settled, "Insufficient fee should not settle the window");
         assertFalse(voided, "Insufficient fee should not void the window");
     }
@@ -625,17 +628,17 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
         pythOracle.setPriceAtTime(
-            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowEnd)
+            PRICE_FEED_ID, convertToPythPrice(3_000_000_000, -8), -8, SafeCast.toUint64(windowStart)
         );
 
         vm.expectRevert(bytes4(keccak256("InvalidUpdateData()")));
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, hex"ff");
 
-        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,,) = hook.getWindow(testKey, windowId);
         assertFalse(settled, "Malformed update data should not settle the window");
         assertFalse(voided, "Malformed update data should not void the window");
     }
@@ -646,14 +649,14 @@ contract SettlementTest is Test {
         vm.prank(user1);
         hook.placeBet(testKey, 1500, windowId, 10_000_000);
 
-        uint256 windowEnd = GRID_EPOCH + ((windowId + 1) * WINDOW_DURATION);
-        vm.warp(windowEnd);
+        uint256 windowStart = GRID_EPOCH + (windowId * WINDOW_DURATION);
+        vm.warp(windowStart);
 
         vm.expectRevert("Empty Pyth update data");
         vm.prank(keeper);
         hook.settle{value: 0.01 ether}(testKey, windowId, "");
 
-        (, bool settled, bool voided,,) = hook.getWindow(testKey, windowId);
+        (, bool settled, bool voided,,,) = hook.getWindow(testKey, windowId);
         assertFalse(settled, "Empty update data should not settle the window");
         assertFalse(voided, "Empty update data should not void the window");
     }

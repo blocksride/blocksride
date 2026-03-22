@@ -196,7 +196,7 @@ contract BetPlacementTest is Test {
 
     function test_PlaceBet_AllThreeBettableWindows() public {
         uint256 cellId = 1500;
-        (uint256 bettableStart, uint256 bettableEnd) = hook.getBettableWindows(testKey);
+        (uint256 bettableStart,) = hook.getBettableWindows(testKey);
 
         // Bet on first bettable window
         vm.prank(user1);
@@ -206,14 +206,14 @@ contract BetPlacementTest is Test {
         vm.prank(user2);
         hook.placeBet(testKey, cellId, bettableStart + 1, MEDIUM_BET);
 
-        // Bet on last bettable window
+        // Bet on a far window (no upper limit)
         vm.prank(user3);
-        hook.placeBet(testKey, cellId, bettableEnd, LARGE_BET);
+        hook.placeBet(testKey, cellId, bettableStart + 5, LARGE_BET);
 
         // Verify all bets succeeded
         assertEq(hook.getCellStake(testKey, bettableStart, cellId), SMALL_BET);
         assertEq(hook.getCellStake(testKey, bettableStart + 1, cellId), MEDIUM_BET);
-        assertEq(hook.getCellStake(testKey, bettableEnd, cellId), LARGE_BET);
+        assertEq(hook.getCellStake(testKey, bettableStart + 5, cellId), LARGE_BET);
     }
 
     // ============================================
@@ -245,16 +245,6 @@ contract BetPlacementTest is Test {
         vm.expectRevert("Window not in betting zone");
         vm.prank(user1);
         hook.placeBet(testKey, cellId, tooEarlyWindow, SMALL_BET);
-    }
-
-    function test_PlaceBet_RevertWhen_WindowTooLate() public {
-        uint256 cellId = 1500;
-        (, uint256 bettableEnd) = hook.getBettableWindows(testKey);
-        uint256 tooLateWindow = bettableEnd + 1; // One window after bettable end
-
-        vm.expectRevert("Window not in betting zone");
-        vm.prank(user1);
-        hook.placeBet(testKey, cellId, tooLateWindow, SMALL_BET);
     }
 
     function test_PlaceBet_RevertWhen_WindowInFrozenZone() public {
@@ -390,23 +380,21 @@ contract BetPlacementTest is Test {
 
         uint256 currentWindow = hook.getCurrentWindow(testKey);
 
-        // Verify bettable range is [current + frozenWindows + 1, current + frozenWindows + 3]
+        // Bettable start is current + frozenWindows + 1; end is unbounded
         assertEq(start, currentWindow + FROZEN_WINDOWS + 1);
-        assertEq(end, currentWindow + FROZEN_WINDOWS + 3);
-        assertEq(end - start, 2); // Exactly 3 windows (0-indexed range)
+        assertEq(end, type(uint256).max);
     }
 
     function test_GetBettableWindows_UpdatesOverTime() public {
-        (uint256 startBefore, uint256 endBefore) = hook.getBettableWindows(testKey);
+        (uint256 startBefore,) = hook.getBettableWindows(testKey);
 
         // Fast forward one window
         vm.warp(block.timestamp + WINDOW_DURATION);
 
-        (uint256 startAfter, uint256 endAfter) = hook.getBettableWindows(testKey);
+        (uint256 startAfter,) = hook.getBettableWindows(testKey);
 
-        // Bettable range should have shifted by 1
+        // Bettable start should have shifted by 1
         assertEq(startAfter, startBefore + 1);
-        assertEq(endAfter, endBefore + 1);
     }
 
     function test_GetUserStake_BeforeBet() public view {
