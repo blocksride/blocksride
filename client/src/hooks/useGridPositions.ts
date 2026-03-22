@@ -73,6 +73,7 @@ const GET_WINDOW_ABI = [
             { name: 'totalPool', type: 'uint256' },
             { name: 'settled', type: 'bool' },
             { name: 'voided', type: 'bool' },
+            { name: 'unresolved', type: 'bool' },
             { name: 'winningCell', type: 'uint256' },
             { name: 'redemptionRate', type: 'uint256' },
         ],
@@ -569,7 +570,7 @@ export function useGridPositions(
 
         windowData.forEach((wr, idx) => {
             if (wr.status !== 'success' || wr.result == null) return
-            const r = wr.result as { settled: boolean; voided: boolean; winningCell: bigint; redemptionRate: bigint }
+            const r = wr.result as { settled: boolean; voided: boolean; unresolved: boolean; winningCell: bigint; redemptionRate: bigint }
             if (!r.settled && !r.voided) return
 
             const windowId = windowIdsToCheck[idx]
