@@ -18,6 +18,7 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
@@ -31,6 +32,7 @@ import {PythStructs} from "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using Hooks for IHooks;
+    using EnumerableSet for EnumerableSet.UintSet;
 
     // =============================================================
     //                      ROLES & CONSTANTS
@@ -93,6 +95,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         uint256 redemptionRate;
         bool settled;
         bool voided;
+        bool unresolved; // opening price unavailable; retry allowed until resolution deadline
         mapping(uint256 => uint256) cellStakes;
         mapping(uint256 => mapping(address => uint256)) userStakes;
     }
@@ -180,6 +183,9 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
     /// @notice Total amount staked by a user in a window across all cells — used for void refunds
     mapping(PoolId => mapping(uint256 => mapping(address => uint256))) public userWindowStake;
 
+    /// @notice Windows marked unresolved (no opening price yet): poolId => set of windowIds
+    mapping(PoolId => EnumerableSet.UintSet) private _unresolvedWindows;
+
     /// @notice EIP-712 domain separator
     bytes32 public immutable DOMAIN_SEPARATOR;
 
@@ -221,6 +227,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
     );
 
     event WindowVoided(PoolId indexed poolId, uint256 indexed windowId, uint256 totalRefundable);
+    event WindowUnresolved(PoolId indexed poolId, uint256 indexed windowId, uint256 retryDeadline);
 
     event WindowRolledOver(
         PoolId indexed poolId, uint256 indexed fromWindowId, uint256 indexed toWindowId, uint256 carryAmount
@@ -632,14 +639,14 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         require(!window.voided, "Already voided");
         require(pythUpdateData.length > 0, "Empty Pyth update data");
 
-        // Calculate window end time
-        uint256 windowEnd = cfg.gridEpoch + ((windowId + 1) * cfg.windowDuration);
-        require(block.timestamp >= windowEnd, "Window not ended");
+        // Calculate window start time — settlement is allowed once the opening price is available
+        uint256 windowStart = cfg.gridEpoch + (windowId * cfg.windowDuration);
+        require(block.timestamp >= windowStart, "Window not started");
 
-        // Try to fetch Pyth price at windowEnd timestamp
-        // Grace period: accept prices within [windowEnd, windowEnd+10s]
-        uint64 minPublishTime = SafeCast.toUint64(windowEnd);
-        uint64 maxPublishTime = SafeCast.toUint64(windowEnd + 10);
+        // Fetch Pyth price at windowStart — the opening price determines the winning cell.
+        // Grace period: accept prices within [windowStart, windowStart+10s]
+        uint64 minPublishTime = SafeCast.toUint64(windowStart);
+        uint64 maxPublishTime = SafeCast.toUint64(windowStart + 10);
 
         bytes[] memory updateDataArray = new bytes[](1);
         updateDataArray[0] = pythUpdateData;
@@ -647,20 +654,32 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         require(msg.value >= updateFee, "Insufficient Pyth update fee");
         uint256 excessEth = msg.value - updateFee;
 
-        uint256 closingPrice;
+        uint256 openingPrice;
         try this._parsePythPrice{value: updateFee}(
             pythUpdateData, cfg.pythPriceFeedId, minPublishTime, maxPublishTime
         ) returns (
             uint256 price
         ) {
-            closingPrice = price;
+            openingPrice = price;
         } catch (bytes memory reason) {
-            // Only auto-void when Pyth explicitly reports no price in this publish-time range.
+            // Only handle when Pyth explicitly reports no price in this publish-time range.
             if (!_isNoPriceInRangeError(reason)) {
                 _bubbleRevert(reason);
             }
-            window.voided = true;
-            emit WindowVoided(poolId, windowId, window.totalPool);
+            // Resolution deadline: one full window duration after opening.
+            // Before deadline: mark unresolved so the keeper can retry later.
+            // After deadline: finalize as voided so participants can claim refunds.
+            uint256 resolutionDeadline = windowStart + cfg.windowDuration;
+            if (block.timestamp >= resolutionDeadline) {
+                window.voided = true;
+                window.unresolved = false;
+                _unresolvedWindows[poolId].remove(windowId);
+                emit WindowVoided(poolId, windowId, window.totalPool);
+            } else {
+                window.unresolved = true;
+                _unresolvedWindows[poolId].add(windowId);
+                emit WindowUnresolved(poolId, windowId, resolutionDeadline);
+            }
             _refundExcessEth(excessEth);
             return;
         }
@@ -673,13 +692,24 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
             return;
         }
 
-        // Calculate winning cell from closing price
-        uint256 winningCell = closingPrice / cfg.bandWidth;
+        // Calculate winning cell from opening price
+        uint256 winningCell = openingPrice / cfg.bandWidth;
         uint256 winStakes = window.cellStakes[winningCell];
 
-        // Rollover if no bets on winning cell — carry pool to next window
+        // Rollover if no bets on winning cell.
+        // Target the first window users can still bet on from now, so rolled-over funds
+        // never land in a past or frozen window (important for late-resolved windows).
         if (winStakes == 0) {
-            _rollover(poolId, windowId, windowId + 1);
+            uint256 current = block.timestamp < cfg.gridEpoch
+                ? 0
+                : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+            uint256 nextBettable = current + cfg.frozenWindows + 1;
+            uint256 rolloverTarget = windowId + 1 >= nextBettable ? windowId + 1 : nextBettable;
+            if (window.unresolved) {
+                window.unresolved = false;
+                _unresolvedWindows[poolId].remove(windowId);
+            }
+            _rollover(poolId, windowId, rolloverTarget);
             _refundExcessEth(excessEth);
             return;
         }
@@ -691,16 +721,20 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         // Calculate redemption rate: how much each staked USDC returns
         uint256 redemptionRate = (netPool * REDEMPTION_PRECISION) / winStakes;
 
-        // Store settlement results
+        // Store settlement results — clear unresolved tracking if it was previously pending
         window.winningCell = winningCell;
         window.redemptionRate = redemptionRate;
         window.settled = true;
+        if (window.unresolved) {
+            window.unresolved = false;
+            _unresolvedWindows[poolId].remove(windowId);
+        }
 
         // Update fee accounting
         collectedFees[poolId] += fee;
 
         emit FeeCollected(poolId, windowId, fee);
-        emit WindowSettled(poolId, windowId, winningCell, closingPrice, redemptionRate);
+        emit WindowSettled(poolId, windowId, winningCell, openingPrice, redemptionRate);
 
         // Refund any excess ETH the caller sent above Pyth's required update fee.
         _refundExcessEth(excessEth);
@@ -884,6 +918,30 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
     }
 
     /**
+     * @notice Finalise an unresolved window as voided once the resolution deadline has passed.
+     * @dev Permissionless — anyone can call after deadline so users are never permanently stuck.
+     *      The resolution deadline is one full windowDuration after the window opened.
+     * @param key Pool key
+     * @param windowId Window to finalise
+     */
+    function finalizeUnresolved(PoolKey calldata key, uint256 windowId) external nonReentrant {
+        PoolId poolId = key.toId();
+        GridConfig storage cfg = gridConfigs[poolId];
+        Window storage window = windows[poolId][windowId];
+
+        require(window.unresolved, "Window is not unresolved");
+
+        uint256 windowStart = cfg.gridEpoch + (windowId * cfg.windowDuration);
+        uint256 resolutionDeadline = windowStart + cfg.windowDuration;
+        require(block.timestamp >= resolutionDeadline, "Resolution deadline not passed");
+
+        window.voided = true;
+        window.unresolved = false;
+        _unresolvedWindows[poolId].remove(windowId);
+        emit WindowVoided(poolId, windowId, window.totalPool);
+    }
+
+    /**
      * @notice Withdraw collected fees to treasury
      * @param key Pool key
      * @param amount USDC amount to withdraw
@@ -961,10 +1019,15 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
     function getWindow(PoolKey calldata key, uint256 windowId)
         external
         view
-        returns (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate)
+        returns (uint256 totalPool, bool settled, bool voided, bool unresolved, uint256 winningCell, uint256 redemptionRate)
     {
         Window storage w = windows[key.toId()][windowId];
-        return (w.totalPool, w.settled, w.voided, w.winningCell, w.redemptionRate);
+        return (w.totalPool, w.settled, w.voided, w.unresolved, w.winningCell, w.redemptionRate);
+    }
+
+    /// @notice Returns all windowIds currently marked unresolved for a pool.
+    function getUnresolvedWindows(PoolKey calldata key) external view returns (uint256[] memory) {
+        return _unresolvedWindows[key.toId()].values();
     }
 
     /**
@@ -1004,13 +1067,13 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
      * @notice Get bettable window range [start, end]
      * @param key Pool key
      * @return start First bettable window ID
-     * @return end Last bettable window ID
+     * @return end type(uint256).max (unbounded — any window >= start is bettable)
      */
     function getBettableWindows(PoolKey calldata key) external view returns (uint256 start, uint256 end) {
         GridConfig storage cfg = gridConfigs[key.toId()];
         uint256 current = block.timestamp < cfg.gridEpoch ? 0 : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
         start = current + cfg.frozenWindows + 1;
-        end = current + cfg.frozenWindows + 3;
+        end = type(uint256).max;
     }
 
     /**
@@ -1120,8 +1183,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
 
         uint256 current = block.timestamp < cfg.gridEpoch ? 0 : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
         uint256 bettableStart = current + cfg.frozenWindows + 1;
-        uint256 bettableEnd = current + cfg.frozenWindows + 3;
-        require(windowId >= bettableStart && windowId <= bettableEnd, "Window not in betting zone");
+        require(windowId >= bettableStart, "Window not in betting zone");
 
         Window storage window = windows[poolId][windowId];
         require(window.cellStakes[cellId] + amount <= cfg.maxStakePerCell, "Exceeds max stake per cell");

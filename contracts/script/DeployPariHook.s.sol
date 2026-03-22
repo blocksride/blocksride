@@ -35,13 +35,11 @@ contract DeployPariHook is Script {
     address constant PYTH_ORACLE = 0xA2aa501b19aff244D90cc15a4Cf739D2725B5729;
     address constant USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
 
-    // Role Addresses
-    address constant RELAYER = 0xF41886af501e2a0958dBD31D9a28AcD6c2f5db06;
-
     function run() public {
-        // Load deployer private key from environment
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
+        address deployer           = vm.addr(deployerPrivateKey);
+        address treasury           = vm.envAddress("TREASURY_ADDRESS");
+        address relayer            = vm.envAddress("RELAYER_ADDRESS");
 
         console.log("\n============================================");
         console.log("  PARIHOOK DEPLOYMENT - BASE SEPOLIA");
@@ -59,12 +57,11 @@ contract DeployPariHook is Script {
 
         console.log("Role Assignment:");
         console.log("  DEFAULT_ADMIN_ROLE:", deployer);
-        console.log("  ADMIN_ROLE:", deployer);
-        console.log("  TREASURY_ROLE:", deployer);
-        console.log("  RELAYER_ROLE:", RELAYER);
+        console.log("  ADMIN_ROLE:        ", deployer);
+        console.log("  TREASURY_ROLE:     ", treasury);
+        console.log("  RELAYER_ROLE:      ", relayer);
         console.log("");
 
-        // Start broadcasting transactions
         vm.startBroadcast(deployerPrivateKey);
 
         console.log("Deploying PariHook...");
@@ -72,8 +69,8 @@ contract DeployPariHook is Script {
             IPoolManager(POOL_MANAGER),
             IPyth(PYTH_ORACLE),
             deployer, // ADMIN_ROLE
-            deployer, // TREASURY_ROLE
-            RELAYER // RELAYER_ROLE
+            treasury, // TREASURY_ROLE
+            relayer   // RELAYER_ROLE
         );
 
         console.log("PariHook deployed at:", address(pariHook));
@@ -83,8 +80,8 @@ contract DeployPariHook is Script {
         console.log("Verifying role assignments...");
         console.log("  Has DEFAULT_ADMIN_ROLE:", pariHook.hasRole(pariHook.DEFAULT_ADMIN_ROLE(), deployer));
         console.log("  Has ADMIN_ROLE:", pariHook.hasRole(pariHook.ADMIN_ROLE(), deployer));
-        console.log("  Has TREASURY_ROLE:", pariHook.hasRole(pariHook.TREASURY_ROLE(), deployer));
-        console.log("  RELAYER has RELAYER_ROLE:", pariHook.hasRole(pariHook.RELAYER_ROLE(), RELAYER));
+        console.log("  Treasury has TREASURY_ROLE:", pariHook.hasRole(pariHook.TREASURY_ROLE(), treasury));
+        console.log("  Relayer has RELAYER_ROLE:", pariHook.hasRole(pariHook.RELAYER_ROLE(), relayer));
         console.log("");
 
         // Display contract state
