@@ -65,7 +65,7 @@ contract SettleWindow is Script {
         vm.stopBroadcast();
 
         // Check final status
-        (uint256 totalPool, bool settled, bool voided, uint256 winningCell, uint256 redemptionRate) =
+        (uint256 totalPool, bool settled, bool voided, bool unresolved, uint256 winningCell, uint256 redemptionRate) =
             PARI_HOOK.getWindow(poolKey, targetWindow);
 
         console.log("");

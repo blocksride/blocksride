@@ -551,8 +551,8 @@ contract PariHookCoverageTest is Test {
 
     function test_GetPendingClaims_SumsMultipleWindows() public {
         // Place bets on two separate windows
-        (uint256 w1, uint256 w2End) = hook.getBettableWindows(poolKey);
-        uint256 w2 = w2End - 1; // second bettable window
+        (uint256 w1,) = hook.getBettableWindows(poolKey);
+        uint256 w2 = w1 + 1; // second bettable window
 
         uint256 winCell = 1500;
         _bet(alice, winCell, w1, 10_000_000);
@@ -657,7 +657,7 @@ contract PariHookCoverageTest is Test {
         vm.warp(windowEnd + 5);
         hook.settle{value: 0}(poolKey, targetWindow, bytes("X"));
 
-        (, bool settled,, uint256 winningCell,) = hook.getWindow(poolKey, targetWindow);
+        (, bool settled,,, uint256 winningCell,) = hook.getWindow(poolKey, targetWindow);
         assertTrue(settled);
         assertEq(winningCell, expectedCell, "winningCell must equal floor(price/bandWidth)");
     }
@@ -677,7 +677,7 @@ contract PariHookCoverageTest is Test {
         vm.warp(windowEnd + 5);
         hook.settle{value: 0}(poolKey, targetWindow, bytes("X"));
 
-        (,,, uint256 winningCell,) = hook.getWindow(poolKey, targetWindow);
+        (,,,, uint256 winningCell,) = hook.getWindow(poolKey, targetWindow);
         assertEq(winningCell, expectedCell, "Upper boundary price should fall in next cell");
     }
 
@@ -848,7 +848,7 @@ contract PariHookCoverageTest is Test {
         // Should auto-void (no revert)
         hook2.settle{value: 0}(key2, tw, bytes("X"));
 
-        (,, bool voided,,) = hook2.getWindow(key2, tw);
+        (,, bool voided,,,) = hook2.getWindow(key2, tw);
         assertTrue(voided, "Window should be auto-voided on PriceFeedNotFoundWithinRange");
     }
 }
