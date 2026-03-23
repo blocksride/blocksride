@@ -7,9 +7,12 @@ import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useAuth } from '@/contexts/AuthContext'
 import { networkName } from '@/providers/Web3Provider'
 import { cn } from '@/lib/utils'
-import { parseUnits, isAddress, encodeFunctionData } from 'viem'
+import { parseUnits, isAddress } from 'viem'
 import { useWallets } from '@privy-io/react-auth'
 import { activeChain } from '@/providers/Web3Provider'
+
+const WITHDRAWAL_FEE_USDC = parseFloat(import.meta.env.VITE_WITHDRAWAL_FEE_USDC || '0.04')
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000'
 
 export function WalletManager() {
     const navigate = useNavigate()
@@ -38,6 +41,10 @@ export function WalletManager() {
             toast.error('Enter a valid amount')
             return
         }
+        if (amt <= WITHDRAWAL_FEE_USDC) {
+            toast.error(`Amount must be greater than fee ($${WITHDRAWAL_FEE_USDC})`)
+            return
+        }
         if (amt > onchainBalance) {
             toast.error('Amount exceeds balance')
             return
@@ -53,17 +60,80 @@ export function WalletManager() {
             setIsWithdrawPending(true)
             await wallet.switchChain(activeChain.id)
             const provider = await wallet.getEthereumProvider()
-            const data = encodeFunctionData({
-                abi: [{ name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const,
-                functionName: 'transfer',
-                args: [withdrawTo as `0x${string}`, parseUnits(withdrawAmount, 6)],
+
+            // Fetch relayer address — the EIP-3009 `to` must match what the server uses
+            const relayerRes = await fetch(`${SERVER_URL}/api/relay/address`)
+            if (!relayerRes.ok) throw new Error('Failed to fetch relayer address')
+            const { address: relayerAddress } = await relayerRes.json() as { address: string }
+
+            const amountRaw = parseUnits(withdrawAmount, 6)
+            const validBefore = Math.floor(Date.now() / 1000) + 300 // 5 min deadline
+            const nonceBytes = crypto.getRandomValues(new Uint8Array(32))
+            const nonce = '0x' + Array.from(nonceBytes).map(b => b.toString(16).padStart(2, '0')).join('')
+
+            const sig = await provider.request({
+                method: 'eth_signTypedData_v4',
+                params: [
+                    wallet.address,
+                    JSON.stringify({
+                        types: {
+                            EIP712Domain: [
+                                { name: 'name',              type: 'string'  },
+                                { name: 'version',           type: 'string'  },
+                                { name: 'chainId',           type: 'uint256' },
+                                { name: 'verifyingContract', type: 'address' },
+                            ],
+                            TransferWithAuthorization: [
+                                { name: 'from',        type: 'address' },
+                                { name: 'to',          type: 'address' },
+                                { name: 'value',       type: 'uint256' },
+                                { name: 'validAfter',  type: 'uint256' },
+                                { name: 'validBefore', type: 'uint256' },
+                                { name: 'nonce',       type: 'bytes32' },
+                            ],
+                        },
+                        primaryType: 'TransferWithAuthorization',
+                        domain: {
+                            name: 'USD Coin',
+                            version: '2',
+                            chainId: activeChain.id,
+                            verifyingContract: TOKEN_ADDRESS,
+                        },
+                        message: {
+                            from:        wallet.address,
+                            to:          relayerAddress,
+                            value:       amountRaw.toString(),
+                            validAfter:  '0',
+                            validBefore: validBefore.toString(),
+                            nonce,
+                        },
+                    }),
+                ],
+            }) as string
+
+            const v = parseInt(sig.slice(130, 132), 16)
+            const r = '0x' + sig.slice(2, 66)
+            const s = '0x' + sig.slice(66, 130)
+
+            const res = await fetch(`${SERVER_URL}/api/relay/withdraw`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    from: wallet.address,
+                    to: withdrawTo,
+                    amount: amountRaw.toString(),
+                    validAfter: 0,
+                    validBefore,
+                    nonce,
+                    v, r, s,
+                }),
             })
-            const hash = await provider.request({
-                method: 'eth_sendTransaction',
-                params: [{ from: wallet.address, to: TOKEN_ADDRESS, data }],
-            })
-            setWithdrawHash(hash as string)
-            toast.success('Withdrawal sent')
+
+            const data = await res.json() as { txHash?: string; error?: string }
+            if (!res.ok) throw new Error(data.error ?? 'Withdrawal failed')
+
+            setWithdrawHash(data.txHash ?? null)
+            toast.success(`Sent $${(amt - WITHDRAWAL_FEE_USDC).toFixed(2)} USDC (fee: $${WITHDRAWAL_FEE_USDC})`)
             setWithdrawTo('')
             setWithdrawAmount('')
         } catch (e) {
@@ -217,9 +287,12 @@ export function WalletManager() {
                         {activeTab === 'withdraw' && (
                             <div className="space-y-4 text-xs">
                                 <div>
-                                    <div className="text-zinc-500 mb-1">AVAILABLE</div>
+                                    <div className="text-zinc-500 mb-1">WITHDRAWABLE</div>
                                     <div className="text-xl font-bold text-green-400">
-                                        ${onchainBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                                        ${Math.max(0, onchainBalance - WITHDRAWAL_FEE_USDC).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                                    </div>
+                                    <div className="text-[10px] text-zinc-600 mt-0.5">
+                                        ${WITHDRAWAL_FEE_USDC.toFixed(2)} USDC fee covers gas · no ETH needed
                                     </div>
                                 </div>
 
@@ -245,7 +318,7 @@ export function WalletManager() {
                                             className="flex-1 bg-zinc-900 border border-zinc-700 p-2 text-zinc-300 font-mono focus:outline-none focus:border-green-500/50 placeholder:text-zinc-600"
                                         />
                                         <button
-                                            onClick={() => setWithdrawAmount(onchainBalance.toFixed(6))}
+                                            onClick={() => setWithdrawAmount(Math.max(0, onchainBalance - WITHDRAWAL_FEE_USDC).toFixed(6))}
                                             className="px-3 py-1 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-all"
                                         >
                                             MAX
