@@ -42,14 +42,11 @@ export const Web3Provider = ({ children }: { children: React.ReactNode }) => {
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
-        loginMethods: ['email', 'wallet'],
+        loginMethods: ['email'],
         appearance: {
           theme: 'dark',
-          accentColor: '#3b82f6', // Blue accent
-          logo: '/logo/blip-logo-white.png',
-          // embedded wallet first = seamless (no pop-ups); metamask shown as secondary option
-          walletList: ['detected_wallets', 'metamask', 'coinbase_wallet'],
-          showWalletLoginFirst: false,
+          accentColor: '#3b82f6',
+          logo: '/blocksride-logo-white.png',
         },
         embeddedWallets: {
           ethereum: {
