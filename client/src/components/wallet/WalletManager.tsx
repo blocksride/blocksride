@@ -94,7 +94,7 @@ export function WalletManager() {
                         },
                         primaryType: 'TransferWithAuthorization',
                         domain: {
-                            name: 'USD Coin',
+                            name: 'USDC',
                             version: '2',
                             chainId: activeChain.id,
                             verifyingContract: TOKEN_ADDRESS,
