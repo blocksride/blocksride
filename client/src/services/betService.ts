@@ -1,6 +1,7 @@
 import { createPublicClient, encodeAbiParameters, http, isAddress, keccak256, maxUint256, parseSignature, type WalletClient } from 'viem'
 import axiosInstance from '../utility/axiosInterceptor'
 import { activeChain } from '@/providers/Web3Provider'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 // Pool shape returned by GET /api/pools
 export interface Pool {
@@ -301,7 +302,7 @@ export const betService = {
 
         const normalizedPoolId = betService.normalizePoolId(pool)
         const tokenAddress = (import.meta.env.VITE_TOKEN_ADDRESS ||
-            '0x036CbD53842c5426634e7929541eC2318f3dCF7e') as `0x${string}`
+            getRuntimeNetworkConfig().usdcTokenAddress) as `0x${string}`
         const approval = await betService.getHookApprovalStatus(
             userAddress,
             tokenAddress,

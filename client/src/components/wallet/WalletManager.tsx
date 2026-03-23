@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 import { parseUnits, isAddress } from 'viem'
 import { useWallets } from '@privy-io/react-auth'
 import { activeChain } from '@/providers/Web3Provider'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 const WITHDRAWAL_FEE_USDC = parseFloat(import.meta.env.VITE_WITHDRAWAL_FEE_USDC || '0.04')
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000'
@@ -25,7 +26,7 @@ export function WalletManager() {
     const [withdrawTo, setWithdrawTo] = useState('')
     const [withdrawAmount, setWithdrawAmount] = useState('')
 
-    const TOKEN_ADDRESS = (import.meta.env.VITE_TOKEN_ADDRESS || '0x036CbD53842c5426634e7929541eC2318f3dCF7e') as `0x${string}`
+    const TOKEN_ADDRESS = (import.meta.env.VITE_TOKEN_ADDRESS || getRuntimeNetworkConfig().usdcTokenAddress) as `0x${string}`
 
     const { wallets } = useWallets()
     const [isWithdrawPending, setIsWithdrawPending] = useState(false)
@@ -278,7 +279,7 @@ export function WalletManager() {
                                 <div className="p-3 bg-zinc-900 border border-zinc-800 text-center">
                                     <div className="text-zinc-400 mb-1">How to fund</div>
                                     <div className="text-zinc-600 text-[10px]">
-                                        Send Base Sepolia USDC to this address. Your balance updates automatically.
+                                        {`Send USDC to this address on ${networkName}. Your balance updates automatically.`}
                                     </div>
                                 </div>
                             </div>

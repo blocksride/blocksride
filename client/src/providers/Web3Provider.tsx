@@ -1,16 +1,14 @@
 import { PrivyProvider } from '@privy-io/react-auth'
 import { WagmiProvider } from 'wagmi'
-import { base, baseSepolia } from 'wagmi/chains'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createConfig } from '@privy-io/wagmi'
 import { http } from 'wagmi'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
-// Select network based on environment variable
-// mainnet = Base, sepolia = Base Sepolia
-const network = import.meta.env.VITE_NETWORK || 'mainnet'
-export const activeChain = network === 'sepolia' ? baseSepolia : base
-export const expectedChainId = activeChain.id
-export const networkName = network === 'sepolia' ? 'Base Sepolia' : 'Base'
+const runtimeNetworkConfig = getRuntimeNetworkConfig()
+export const activeChain = runtimeNetworkConfig.chain
+export const expectedChainId = runtimeNetworkConfig.chainId
+export const networkName = runtimeNetworkConfig.networkName
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,8 +24,7 @@ const queryClient = new QueryClient({
 const wagmiConfig = createConfig({
   chains: [activeChain],
   transports: {
-    [base.id]: http(),
-    [baseSepolia.id]: http(),
+    [activeChain.id]: http(),
   },
 })
 

@@ -2,6 +2,7 @@ import { useReadContracts } from 'wagmi'
 import { useWallets } from '@privy-io/react-auth'
 import { formatUnits } from 'viem'
 import { useAuth } from '@/contexts/AuthContext'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 const erc20Abi = [
     {
@@ -29,8 +30,7 @@ export function useTokenBalance() {
     const address = (walletAddress || activeWallet?.address) as `0x${string}` | undefined
     const isConnected = !!address
 
-    // USDC on Base Mainnet
-    const TOKEN_ADDRESS = import.meta.env.VITE_TOKEN_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    const TOKEN_ADDRESS = import.meta.env.VITE_TOKEN_ADDRESS || getRuntimeNetworkConfig().usdcTokenAddress
 
     const { data: reads, refetch, isRefetching } = useReadContracts({
         contracts: [
