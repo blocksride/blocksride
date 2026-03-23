@@ -22,9 +22,9 @@ describe('networkConfig', () => {
         expect(config.networkName).toBe('Base')
         expect(config.usdcTokenAddress).toBe(MAINNET_USDC_ADDRESS)
         expect(config.basescanTxBaseUrl).toBe('https://basescan.org/tx')
-        expect(config.fundingUrl).toBe('https://bridge.base.org/deposit')
-        expect(config.fundingLabel).toBe('Top Up Wallet')
-        expect(config.fundingInstructions).toContain('Top up')
+        expect(config.fundingUrl).toBe('https://basepesa.com')
+        expect(config.fundingLabel).toBe('Fund with BasePesa')
+        expect(config.fundingInstructions).toContain('Fund your embedded wallet')
     })
 
     it('resolves Base mainnet config explicitly', async () => {
@@ -35,10 +35,10 @@ describe('networkConfig', () => {
         expect(config.chainId).toBe(8453)
         expect(config.usdcTokenAddress).toBe(MAINNET_USDC_ADDRESS)
         expect(config.basescanTxBaseUrl).toBe('https://basescan.org/tx')
-        expect(config.fundingUrl).toBe('https://bridge.base.org/deposit')
+        expect(config.fundingUrl).toBe('https://basepesa.com')
         expect(config.networkName).toBe('Base')
         expect(config.basescanTxBaseUrl.toLowerCase()).not.toContain('sepolia')
-        expect(config.fundingLabel.toLowerCase()).toContain('top up')
+        expect(config.fundingLabel).toBe('Fund with BasePesa')
         expect(config.fundingInstructions.toLowerCase()).not.toContain('sepolia')
     })
 
@@ -53,7 +53,7 @@ describe('networkConfig', () => {
         expect(config.networkName).toBe('Base Sepolia')
         expect(config.usdcTokenAddress).toBe(SEPOLIA_USDC_ADDRESS)
         expect(config.basescanTxBaseUrl).toBe('https://sepolia.basescan.org/tx')
-        expect(config.fundingLabel).toBe('Top Up Wallet')
+        expect(config.fundingLabel).toBe('Fund with BasePesa')
     })
 
     it('falls back to mainnet for unknown network values', async () => {
@@ -66,6 +66,6 @@ describe('networkConfig', () => {
         expect(config.chainId).toBe(8453)
         expect(config.usdcTokenAddress).toBe(MAINNET_USDC_ADDRESS)
         expect(config.basescanTxBaseUrl).toBe('https://basescan.org/tx')
-        expect(config.fundingUrl).toBe('https://bridge.base.org/deposit')
+        expect(config.fundingUrl).toBe('https://basepesa.com')
     })
 })
