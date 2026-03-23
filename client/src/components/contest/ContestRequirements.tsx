@@ -11,6 +11,7 @@ import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { toast } from 'sonner'
 import { Contest } from '@/services/apiService'
 import { cn } from '@/lib/utils'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 interface ContestRequirementsProps {
     isOpen: boolean
@@ -18,8 +19,6 @@ interface ContestRequirementsProps {
     contest: Contest
     onRequirementsMet: () => void
 }
-
-const BASE_SEPOLIA_FAUCET_URL = 'https://www.coinbase.com/developer-platform/products/faucet'
 
 export function ContestRequirements({
     isOpen,
@@ -30,6 +29,7 @@ export function ContestRequirements({
     const { address, formatted, refetch, isRefetching } = useTokenBalance()
     const walletBalance = Number(formatted || '0')
     const hasBalance = walletBalance > 0
+    const networkConfig = getRuntimeNetworkConfig()
 
     const handleContinue = () => {
         if (hasBalance) {
@@ -43,7 +43,7 @@ export function ContestRequirements({
     }
 
     const openFaucet = () => {
-        window.open(BASE_SEPOLIA_FAUCET_URL, '_blank', 'noopener,noreferrer')
+        window.open(networkConfig.fundingUrl, '_blank', 'noopener,noreferrer')
     }
 
     const shortenAddress = (addr: string | undefined) => {
@@ -70,7 +70,7 @@ export function ContestRequirements({
                             {hasBalance ? (
                                 <>You can now enter <span className="text-zinc-100 font-medium">{contest.name}</span>.</>
                             ) : (
-                                <>Get Base Sepolia USDC from the faucet, send it to your embedded wallet, then refresh your balance.</>
+                                <>{networkConfig.fundingInstructions}</>
                             )}
                         </DialogDescription>
                     </div>
@@ -117,7 +117,7 @@ export function ContestRequirements({
                                     className="h-9 justify-between border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15 hover:text-amber-100"
                                     onClick={openFaucet}
                                 >
-                                    Open Base Sepolia Faucet
+                                    {networkConfig.fundingLabel}
                                     <ExternalLink className="w-3.5 h-3.5" />
                                 </Button>
 
@@ -136,7 +136,7 @@ export function ContestRequirements({
 
                     {!hasBalance && (
                         <p className="text-[11px] leading-relaxed text-zinc-500">
-                            The Coinbase faucet supports Base Sepolia test tokens including USDC. Paste your embedded wallet address there, then return here.
+                            {networkConfig.fundingHelpText}
                         </p>
                     )}
                 </div>

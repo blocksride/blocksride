@@ -9,6 +9,7 @@ import { BUILDER_CODE_SUFFIX } from '@/lib/builderCode'
 import { toast } from 'sonner'
 import { Loader2, Copy, CheckCircle2, Info } from 'lucide-react'
 import { networkName } from '@/providers/Web3Provider'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 import { useWallets } from '@privy-io/react-auth'
 
 const erc20Abi = [
@@ -47,7 +48,7 @@ export function WalletDeposit() {
     const [copied, setCopied] = useState(false)
 
     const TREASURY_ADDRESS = import.meta.env.VITE_PLATFORM_TREASURY || ''
-    const TOKEN_ADDRESS = import.meta.env.VITE_TOKEN_ADDRESS || '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    const TOKEN_ADDRESS = import.meta.env.VITE_TOKEN_ADDRESS || getRuntimeNetworkConfig().usdcTokenAddress
 
     const { data: decimals } = useReadContract({
         address: TOKEN_ADDRESS as `0x${string}`,

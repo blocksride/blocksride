@@ -36,6 +36,7 @@ import { createWalletClient, custom } from 'viem'
 import { activeChain, expectedChainId } from '@/providers/Web3Provider'
 import { betService, type BetStatus, type Pool } from '../services/betService'
 import { getCellPriceRange, getSlotKey, getWindowEndMs, getWindowStartMs, normalizeSlotKey } from '../lib/gridSlots'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 const BET_CONFIRMATION_KEY = 'blocksride_bet_confirmation_enabled'
 const SIDEBAR_COLLAPSED_KEY = 'blocksride_sidebar_collapsed'
@@ -547,10 +548,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                     },
                 })
 
-                const network = import.meta.env.VITE_NETWORK || 'mainnet'
-                const basescanBase = network === 'sepolia'
-                    ? 'https://sepolia.basescan.org/tx'
-                    : 'https://basescan.org/tx'
+                const basescanBase = getRuntimeNetworkConfig().basescanTxBaseUrl
 
                 betService.pollBetStatus(intentId, (status: BetStatus) => {
                     if (cancelled) return
