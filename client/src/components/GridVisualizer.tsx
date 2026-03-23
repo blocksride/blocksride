@@ -586,8 +586,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 msg === 'window-closing'
 
             if (msg === 'no-wallet') {
-                toast.error('Embedded wallet not ready', {
-                    description: 'Sign in with Privy to use the embedded wallet for betting.',
+                toast.error('Wallet not ready', {
+                    description: 'Your embedded wallet is still loading — wait a moment and try again, or sign out and back in.',
                 })
             } else if (!isUserRejection && msg !== 'no-pool') {
                 toast.error('Failed to place bet', {

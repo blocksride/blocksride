@@ -14,6 +14,7 @@ import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 const WITHDRAWAL_FEE_USDC = parseFloat(import.meta.env.VITE_WITHDRAWAL_FEE_USDC || '0.04')
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3000'
+const { basescanTxBaseUrl } = getRuntimeNetworkConfig()
 
 export function WalletManager() {
     const navigate = useNavigate()
@@ -348,7 +349,15 @@ export function WalletManager() {
 
                                 {withdrawHash && (
                                     <div className="text-[10px] text-zinc-600 break-all">
-                                        TX: {withdrawHash}
+                                        TX:{' '}
+                                        <a
+                                            href={`${basescanTxBaseUrl}/${withdrawHash}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-green-500/70 hover:text-green-400 underline"
+                                        >
+                                            {withdrawHash}
+                                        </a>
                                     </div>
                                 )}
                             </div>
