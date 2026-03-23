@@ -175,7 +175,6 @@ export function useGridPositions(
                         state,
                         result,
                         payout: payoutUsdc,
-                        is_practice: false,
                     } as Position)
 
                     // Inject synthetic cell if not in current cells array
@@ -355,7 +354,6 @@ export function useGridPositions(
                     cell_id: cellKey,
                     stake: Number(stake) / 1_000_000,
                     state: 'ACTIVE',
-                    is_practice: false,
                 } as Position)
 
                 // Inject a synthetic cell entry if missing so time-based logic works

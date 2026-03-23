@@ -66,11 +66,6 @@ export const BetHistory: React.FC<BetHistoryProps> = ({
                                     <span className={`text-xs font-bold uppercase tracking-tight ${result === 'won' ? 'text-trade-up' : 'text-trade-down'}`}>
                                         {result === 'won' ? 'Won' : 'Lost'}
                                     </span>
-                                    {position.is_practice && (
-                                        <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/20 text-amber-500 rounded font-semibold uppercase">
-                                            Practice
-                                        </span>
-                                    )}
                                 </div>
                                 <span className="text-[10px] font-mono text-muted-foreground/50">
                                     {new Date(cell.t_end).toLocaleTimeString([], {

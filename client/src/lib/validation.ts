@@ -15,7 +15,6 @@ export const createPositionSchema = z.object({
   cell_id: uuidString,
   asset_id: z.string().min(1, 'Asset is required'),
   stake: positiveNumber.max(1000000, 'Stake exceeds maximum allowed'),
-  is_practice: z.boolean().default(false),
 })
 
 export type CreatePositionInput = z.infer<typeof createPositionSchema>

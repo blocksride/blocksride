@@ -46,7 +46,6 @@ export interface Position {
     cell_id: string
     stake: number
     state: PositionState | 'PENDING' | 'ACTIVE' | 'LOCKED' | 'RESOLVED' | 'VOIDED'
-    is_practice: boolean
     created_at?: string
     payout?: number
     result?: string
