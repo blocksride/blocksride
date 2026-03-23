@@ -1,6 +1,6 @@
 import { createPublicClient, encodeAbiParameters, http, isAddress, keccak256, maxUint256, parseSignature, type WalletClient } from 'viem'
 import axiosInstance from '../utility/axiosInterceptor'
-import { activeChain } from '@/providers/Web3Provider'
+import { activeChain, rpcUrl } from '@/providers/Web3Provider'
 import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
 
 // Pool shape returned by GET /api/pools
@@ -191,7 +191,7 @@ export const betService = {
     ): Promise<ApprovalResult> => {
         const publicClient = createPublicClient({
             chain: activeChain,
-            transport: http(),
+            transport: http(rpcUrl),
         })
 
         const allowance = await publicClient.readContract({

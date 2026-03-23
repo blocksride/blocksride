@@ -24,11 +24,13 @@ const queryClient = new QueryClient({
 })
 
 // Privy wagmi config
+export const rpcUrl: string | undefined = import.meta.env.VITE_RPC_URL || undefined
+
 const wagmiConfig = createConfig({
   chains: wagmiChains,
   transports: {
-    [base.id]: http(),
-    [baseSepolia.id]: http(),
+    [base.id]: http(runtimeNetworkConfig.network === 'mainnet' ? rpcUrl : undefined),
+    [baseSepolia.id]: http(runtimeNetworkConfig.network === 'sepolia' ? rpcUrl : undefined),
   },
 })
 
