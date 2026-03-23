@@ -7,8 +7,9 @@ import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useAuth } from '@/contexts/AuthContext'
 import { networkName } from '@/providers/Web3Provider'
 import { cn } from '@/lib/utils'
-import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { parseUnits, isAddress } from 'viem'
+import { parseUnits, isAddress, encodeFunctionData } from 'viem'
+import { useWallets } from '@privy-io/react-auth'
+import { activeChain } from '@/providers/Web3Provider'
 
 export function WalletManager() {
     const navigate = useNavigate()
@@ -23,10 +24,11 @@ export function WalletManager() {
 
     const TOKEN_ADDRESS = (import.meta.env.VITE_TOKEN_ADDRESS || '0x036CbD53842c5426634e7929541eC2318f3dCF7e') as `0x${string}`
 
-    const { data: withdrawHash, writeContract: writeWithdraw, isPending: isWithdrawPending, reset: resetWithdraw } = useWriteContract()
-    const { isLoading: isWithdrawConfirming, isSuccess: isWithdrawSuccess } = useWaitForTransactionReceipt({ hash: withdrawHash })
+    const { wallets } = useWallets()
+    const [isWithdrawPending, setIsWithdrawPending] = useState(false)
+    const [withdrawHash, setWithdrawHash] = useState<string | null>(null)
 
-    const handleWithdraw = () => {
+    const handleWithdraw = async () => {
         if (!isAddress(withdrawTo)) {
             toast.error('Invalid destination address')
             return
@@ -40,26 +42,35 @@ export function WalletManager() {
             toast.error('Amount exceeds balance')
             return
         }
-        writeWithdraw({
-            address: TOKEN_ADDRESS,
-            abi: [{
-                name: 'transfer',
-                type: 'function',
-                stateMutability: 'nonpayable',
-                inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
-                outputs: [{ type: 'bool' }],
-            }] as const,
-            functionName: 'transfer',
-            args: [withdrawTo as `0x${string}`, parseUnits(withdrawAmount, 6)],
-        }, {
-            onSuccess: () => {
-                toast.success('Withdrawal confirmed')
-                setWithdrawTo('')
-                setWithdrawAmount('')
-                setTimeout(() => resetWithdraw(), 3000)
-            },
-            onError: (e) => toast.error(e.message),
-        })
+
+        const wallet = wallets.find(w => w.address.toLowerCase() === walletAddress?.toLowerCase()) ?? wallets[0]
+        if (!wallet) {
+            toast.error('No wallet found')
+            return
+        }
+
+        try {
+            setIsWithdrawPending(true)
+            await wallet.switchChain(activeChain.id)
+            const provider = await wallet.getEthereumProvider()
+            const data = encodeFunctionData({
+                abi: [{ name: 'transfer', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const,
+                functionName: 'transfer',
+                args: [withdrawTo as `0x${string}`, parseUnits(withdrawAmount, 6)],
+            })
+            const hash = await provider.request({
+                method: 'eth_sendTransaction',
+                params: [{ from: wallet.address, to: TOKEN_ADDRESS, data }],
+            })
+            setWithdrawHash(hash as string)
+            toast.success('Withdrawal sent')
+            setWithdrawTo('')
+            setWithdrawAmount('')
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Withdrawal failed')
+        } finally {
+            setIsWithdrawPending(false)
+        }
     }
 
     const handleDisconnect = () => {
@@ -244,19 +255,17 @@ export function WalletManager() {
 
                                 <button
                                     onClick={handleWithdraw}
-                                    disabled={isWithdrawPending || isWithdrawConfirming || !withdrawTo || !withdrawAmount}
+                                    disabled={isWithdrawPending || !withdrawTo || !withdrawAmount}
                                     className={cn(
                                         'w-full py-2.5 border transition-all flex items-center justify-center gap-2',
-                                        isWithdrawPending || isWithdrawConfirming
+                                        isWithdrawPending
                                             ? 'border-zinc-700 text-zinc-500 cursor-not-allowed'
                                             : 'border-green-500/40 text-green-400 hover:bg-green-500/10'
                                     )}
                                 >
                                     {isWithdrawPending ? (
-                                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> CONFIRM IN WALLET...</>
-                                    ) : isWithdrawConfirming ? (
-                                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> CONFIRMING...</>
-                                    ) : isWithdrawSuccess ? (
+                                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> SENDING...</>
+                                    ) : withdrawHash ? (
                                         '[WITHDRAWAL SENT]'
                                     ) : (
                                         '[WITHDRAW]'
