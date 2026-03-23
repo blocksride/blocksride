@@ -94,7 +94,6 @@ export function useGridPositions(
     grid: Grid | null,
     cells: Cell[],
     currentPrice: number | null,
-    isPracticeMode?: boolean
 ) {
     const [positions, setPositions] = useState<Position[]>([])
     const [betResults, setBetResults] = useState<
@@ -120,88 +119,17 @@ export function useGridPositions(
 
     // Load pool config (needed for contract calls)
     useEffect(() => {
-        if (isPracticeMode) return
         betService.getPools()
             .then(pools => {
                 const pool = pools.find(p => p.assetId === selectedAsset)
                 if (pool) setActivePool(pool)
             })
             .catch(() => {})
-    }, [selectedAsset, isPracticeMode])
+    }, [selectedAsset])
 
-    // ── Practice mode: API-backed positions ──────────────────────────────────
+    // ── Server-side bet records (primary source) ─────────────────────────────
     useEffect(() => {
-        if (!isPracticeMode) return
-        let isMounted = true
-
-        const load = async () => {
-            if (!grid || !authenticated) return
-            try {
-                const response = await api.getPositions(true)
-                if (!isMounted) return
-                const data: Position[] = response.data
-
-                const activeStake = data
-                    .filter(p => p.state === 'ACTIVE' || p.state === 'PENDING')
-                    .reduce((sum, p) => sum + p.stake, 0)
-                setTotalActiveStake(activeStake)
-                setPositions(data)
-
-                const results: Record<string, 'won' | 'lost' | 'pending' | 'winning'> = {}
-                const placedCellIds: string[] = []
-                const currentCells = cellsRef.current
-
-                data.forEach(p => {
-                    const slotKey = normalizeSlotKey(p.cell_id, currentCells)
-                    placedCellIds.push(slotKey)
-                    const cell = currentCells.find(c => c.cell_id === p.cell_id)
-                    if (cell?.result) {
-                        results[slotKey] = cell.result === 'WIN' ? 'won' : 'lost'
-                    } else if (p.result) {
-                        results[slotKey] = p.result === 'WIN' ? 'won' : 'lost'
-                    } else if (p.state === 'RESOLVED') {
-                        results[slotKey] = p.payout && p.payout > 0 ? 'won' : 'lost'
-                    } else {
-                        results[slotKey] = 'pending'
-                    }
-                })
-
-                setBetResults(results)
-                setSelectedCells(prev => {
-                    const placed = new Set(placedCellIds)
-                    const kept = prev.filter(id => placed.has(id) || id.startsWith('future_'))
-                    placedCellIds.forEach(id => { if (!kept.includes(id)) kept.push(id) })
-                    return Array.from(new Set(kept))
-                })
-            } catch {
-                // ignore
-            }
-        }
-
-        load()
-
-        let debounce: ReturnType<typeof setTimeout> | null = null
-        const debouncedLoad = () => {
-            if (debounce) clearTimeout(debounce)
-            debounce = setTimeout(() => { if (isMounted) load() }, 100)
-        }
-
-        window.addEventListener('cells_refreshed', debouncedLoad)
-        window.addEventListener('cell_resolved', debouncedLoad)
-        window.addEventListener('position_updated', debouncedLoad)
-
-        return () => {
-            isMounted = false
-            if (debounce) clearTimeout(debounce)
-            window.removeEventListener('cells_refreshed', debouncedLoad)
-            window.removeEventListener('cell_resolved', debouncedLoad)
-            window.removeEventListener('position_updated', debouncedLoad)
-        }
-    }, [selectedAsset, grid, authenticated, isPracticeMode])
-
-    // ── Real mode: server-side bet records (primary source) ──────────────────
-    useEffect(() => {
-        if (isPracticeMode || !authenticated || !walletAddress || !activePool) return
+        if (!authenticated || !walletAddress || !activePool) return
         let isMounted = true
 
         const loadBets = async () => {
@@ -307,7 +235,7 @@ export function useGridPositions(
             isMounted = false
             clearInterval(interval)
         }
-    }, [isPracticeMode, authenticated, walletAddress, activePool, selectedAsset, grid])
+    }, [authenticated, walletAddress, activePool, selectedAsset, grid])
 
     // ── Real mode: Step 1 — scan past windows for user stake ─────────────────
     const poolKey = useMemo(() => {
@@ -323,7 +251,7 @@ export function useGridPositions(
 
     // Window IDs to scan: last 200 windows + current + next 5
     const scanWindowIds = useMemo(() => {
-        if (isPracticeMode || !activePool || !walletAddress) return []
+        if (!activePool || !walletAddress) return []
         const nowSec = Math.floor(Date.now() / 1000)
         const currentWindowId = Math.floor(nowSec / activePool.windowDurationSec)
         const ids: number[] = []
@@ -332,7 +260,7 @@ export function useGridPositions(
             if (wid > 0) ids.push(wid)
         }
         return ids
-    }, [isPracticeMode, activePool, walletAddress])
+    }, [activePool, walletAddress])
 
     const userWindowStakeContracts = useMemo(() => {
         if (!activePool || !walletAddress || scanWindowIds.length === 0) return []
@@ -391,7 +319,7 @@ export function useGridPositions(
 
     // Derive positions from on-chain stake data
     useEffect(() => {
-        if (isPracticeMode || !userStakesData || !walletAddress || !activePool) return
+        if (!userStakesData || !walletAddress || !activePool) return
 
         const newPositions: Position[] = []
         const placedCellIds: string[] = []
@@ -467,7 +395,7 @@ export function useGridPositions(
             placedCellIds.forEach(id => { if (!kept.includes(id)) kept.push(id) })
             return Array.from(new Set(kept))
         })
-    }, [userStakesData, isPracticeMode, walletAddress, activePool, bettedWindowIds, selectedAsset, grid])
+    }, [userStakesData, walletAddress, activePool, bettedWindowIds, selectedAsset, grid])
 
     // ── Time-based winning state ──────────────────────────────────────────────
     useEffect(() => {
@@ -523,7 +451,7 @@ export function useGridPositions(
 
     // ── On-chain settlement via getWindow multicall ───────────────────────────
     const windowIdsToCheck = useMemo(() => {
-        if (!activePool || !grid || isPracticeMode || positions.length === 0) return []
+        if (!activePool || !grid || positions.length === 0) return []
         const now = Date.now()
         const seen = new Set<number>()
         const result: number[] = []
@@ -539,7 +467,7 @@ export function useGridPositions(
             }
         }
         return result
-    }, [positions, activePool, grid, isPracticeMode])
+    }, [positions, activePool, grid])
 
     const getWindowContracts = useMemo(() => {
         if (!activePool || !poolKey || windowIdsToCheck.length === 0) return []
