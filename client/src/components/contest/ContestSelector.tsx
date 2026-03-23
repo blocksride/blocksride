@@ -4,7 +4,7 @@ import { Trophy, Target, Clock, ArrowRight, Loader2 } from 'lucide-react'
 import { Contest } from '@/services/apiService'
 
 export function ContestSelector() {
-    const { allContests, loading, enterPracticeMode, selectContest, refreshContests } = useContest()
+    const { allContests, loading, selectContest, refreshContests } = useContest()
 
     if (loading) {
         return (
@@ -29,29 +29,7 @@ export function ContestSelector() {
                     <p className="text-muted-foreground">Choose your trading session</p>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
-                    {/* Practice Mode Card */}
-                    <div
-                        onClick={enterPracticeMode}
-                        className="p-6 rounded-xl border-2 border-dashed border-amber-400/50 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 dark:border-yellow-500/30 dark:bg-yellow-500/5 dark:hover:border-yellow-500/60 dark:hover:bg-yellow-500/10 cursor-pointer transition-all group"
-                    >
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-amber-200 dark:bg-yellow-500/20 flex items-center justify-center">
-                                <Target className="w-5 h-5 text-amber-600 dark:text-yellow-500" />
-                            </div>
-                            <div>
-                                <h2 className="text-xl font-bold text-foreground">Practice Mode</h2>
-                                <p className="text-sm text-muted-foreground">No real money at stake</p>
-                            </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Trade with practice balance. Perfect for learning the platform and testing strategies.
-                        </p>
-                        <div className="flex items-center text-amber-600 dark:text-yellow-500 text-sm font-medium group-hover:translate-x-1 transition-transform">
-                            Enter Practice <ArrowRight className="w-4 h-4 ml-1" />
-                        </div>
-                    </div>
-
+                <div className="grid gap-6">
                     {/* Rides Section */}
                     {allContests.length === 0 ? (
                         <div className="p-6 rounded-xl border border-border bg-card">
