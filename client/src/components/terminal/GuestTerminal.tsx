@@ -231,7 +231,6 @@ export const GuestTerminal = ({ assetId }: GuestTerminalProps) => {
                     stake={stake}
                     onStakeChange={setStake}
                     balance={0}
-                    isPractice={false}
                     selectedCellId={null}
                 />
                 <PositionSummary

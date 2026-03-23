@@ -24,7 +24,7 @@ const LOGO_URLS: Record<string, string> = {
 export function TerminalHeader() {
   const navigate = useNavigate()
   const { authenticated, signOut } = useAuth()
-  const { isPracticeMode, selectedContest, exitToSelection } = useContest()
+  const { selectedContest, exitToSelection } = useContest()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [priceDelta, setPriceDelta] = useState<number | null>(null)
   const prevPriceRef = useRef<number | null>(null)
@@ -124,16 +124,8 @@ export function TerminalHeader() {
 
           {/* Mode indicator */}
           <div className="hidden md:flex items-center gap-1.5 text-xs">
-            <Radio
-              className={cn(
-                'w-3 h-3 animate-pulse',
-                isPracticeMode ? 'text-yellow-500' : 'text-green-500'
-              )}
-              aria-hidden="true"
-            />
-            <span className={isPracticeMode ? 'text-yellow-500' : 'text-green-500'}>
-              {isPracticeMode ? 'PRACTICE' : 'LIVE'}
-            </span>
+            <Radio className="w-3 h-3 animate-pulse text-green-500" aria-hidden="true" />
+            <span className="text-green-500">LIVE</span>
           </div>
 
           {/* Network Badge - only show on testnet */}

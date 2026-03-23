@@ -1,8 +1,6 @@
 import { Position, Cell } from '../../types/grid'
 import { normalizeSlotKey } from '../../lib/gridSlots'
 import { Activity, TrendingUp, TrendingDown, Clock } from 'lucide-react'
-import { useContest } from '../../contexts/ContestContext'
-
 interface PositionSummaryProps {
     selectedCells: string[]
     betResults: Record<string, string>
@@ -17,7 +15,6 @@ export const PositionSummary: React.FC<PositionSummaryProps> = ({
     positions,
     cells = [],
 }) => {
-    const { isPracticeMode } = useContest()
     // Show ALL active/pending positions, not just selected cells
     const activePositions = positions.filter(p => p.state === 'ACTIVE' || p.state === 'PENDING')
 
@@ -28,7 +25,6 @@ export const PositionSummary: React.FC<PositionSummaryProps> = ({
     activePositions.forEach((p) => {
         const result = betResults[normalizeSlotKey(p.cell_id, cells)]
         if (result === 'won' && p.payout) {
-            // Payout now includes stake for both practice and contest modes
             // So profit = payout - stake
             totalProfit += (p.payout - p.stake)
         } else if (result === 'lost') {
@@ -66,15 +62,9 @@ export const PositionSummary: React.FC<PositionSummaryProps> = ({
                     <Activity className="w-4 h-4 text-primary" />
                     <span className="text-xs font-bold uppercase tracking-wider text-foreground">Active Summary</span>
                 </div>
-                {isPracticeMode ? (
-                    <span className="text-[9px] px-2 py-1 bg-amber-500/20 text-amber-500 rounded-full font-bold uppercase tracking-wide">
-                        Practice Mode
-                    </span>
-                ) : (
-                    <span className="text-[9px] px-2 py-1 bg-emerald-500/20 text-emerald-500 rounded-full font-bold uppercase tracking-wide">
-                        Live Mode
-                    </span>
-                )}
+                <span className="text-[9px] px-2 py-1 bg-emerald-500/20 text-emerald-500 rounded-full font-bold uppercase tracking-wide">
+                    Live Mode
+                </span>
             </div>
 
             { }

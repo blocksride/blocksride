@@ -29,7 +29,7 @@ interface GridCanvasProps {
     /** On-chain parimutuel multipliers keyed by "${windowId}_${cellId}" */
     multipliers?: Record<string, number>
     recentCellIds?: Record<string, boolean>
-    contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
+    contestEndTime?: number // Contest end time in ms (undefined = no restriction)
 }
 
 const GridCanvasInner: React.FC<GridCanvasProps> = ({

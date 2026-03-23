@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Dialog, DialogContent, DialogDescription, DialogTrigger, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { Copy } from 'lucide-react'
+import { Copy, Loader2 } from 'lucide-react'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useAuth } from '@/contexts/AuthContext'
 import { networkName } from '@/providers/Web3Provider'
 import { cn } from '@/lib/utils'
+import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { parseUnits, isAddress } from 'viem'
 
 export function WalletManager() {
     const navigate = useNavigate()
@@ -15,7 +17,50 @@ export function WalletManager() {
     const onchainBalance = Number(walletBalance ?? 0)
 
     const [isOpen, setIsOpen] = useState(false)
-    const [activeTab, setActiveTab] = useState<'status' | 'fund'>('status')
+    const [activeTab, setActiveTab] = useState<'status' | 'fund' | 'withdraw'>('status')
+    const [withdrawTo, setWithdrawTo] = useState('')
+    const [withdrawAmount, setWithdrawAmount] = useState('')
+
+    const TOKEN_ADDRESS = (import.meta.env.VITE_TOKEN_ADDRESS || '0x036CbD53842c5426634e7929541eC2318f3dCF7e') as `0x${string}`
+
+    const { data: withdrawHash, writeContract: writeWithdraw, isPending: isWithdrawPending, reset: resetWithdraw } = useWriteContract()
+    const { isLoading: isWithdrawConfirming, isSuccess: isWithdrawSuccess } = useWaitForTransactionReceipt({ hash: withdrawHash })
+
+    const handleWithdraw = () => {
+        if (!isAddress(withdrawTo)) {
+            toast.error('Invalid destination address')
+            return
+        }
+        const amt = parseFloat(withdrawAmount)
+        if (!amt || amt <= 0) {
+            toast.error('Enter a valid amount')
+            return
+        }
+        if (amt > onchainBalance) {
+            toast.error('Amount exceeds balance')
+            return
+        }
+        writeWithdraw({
+            address: TOKEN_ADDRESS,
+            abi: [{
+                name: 'transfer',
+                type: 'function',
+                stateMutability: 'nonpayable',
+                inputs: [{ name: 'to', type: 'address' }, { name: 'amount', type: 'uint256' }],
+                outputs: [{ type: 'bool' }],
+            }] as const,
+            functionName: 'transfer',
+            args: [withdrawTo as `0x${string}`, parseUnits(withdrawAmount, 6)],
+        }, {
+            onSuccess: () => {
+                toast.success('Withdrawal confirmed')
+                setWithdrawTo('')
+                setWithdrawAmount('')
+                setTimeout(() => resetWithdraw(), 3000)
+            },
+            onError: (e) => toast.error(e.message),
+        })
+    }
 
     const handleDisconnect = () => {
         signOut()
@@ -86,7 +131,7 @@ export function WalletManager() {
                     </div>
 
                     <div className="flex border-b border-zinc-800 text-xs" role="tablist" aria-label="Wallet options">
-                        {(['status', 'fund'] as const).map((tab) => (
+                        {(['status', 'fund', 'withdraw'] as const).map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
@@ -155,6 +200,74 @@ export function WalletManager() {
                                         Send Base Sepolia USDC to this address. Your balance updates automatically.
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'withdraw' && (
+                            <div className="space-y-4 text-xs">
+                                <div>
+                                    <div className="text-zinc-500 mb-1">AVAILABLE</div>
+                                    <div className="text-xl font-bold text-green-400">
+                                        ${onchainBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div className="text-zinc-500 mb-1">DESTINATION ADDRESS</div>
+                                    <input
+                                        type="text"
+                                        placeholder="0x..."
+                                        value={withdrawTo}
+                                        onChange={(e) => setWithdrawTo(e.target.value)}
+                                        className="w-full bg-zinc-900 border border-zinc-700 p-2 text-zinc-300 font-mono text-[11px] focus:outline-none focus:border-green-500/50 placeholder:text-zinc-600"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div className="text-zinc-500 mb-1">AMOUNT (USDC)</div>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="number"
+                                            placeholder="0.00"
+                                            value={withdrawAmount}
+                                            onChange={(e) => setWithdrawAmount(e.target.value)}
+                                            className="flex-1 bg-zinc-900 border border-zinc-700 p-2 text-zinc-300 font-mono focus:outline-none focus:border-green-500/50 placeholder:text-zinc-600"
+                                        />
+                                        <button
+                                            onClick={() => setWithdrawAmount(onchainBalance.toFixed(6))}
+                                            className="px-3 py-1 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-all"
+                                        >
+                                            MAX
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={handleWithdraw}
+                                    disabled={isWithdrawPending || isWithdrawConfirming || !withdrawTo || !withdrawAmount}
+                                    className={cn(
+                                        'w-full py-2.5 border transition-all flex items-center justify-center gap-2',
+                                        isWithdrawPending || isWithdrawConfirming
+                                            ? 'border-zinc-700 text-zinc-500 cursor-not-allowed'
+                                            : 'border-green-500/40 text-green-400 hover:bg-green-500/10'
+                                    )}
+                                >
+                                    {isWithdrawPending ? (
+                                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> CONFIRM IN WALLET...</>
+                                    ) : isWithdrawConfirming ? (
+                                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> CONFIRMING...</>
+                                    ) : isWithdrawSuccess ? (
+                                        '[WITHDRAWAL SENT]'
+                                    ) : (
+                                        '[WITHDRAW]'
+                                    )}
+                                </button>
+
+                                {withdrawHash && (
+                                    <div className="text-[10px] text-zinc-600 break-all">
+                                        TX: {withdrawHash}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

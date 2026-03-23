@@ -17,7 +17,7 @@ export const Terminal = () => {
     useAccount() // Keep for wagmi state
     const { authenticated, loading, user } = useAuth()
     const { formatted: onchainUsdcBalance } = useTokenBalance()
-    const { selectedContest, sessionMode, isWaitingForStart, isPracticeMode } = useContest()
+    const { selectedContest, sessionMode, isWaitingForStart } = useContest()
     const { startOnboarding, isOnboardingActive } = useOnboarding()
 
     // Check if user needs onboarding
@@ -31,7 +31,7 @@ export const Terminal = () => {
     }, [loading, authenticated, user, startOnboarding, isOnboardingActive])
 
     useEffect(() => {
-        if (loading || !authenticated || !user || isPracticeMode) return
+        if (loading || !authenticated || !user) return
         if (Number(onchainUsdcBalance ?? 0) > 0) return
         if (typeof window === 'undefined') return
 
@@ -48,7 +48,7 @@ export const Terminal = () => {
         })
 
         localStorage.setItem(ADD_FUNDS_PROMPT_KEY, 'true')
-    }, [loading, authenticated, user, isPracticeMode, onchainUsdcBalance])
+    }, [loading, authenticated, user, onchainUsdcBalance])
 
     // Show nothing while checking auth
     if (loading) {

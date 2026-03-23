@@ -23,7 +23,7 @@ interface GridCellsProps {
     getY: (p: number) => number
     onCellClick: (cellId: number, windowId: number) => void
     onFrozenCellClick?: (windowIndex: number) => void
-    contestEndTime?: number // Contest end time in ms (undefined = no restriction, e.g., practice mode)
+    contestEndTime?: number // Contest end time in ms (undefined = no restriction)
 }
 
 export const GridCells: React.FC<GridCellsProps> = ({

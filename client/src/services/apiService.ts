@@ -38,18 +38,14 @@ export const api = {
     getPublicPrice: (assetId: string = 'ETH-USD') =>
         axiosInstance.get<PublicPrice>(`/public-price?asset_id=${assetId}`),
 
-    createPosition: (cellId: string, assetId: string, stake: number, isPractice: boolean = false) =>
+    createPosition: (cellId: string, assetId: string, stake: number) =>
         axiosInstance.post<Position>(`/positions`, {
             cell_id: cellId,
             asset_id: assetId,
             stake,
-            is_practice: isPractice,
         }),
 
-    getPositions: (isPractice?: boolean) => {
-        const params = isPractice !== undefined ? `?is_practice=${isPractice}` : ''
-        return axiosInstance.get<Position[]>(`/positions${params}`)
-    },
+    getPositions: () => axiosInstance.get<Position[]>(`/positions`),
 
     getUserStats: () => axiosInstance.get('/user/stats'),
 

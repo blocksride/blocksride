@@ -11,7 +11,6 @@ interface MobileControlTabsProps {
   currentStake: number
   onStakeChange: (amount: number) => void
   balance: number
-  isPractice: boolean
   positions: Position[]
   selectedCells: string[]
   betResults: Record<string, 'won' | 'lost' | 'pending' | 'winning'>
@@ -25,7 +24,6 @@ export const MobileControlTabs: React.FC<MobileControlTabsProps> = ({
   currentStake,
   onStakeChange,
   balance,
-  isPractice,
   positions,
   selectedCells,
   betResults,
@@ -71,7 +69,6 @@ export const MobileControlTabs: React.FC<MobileControlTabsProps> = ({
           stake={currentStake}
           onStakeChange={onStakeChange}
           balance={balance}
-          isPractice={isPractice}
           betQuote={betQuote}
           quoteLoading={quoteLoading}
           selectedCellId={selectedCellId}
