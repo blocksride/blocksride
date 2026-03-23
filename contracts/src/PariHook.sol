@@ -266,25 +266,11 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         POOL_MANAGER = _poolManager;
         PYTH_ORACLE = _pythOracle;
 
-        // Hook address bit pattern validation is skipped — hook address is pre-mined at deploy time.
-        // IHooks(this).validateHookPermissions(
-        //     Hooks.Permissions({
-        //         beforeInitialize: true,
-        //         afterInitialize: false,
-        //         beforeAddLiquidity: false,
-        //         afterAddLiquidity: false,
-        //         beforeRemoveLiquidity: false,
-        //         afterRemoveLiquidity: false,
-        //         beforeSwap: false,
-        //         afterSwap: false,
-        //         beforeDonate: false,
-        //         afterDonate: false,
-        //         beforeSwapReturnDelta: false,
-        //         afterSwapReturnDelta: false,
-        //         afterAddLiquidityReturnDelta: false,
-        //         afterRemoveLiquidityReturnDelta: false
-        //     })
-        // );
+        // Validate the deployed hook bit pattern on real Base deployments.
+        // Local tests deploy with plain CREATE and random addresses, so validation is skipped there.
+        if (block.chainid == 8453 || block.chainid == 84532) {
+            Hooks.validateHookPermissions(IHooks(address(this)), getHookPermissions());
+        }
 
         // EIP-712 domain separator
         DOMAIN_SEPARATOR = keccak256(
@@ -302,6 +288,29 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         _grantRole(ADMIN_ROLE, _admin);
         _grantRole(TREASURY_ROLE, _treasury);
         _grantRole(RELAYER_ROLE, _relayer);
+    }
+
+    function getHookPermissions() public pure returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: true,
+            afterInitialize: false,
+            beforeAddLiquidity: false,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: false,
+            afterSwap: false,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    function requiredHookFlags() public pure returns (uint160) {
+        return Hooks.BEFORE_INITIALIZE_FLAG;
     }
 
     // =============================================================
@@ -700,9 +709,8 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         // Target the first window users can still bet on from now, so rolled-over funds
         // never land in a past or frozen window (important for late-resolved windows).
         if (winStakes == 0) {
-            uint256 current = block.timestamp < cfg.gridEpoch
-                ? 0
-                : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
+            uint256 current =
+                block.timestamp < cfg.gridEpoch ? 0 : (block.timestamp - cfg.gridEpoch) / cfg.windowDuration;
             uint256 nextBettable = current + cfg.frozenWindows + 1;
             uint256 rolloverTarget = windowId + 1 >= nextBettable ? windowId + 1 : nextBettable;
             if (window.unresolved) {
@@ -1019,7 +1027,14 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
     function getWindow(PoolKey calldata key, uint256 windowId)
         external
         view
-        returns (uint256 totalPool, bool settled, bool voided, bool unresolved, uint256 winningCell, uint256 redemptionRate)
+        returns (
+            uint256 totalPool,
+            bool settled,
+            bool voided,
+            bool unresolved,
+            uint256 winningCell,
+            uint256 redemptionRate
+        )
     {
         Window storage w = windows[key.toId()][windowId];
         return (w.totalPool, w.settled, w.voided, w.unresolved, w.winningCell, w.redemptionRate);

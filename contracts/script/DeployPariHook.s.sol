@@ -4,117 +4,139 @@ pragma solidity ^0.8.26;
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {PariHook} from "../src/PariHook.sol";
+import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {IPyth} from "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 
 /**
  * @title DeployPariHook
- * @notice Deployment script for PariHook contract on Base Sepolia
+ * @notice Deterministic Uniswap v4 hook deployment for Base mainnet and Base Sepolia.
+ * @dev The hook address must have the correct low 14-bit permission mask. This script mines a
+ *      CREATE2 salt against Foundry's deterministic CREATE2 deployer and then broadcasts the deployment.
  *
- * Usage:
- * ------
- * 1. Ensure .env file is configured with:
- *    - PRIVATE_KEY (deployer wallet)
- *    - BASE_SEPOLIA_RPC_URL
- * 2. Run deployment:
- *    source .env
- *    forge script script/DeployPariHook.s.sol:DeployPariHook \
- *      --rpc-url $BASE_SEPOLIA_RPC_URL \
- *      --broadcast \
- *      --verify \
- *      -vvvv
+ * Required env:
+ * - PRIVATE_KEY
+ * - ADMIN_ADDRESS
+ * - TREASURY_ADDRESS
+ * - RELAYER_ADDRESS
  *
- * Contract Addresses (Base Sepolia):
- * - PoolManager: 0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408
- * - Pyth Oracle: 0xA2aa501b19aff244D90cc15a4Cf739D2725B5729
- * - USDC: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
+ * Optional env overrides:
+ * - POOL_MANAGER_ADDRESS
+ * - PYTH_ORACLE_ADDRESS
+ * - USDC_ADDRESS
+ *
+ * Example dry-run:
+ * forge script script/DeployPariHook.s.sol:DeployPariHook \
+ *   --rpc-url $BASE_MAINNET_RPC_URL \
+ *   --chain-id 8453
+ *
+ * Example broadcast:
+ * forge script script/DeployPariHook.s.sol:DeployPariHook \
+ *   --rpc-url $BASE_MAINNET_RPC_URL \
+ *   --chain-id 8453 \
+ *   --broadcast \
+ *   --verify
  */
 contract DeployPariHook is Script {
-    // Base Sepolia Contract Addresses
-    address constant POOL_MANAGER = 0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408;
-    address constant PYTH_ORACLE = 0xA2aa501b19aff244D90cc15a4Cf739D2725B5729;
-    address constant USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
+    uint256 internal constant BASE_MAINNET_CHAIN_ID = 8453;
+    uint256 internal constant BASE_SEPOLIA_CHAIN_ID = 84532;
+    uint160 internal constant HOOK_MASK = uint160((1 << 14) - 1);
 
-    function run() public {
+    address internal constant BASE_MAINNET_POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
+    address internal constant BASE_MAINNET_PYTH = 0x8250f4aF4B972684F7b336503E2D6dFeDeB1487a;
+    address internal constant BASE_MAINNET_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+
+    address internal constant BASE_SEPOLIA_POOL_MANAGER = 0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408;
+    address internal constant BASE_SEPOLIA_PYTH = 0xA2aa501b19aff244D90cc15a4Cf739D2725B5729;
+    address internal constant BASE_SEPOLIA_USDC = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
+
+    function run() external returns (PariHook pariHook, bytes32 salt, address predicted) {
+        uint256 chainId = block.chainid;
+        require(chainId == BASE_MAINNET_CHAIN_ID || chainId == BASE_SEPOLIA_CHAIN_ID, "Unsupported chain");
+
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer           = vm.addr(deployerPrivateKey);
-        address treasury           = vm.envAddress("TREASURY_ADDRESS");
-        address relayer            = vm.envAddress("RELAYER_ADDRESS");
+        address deployer = vm.addr(deployerPrivateKey);
+        address admin = vm.envAddress("ADMIN_ADDRESS");
+        address treasury = vm.envAddress("TREASURY_ADDRESS");
+        address relayer = vm.envAddress("RELAYER_ADDRESS");
+
+        (address poolManager, address pythOracle, address usdcToken, string memory networkLabel) =
+            _resolveNetworkConfig(chainId);
+
+        bytes memory constructorArgs =
+            abi.encode(IPoolManager(poolManager), IPyth(pythOracle), admin, treasury, relayer);
+        bytes32 initCodeHash = keccak256(abi.encodePacked(type(PariHook).creationCode, constructorArgs));
+        uint160 requiredFlags = Hooks.BEFORE_INITIALIZE_FLAG;
+
+        salt = _mineHookSalt(initCodeHash, requiredFlags);
+        predicted = vm.computeCreate2Address(salt, initCodeHash, CREATE2_FACTORY);
+
+        require((uint160(predicted) & HOOK_MASK) == requiredFlags, "Invalid mined hook address");
 
         console.log("\n============================================");
-        console.log("  PARIHOOK DEPLOYMENT - BASE SEPOLIA");
+        console.log("  PARIHOOK CREATE2 DEPLOYMENT");
         console.log("============================================\n");
-
-        console.log("Deployer Address:", deployer);
-        console.log("Deployer Balance:", deployer.balance / 1e18, "ETH");
-        console.log("");
-
-        console.log("Configuration:");
-        console.log("  PoolManager:", POOL_MANAGER);
-        console.log("  Pyth Oracle:", PYTH_ORACLE);
-        console.log("  USDC Token:", USDC);
-        console.log("");
-
-        console.log("Role Assignment:");
-        console.log("  DEFAULT_ADMIN_ROLE:", deployer);
-        console.log("  ADMIN_ROLE:        ", deployer);
-        console.log("  TREASURY_ROLE:     ", treasury);
-        console.log("  RELAYER_ROLE:      ", relayer);
+        console.log("Network:", networkLabel);
+        console.log("Chain ID:", chainId);
+        console.log("Deployer EOA:", deployer);
+        console.log("CREATE2 Factory:", CREATE2_FACTORY);
+        console.log("PoolManager:", poolManager);
+        console.log("Pyth Oracle:", pythOracle);
+        console.log("USDC:", usdcToken);
+        console.log("Admin:", admin);
+        console.log("Treasury:", treasury);
+        console.log("Relayer:", relayer);
+        console.log("Required Hook Flags:", requiredFlags);
+        console.log("Salt:");
+        console.logBytes32(salt);
+        console.log("Predicted Hook Address:", predicted);
         console.log("");
 
         vm.startBroadcast(deployerPrivateKey);
-
-        console.log("Deploying PariHook...");
-        PariHook pariHook = new PariHook(
-            IPoolManager(POOL_MANAGER),
-            IPyth(PYTH_ORACLE),
-            deployer, // ADMIN_ROLE
-            treasury, // TREASURY_ROLE
-            relayer   // RELAYER_ROLE
-        );
-
-        console.log("PariHook deployed at:", address(pariHook));
-        console.log("");
-
-        // Verify role assignments
-        console.log("Verifying role assignments...");
-        console.log("  Has DEFAULT_ADMIN_ROLE:", pariHook.hasRole(pariHook.DEFAULT_ADMIN_ROLE(), deployer));
-        console.log("  Has ADMIN_ROLE:", pariHook.hasRole(pariHook.ADMIN_ROLE(), deployer));
-        console.log("  Treasury has TREASURY_ROLE:", pariHook.hasRole(pariHook.TREASURY_ROLE(), treasury));
-        console.log("  Relayer has RELAYER_ROLE:", pariHook.hasRole(pariHook.RELAYER_ROLE(), relayer));
-        console.log("");
-
-        // Display contract state
-        console.log("Contract State:");
-        console.log("  PoolManager:", address(pariHook.POOL_MANAGER()));
-        console.log("  Pyth Oracle:", address(pariHook.PYTH_ORACLE()));
-        console.log("  DOMAIN_SEPARATOR:", vm.toString(pariHook.DOMAIN_SEPARATOR()));
-        console.log("  Paused:", pariHook.paused());
-        console.log("");
-
+        pariHook = new PariHook{salt: salt}(IPoolManager(poolManager), IPyth(pythOracle), admin, treasury, relayer);
         vm.stopBroadcast();
 
-        console.log("============================================");
-        console.log("  DEPLOYMENT COMPLETE");
-        console.log("============================================\n");
+        require(address(pariHook) == predicted, "CREATE2 deployment address mismatch");
+        require((uint160(address(pariHook)) & HOOK_MASK) == requiredFlags, "Deployed hook flags mismatch");
 
-        console.log("Next Steps:");
-        console.log("1. Save the PariHook address:", address(pariHook));
-        console.log("2. Configure a grid using configureGrid()");
-        console.log("3. Initialize pool in PoolManager");
-        console.log("4. Start accepting bets");
-        console.log("");
+        console.log("PariHook deployed at:", address(pariHook));
+        console.log("DOMAIN_SEPARATOR:", vm.toString(pariHook.DOMAIN_SEPARATOR()));
+        console.log("Has ADMIN_ROLE:", pariHook.hasRole(pariHook.ADMIN_ROLE(), admin));
+        console.log("Has TREASURY_ROLE:", pariHook.hasRole(pariHook.TREASURY_ROLE(), treasury));
+        console.log("Has RELAYER_ROLE:", pariHook.hasRole(pariHook.RELAYER_ROLE(), relayer));
+        console.log("\nNext steps:");
+        console.log("1. Configure grid via configureGrid()");
+        console.log("2. Initialize the pool via PoolManager.initialize()");
+        console.log("3. Point backend/frontend env to the new hook address");
+    }
 
-        console.log("Example Grid Configuration (ETH/USD):");
-        console.log("  pythPriceFeedId: 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace");
-        console.log("  bandWidth: 2000000 ($2.00)");
-        console.log("  windowDuration: 60 (seconds)");
-        console.log("  frozenWindows: 3");
-        console.log("  maxStakePerCell: 100000000000 ($100,000)");
-        console.log("  feeBps: 200 (2%)");
-        console.log("  minPoolThreshold: 1000000 ($1.00)");
-        console.log("  gridEpoch: [future timestamp - aligned to clean boundary]");
-        console.log("  usdcToken:", USDC);
-        console.log("");
+    function _resolveNetworkConfig(uint256 chainId)
+        internal
+        view
+        returns (address poolManager, address pythOracle, address usdcToken, string memory networkLabel)
+    {
+        if (chainId == BASE_MAINNET_CHAIN_ID) {
+            poolManager = vm.envOr("POOL_MANAGER_ADDRESS", BASE_MAINNET_POOL_MANAGER);
+            pythOracle = vm.envOr("PYTH_ORACLE_ADDRESS", BASE_MAINNET_PYTH);
+            usdcToken = vm.envOr("USDC_ADDRESS", BASE_MAINNET_USDC);
+            networkLabel = "Base Mainnet";
+            return (poolManager, pythOracle, usdcToken, networkLabel);
+        }
+
+        poolManager = vm.envOr("POOL_MANAGER_ADDRESS", BASE_SEPOLIA_POOL_MANAGER);
+        pythOracle = vm.envOr("PYTH_ORACLE_ADDRESS", BASE_SEPOLIA_PYTH);
+        usdcToken = vm.envOr("USDC_ADDRESS", BASE_SEPOLIA_USDC);
+        networkLabel = "Base Sepolia";
+    }
+
+    function _mineHookSalt(bytes32 initCodeHash, uint160 requiredFlags) internal view returns (bytes32 minedSalt) {
+        for (uint256 i = 0; i < 500000; ++i) {
+            bytes32 candidateSalt = bytes32(i);
+            address predicted = vm.computeCreate2Address(candidateSalt, initCodeHash, CREATE2_FACTORY);
+            if ((uint160(predicted) & HOOK_MASK) == requiredFlags) {
+                return candidateSalt;
+            }
+        }
+        revert("Unable to mine CREATE2 salt for required hook flags");
     }
 }
