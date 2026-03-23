@@ -1,5 +1,5 @@
 import React from 'react'
-import { Wallet, FlaskConical, TrendingUp, Loader2 } from 'lucide-react'
+import { Wallet, TrendingUp, Loader2 } from 'lucide-react'
 import { ChipBar } from './ChipBar'
 import type { BetQuote } from '../../types/grid'
 
@@ -9,7 +9,6 @@ interface TradeControlsProps {
     stake: number
     onStakeChange: (amount: number) => void
     balance: number
-    isPractice?: boolean
     betQuote?: BetQuote | null
     quoteLoading?: boolean
     selectedCellId?: string | null
@@ -19,7 +18,6 @@ export const TradeControls: React.FC<TradeControlsProps> = ({
     stake,
     onStakeChange,
     balance,
-    isPractice = false,
     betQuote,
     quoteLoading = false,
     selectedCellId,
@@ -53,21 +51,10 @@ export const TradeControls: React.FC<TradeControlsProps> = ({
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                         Stake
                     </span>
-                    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${
-                        isPractice
-                            ? 'bg-primary/10 border-primary/30'
-                            : 'bg-secondary/30 border-border/50'
-                    }`}>
-                        {isPractice ? (
-                            <FlaskConical className="w-3 h-3 text-primary" />
-                        ) : (
-                            <Wallet className="w-3 h-3 text-muted-foreground" />
-                        )}
-                        <span className={`text-[10px] font-mono font-medium ${
-                            isPractice ? 'text-primary' : 'text-foreground'
-                        }`}>
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full border bg-secondary/30 border-border/50">
+                        <Wallet className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-[10px] font-mono font-medium text-foreground">
                             ${balance.toFixed(2)}
-                            {isPractice && <span className="ml-1 text-[8px]">DEMO</span>}
                         </span>
                     </div>
                 </div>

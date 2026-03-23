@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { api } from '../services/apiService'
 import { GridCanvas } from './grid/GridCanvas'
 import { GridSkeleton } from './grid/GridSkeleton'
 import { PositionSummary } from './grid/PositionSummary'
@@ -121,25 +120,25 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     })
 
     const selectedTimeframe = 60
-    const { isPracticeMode, selectedContest, timeRemaining, exitToSelection } = useContest()
+    const { selectedContest, timeRemaining, exitToSelection } = useContest()
     const { formatted: walletBalance } = useTokenBalance()
     const [showContestEnded, setShowContestEnded] = useState(false)
     const [showRequirements, setShowRequirements] = useState(false)
 
     const timeBoundary = useMemo(() => {
-        if (isPracticeMode || !selectedContest) return null
+        if (!selectedContest) return null
         return {
             start: new Date(selectedContest.start_time).getTime(),
             end: new Date(selectedContest.end_time).getTime(),
         }
-    }, [isPracticeMode, selectedContest])
+    }, [selectedContest])
 
     const { grid, cells } = useGridState(selectedAsset, selectedTimeframe)
     const { prices, currentPrice } = useGridPrices(selectedAsset, grid)
     const {
         positions, betResults, selectedCells, totalActiveStake, extraCells,
-        addOptimisticCell, removeOptimisticCell, updateCellId,
-    } = useGridPositions(selectedAsset, grid, cells, currentPrice, isPracticeMode)
+        addOptimisticCell, removeOptimisticCell,
+    } = useGridPositions(selectedAsset, grid, cells, currentPrice)
 
     // Merge grid cells with synthetic cells for historical windows
     const allCells = useMemo(() => {
@@ -217,10 +216,10 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
     }, [betResults, positions, cells, triggerConfetti])
 
     useEffect(() => {
-        if (!isPracticeMode && timeRemaining === 0 && selectedContest) {
+        if (timeRemaining === 0 && selectedContest) {
             setShowContestEnded(true)
         }
-    }, [timeRemaining, isPracticeMode, selectedContest])
+    }, [timeRemaining, selectedContest])
 
     const handleContestEndedExit = useCallback(() => {
         setShowContestEnded(false)
@@ -281,7 +280,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         return parts.find((part) => part.type === 'timeZoneName')?.value ?? ''
     }, [])
 
-    const { user, refreshUser, authenticated, walletAddress } = useAuth()
+    const { refreshUser, authenticated, walletAddress } = useAuth()
     const { wallets } = useWallets()
     const walletsRef = useRef(wallets)
     walletsRef.current = wallets
@@ -318,9 +317,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         windowTotals,
         cellStakes: onChainCellStakes,
     })
-    const practiceBalance = user?.practice_balance ?? 1000
-    const liveWalletBalance = Number(walletBalance || '0')
-    const userBalance = isPracticeMode ? practiceBalance : liveWalletBalance
+    const userBalance = Number(walletBalance || '0')
     const availableBalance = Math.max(0, userBalance - totalActiveStake - pendingStake)
 
     const claimItems = useMemo(() => {
@@ -391,14 +388,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         setClaimingIds(prev => { const s = new Set(prev); positionIds.forEach(id => s.add(id)); return s })
 
         try {
-            if (isPracticeMode) {
-                // Practice wins are pushed by the backend — just mark as claimed locally
-                await new Promise(r => setTimeout(r, 500))
-                setClaimedIds(prev => new Set([...prev, ...positionIds]))
-                refreshUser()
-                return
-            }
-
             const pool = poolsRef.current.find(p => p.assetId === selectedAsset)
             if (!pool) {
                 toast.error('Chain not configured', { description: 'No pool found for this asset.' })
@@ -452,7 +441,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 return s
             })
         }
-    }, [isPracticeMode, selectedAsset, refreshUser, getWindowIds, walletAddress])
+    }, [selectedAsset, refreshUser, getWindowIds, walletAddress])
 
     const handleClaim = useCallback((positionId: string) => {
         executeClaim([positionId])
@@ -501,41 +490,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
         const priceLabel = `$${low.toLocaleString(undefined, { minimumFractionDigits: 2 })} – $${high.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
 
         try {
-            if (isPracticeMode) {
-                // Practice mode — off-chain via legacy positions API
-                const legacyCell = cells.find(c => c.window_index === windowId && c.price_band_index === cellId)
-                const legacyCellId = legacyCell?.cell_id ?? slotKey
-
-                const response = await api.createPosition(legacyCellId, selectedAsset, stake, true)
-                const position = response.data
-
-                if (position.cell_id && position.cell_id !== slotKey) {
-                    updateCellId(slotKey, position.cell_id)
-                    placedCellsRef.current.delete(slotKey)
-                    placedCellsRef.current.add(position.cell_id)
-                }
-
-                prevBetResultsRef.current = { ...betResultsRef.current }
-                hasPlacedBetRef.current = true
-                setPendingStake(prev => Math.max(0, prev - stake))
-                refreshUser()
-                window.dispatchEvent(new CustomEvent('position_updated'))
-                setShowBetConfirmation(false)
-                setPendingBetCellId(null)
-                setPendingBetInfo(null)
-                setQuoteCellId(null)
-
-                setUndoToast({
-                    amount: stake,
-                    priceLabel,
-                    undoFn: () => {
-                        removeOptimisticCell(position.cell_id || slotKey)
-                        placedCellsRef.current.delete(position.cell_id || slotKey)
-                        setPendingStake(prev => Math.max(0, prev - stake))
-                        refreshUser()
-                    },
-                })
-            } else {
+            {
                 // On-chain — sign EIP-712 BetIntent and schedule via relay
                 const pool = poolsRef.current.find(p => p.assetId === selectedAsset)
                 if (!pool) {
@@ -655,8 +610,8 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             setIsBetLoading(false)
         }
     }, [
-        isPracticeMode, selectedAsset, refreshUser,
-        addOptimisticCell, removeOptimisticCell, updateCellId, cells, markRecentCell, grid, walletAddress,
+        selectedAsset,
+        addOptimisticCell, removeOptimisticCell, markRecentCell, grid, walletAddress,
     ])
 
     const handleCellClick = useCallback(async (cellId: number, windowId: number) => {
@@ -683,7 +638,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             }
         }
 
-        if (!isPracticeMode && !authenticated) {
+        if (!authenticated) {
             toast.error('Wallet not connected', {
                 description: 'Please connect your wallet to place bets.',
                 action: {
@@ -704,7 +659,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
             return
         }
 
-        if (!isPracticeMode && Number(walletBalance || '0') <= 0) {
+        if (Number(walletBalance || '0') <= 0) {
             setShowRequirements(true)
             return
         }
@@ -733,7 +688,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
 
         await executeBet(cellId, windowId, currentStake)
     }, [
-        viewport.dragStart.hasMoved, isPracticeMode, authenticated,
+        viewport.dragStart.hasMoved, authenticated,
         selectedCells, currentStake, availableBalance, activePool, grid,
         betConfirmationEnabled, executeBet, walletBalance,
     ])
@@ -993,7 +948,7 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                 {/* ── Grid canvas ─────────────────────────────────────────── */}
                 <main className="flex-1 relative flex flex-col bg-background min-w-0">
                     {/* Contest timer */}
-                    {!isPracticeMode && selectedContest && timeRemaining !== null && (
+                    {selectedContest && timeRemaining !== null && (
                         <div className="absolute top-3 left-3 z-20 bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg">
                             <Clock className={`w-4 h-4 ${
                                 timeRemaining <= 60 ? 'text-trade-down animate-pulse'
@@ -1154,7 +1109,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                 stake={currentStake}
                                 onStakeChange={setCurrentStake}
                                 balance={availableBalance}
-                                isPractice={isPracticeMode}
                                 betQuote={betQuote}
                                 quoteLoading={quoteLoading}
                                 selectedCellId={quoteCellId}
@@ -1245,7 +1199,6 @@ export const GridVisualizer: React.FC<GridVisualizerProps> = ({
                                     stake={currentStake}
                                     onStakeChange={setCurrentStake}
                                     balance={availableBalance}
-                                    isPractice={isPracticeMode}
                                     betQuote={betQuote}
                                     quoteLoading={quoteLoading}
                                     selectedCellId={quoteCellId}
