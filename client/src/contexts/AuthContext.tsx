@@ -1,7 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { usePrivy, useWallets } from '@privy-io/react-auth'
+import { useReadContracts } from 'wagmi'
+import { formatUnits } from 'viem'
 import { User } from '../types/auth'
 import { authService } from '../services/authService'
+import { getRuntimeNetworkConfig } from '@/lib/networkConfig'
+
+const { usdcTokenAddress } = getRuntimeNetworkConfig()
+
+const erc20Abi = [
+    { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+    { name: 'decimals', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'uint8' }] },
+] as const
 
 interface AuthContextType {
     user: User | null
@@ -11,6 +21,12 @@ interface AuthContextType {
     signIn: () => void
     signOut: () => void
     refreshUser: () => Promise<void>
+    // token balance — single shared subscription
+    usdcBalance: bigint
+    usdcFormatted: string
+    usdcDecimals: number
+    refetchBalance: () => void
+    isRefetchingBalance: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -34,6 +50,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         (w.walletClientType || '').toLowerCase().includes('privy'),
     )
     const activeWallet = embeddedWallet || wallets[0]
+
+    const tokenAddress = (import.meta.env.VITE_TOKEN_ADDRESS || usdcTokenAddress) as `0x${string}`
+    const balanceAddress = (walletAddress || activeWallet?.address) as `0x${string}` | undefined
+    const { data: balanceReads, refetch: refetchBalance, isRefetching: isRefetchingBalance } = useReadContracts({
+        contracts: [
+            { address: tokenAddress, abi: erc20Abi, functionName: 'decimals' },
+            { address: tokenAddress, abi: erc20Abi, functionName: 'balanceOf', args: [balanceAddress!] },
+        ],
+        query: { enabled: !!balanceAddress, refetchInterval: 30000 },
+    })
+    const usdcDecimals = (balanceReads?.[0]?.result as number | undefined) ?? 6
+    const usdcBalance = (balanceReads?.[1]?.result as bigint | undefined) ?? 0n
+    const usdcFormatted = formatUnits(usdcBalance, usdcDecimals)
 
     // Sync Privy auth state with backend
     const syncAuth = useCallback(async () => {
@@ -153,7 +182,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     return (
         <AuthContext.Provider
-            value={{ user, loading, authenticated, walletAddress, signIn, signOut, refreshUser }}
+            value={{ user, loading, authenticated, walletAddress, signIn, signOut, refreshUser, usdcBalance, usdcFormatted, usdcDecimals, refetchBalance, isRefetchingBalance }}
         >
             {children}
         </AuthContext.Provider>
