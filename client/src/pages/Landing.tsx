@@ -450,6 +450,9 @@ export const Landing = () => {
                         <span onClick={() => navigate('/terms')} className="hover:text-primary cursor-pointer transition-colors">
                             Terms
                         </span>
+                        <span onClick={() => navigate('/privacy')} className="hover:text-primary cursor-pointer transition-colors">
+                            Privacy
+                        </span>
                         <a href="https://base.org" target="_blank" rel="noopener noreferrer"
                             className="flex items-center gap-1.5 opacity-50 hover:opacity-80 transition-opacity"
                             aria-label="Built on Base">
