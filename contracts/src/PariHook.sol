@@ -587,7 +587,7 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
         external
         nonReentrant
         whenNotPaused
-        onlyRole(TREASURY_ROLE)
+        onlyRole(RELAYER_ROLE)
     {
         PoolId poolId = key.toId();
         GridConfig storage cfg = gridConfigs[poolId];
@@ -746,14 +746,14 @@ contract PariHook is IHooks, IUnlockCallback, AccessControl, Pausable, Reentranc
 
     /**
      * @notice Push payouts to winning users (keeper batch operation)
-     * @dev Only TREASURY_ROLE can push payouts
+     * @dev Only RELAYER_ROLE can push payouts
      * @param key Pool key
      * @param windowId Settled window
      * @param winners Array of winning user addresses
      */
     function pushPayouts(PoolKey calldata key, uint256 windowId, address[] calldata winners)
         external
-        onlyRole(TREASURY_ROLE)
+        onlyRole(RELAYER_ROLE)
     {
         PoolId poolId = key.toId();
         Window storage window = windows[poolId][windowId];
