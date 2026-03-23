@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { api, Contest } from '../services/apiService'
 
-type SessionMode = 'selecting' | 'practice' | 'contest'
+type SessionMode = 'selecting' | 'contest'
 
 interface ContestContextType {
     activeContest: Contest | null
@@ -9,7 +9,6 @@ interface ContestContextType {
     allContests: Contest[] // All available contests (active + upcoming)
     selectedContest: Contest | null
     sessionMode: SessionMode
-    isPracticeMode: boolean
     isWaitingForStart: boolean // Selected contest hasn't started yet
     loading: boolean
     error: string | null
@@ -17,7 +16,6 @@ interface ContestContextType {
     timeUntilStart: number | null // seconds until selected contest starts
     refreshContests: () => Promise<void>
     selectContest: (contest: Contest | null) => void
-    enterPracticeMode: () => void
     exitToSelection: () => void
 }
 
@@ -45,7 +43,6 @@ export const ContestProvider = ({ children }: ContestProviderProps) => {
     // Keep selectedContestRef in sync
     selectedContestRef.current = selectedContest
 
-    const isPracticeMode = sessionMode === 'practice'
     const isWaitingForStart = sessionMode === 'contest' && selectedContest?.status === 'upcoming'
     const allContests = [...(activeContest ? [activeContest] : []), ...upcomingContests]
 
@@ -182,11 +179,6 @@ export const ContestProvider = ({ children }: ContestProviderProps) => {
         }
     }
 
-    const enterPracticeMode = () => {
-        setSelectedContest(null)
-        setSessionMode('practice')
-    }
-
     const exitToSelection = () => {
         setSelectedContest(null)
         setSessionMode('selecting')
@@ -200,7 +192,6 @@ export const ContestProvider = ({ children }: ContestProviderProps) => {
                 allContests,
                 selectedContest,
                 sessionMode,
-                isPracticeMode,
                 isWaitingForStart,
                 loading,
                 error,
@@ -208,7 +199,6 @@ export const ContestProvider = ({ children }: ContestProviderProps) => {
                 timeUntilStart,
                 refreshContests,
                 selectContest,
-                enterPracticeMode,
                 exitToSelection,
             }}
         >
